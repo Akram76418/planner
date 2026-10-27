@@ -135,7 +135,7 @@ td.n,th.n{font-variant-numeric:tabular-nums}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 
-<header class="mbar"><button data-act="menu" aria-label="Menu" id="menuBtn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><b id="mtitle"></b></header>
+<header class="mbar"><button data-act="menu" aria-label="Menu" id="menuBtn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><b id="mtitle"></b><button data-act="sign-out" id="outBtn" aria-label="Sign out" title="Sign out" style="margin-inline-start:auto"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H5v16h4M16 8l4 4-4 4M20 12H9"/></svg></button></header>
 <div class="scrim" id="scrim" data-act="menu-close"></div>
 <div class="shell">
   <aside class="side" id="side"></aside>
@@ -165,7 +165,7 @@ const clamp=(n,a,b)=>Math.min(b,Math.max(a,n));
 
 /* ---------- i18n ---------- */
 const TX={
-ar:{app:'منظّم أعمالي اليومية',appEn:'My Daily Planner',dash:'لوحة التحكم',cal:'التقويم',appts:'المواعيد',follow:'متابعاتي اليومية',tasks:'المهام',reports:'التقارير والإنجازات',settings:'الإعدادات',comm:'التواصل',proj:'المشاريع الخارجية',
+ar:{app:'منظّم أعمالي اليومية',appEn:'My Daily Planner',dash:'لوحة التحكم',cal:'التقويم',appts:'المواعيد',follow:'متابعاتي اليومية',tasks:'المهام',reports:'التقارير والإنجازات',settings:'الإعدادات',comm:'التواصل',proj:'المشاريع الخارجية',logs:'السجلات',signout:'خروج / تبديل الحساب',
 new:'إضافة جديدة',newAppt:'موعد / اجتماع',newTask:'مهمة',newFollow:'متابعة يومية',save:'حفظ',cancel:'إلغاء',close:'إغلاق',edit:'تعديل',del:'حذف',delOk:'تأكيد الحذف',details:'التفاصيل',
 title:'العنوان',date:'التاريخ',start:'البداية',end:'النهاية',place:'المكان',people:'المشاركون',type:'النوع',prio:'الأولوية',status:'الحالة',optional:'اختياري',
 t_meeting:'اجتماع',t_admin:'عمل إداري',t_teaching:'تدريس',t_research:'بحث علمي',t_personal:'موعد شخصي',t_project:'متابعة مشروع',t_custom:'نوع مخصص',customType:'اسم النوع المخصص',
@@ -206,7 +206,7 @@ sumNoData:'لا توجد بيانات مسجلة في هذه الفترة.',
 nextOpen:'إجراءات اجتماعات غير منفذة',
 timeErr:'وقت النهاية يجب أن يكون بعد البداية',titleErr:'العنوان مطلوب',dateErr:'التاريخ مطلوب',
 wd:['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت']},
-en:{app:'My Daily Planner',appEn:'منظّم أعمالي اليومية',dash:'Dashboard',cal:'Calendar',appts:'Appointments',follow:'Daily Focus',tasks:'Tasks',reports:'Reports & Achievements',settings:'Settings',comm:'Messages',proj:'External projects',
+en:{app:'My Daily Planner',appEn:'منظّم أعمالي اليومية',dash:'Dashboard',cal:'Calendar',appts:'Appointments',follow:'Daily Focus',tasks:'Tasks',reports:'Reports & Achievements',settings:'Settings',comm:'Messages',proj:'External projects',logs:'Logs',signout:'Sign out / switch account',
 new:'Add new',newAppt:'Appointment / meeting',newTask:'Task',newFollow:'Follow-up',save:'Save',cancel:'Cancel',close:'Close',edit:'Edit',del:'Delete',delOk:'Confirm delete',details:'Details',
 title:'Title',date:'Date',start:'Start',end:'End',place:'Location',people:'Participants',type:'Type',prio:'Priority',status:'Status',optional:'optional',
 t_meeting:'Meeting',t_admin:'Admin work',t_teaching:'Teaching',t_research:'Research',t_personal:'Personal',t_project:'Project follow-up',t_custom:'Custom type',customType:'Custom type name',
@@ -298,11 +298,13 @@ const IC={
  reports:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
  settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
  comm:'<path d="M4 5h16v11H9l-5 4z"/>',
+ logs:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 12h7M9 16h7"/>',
+ out:'<path d="M9 4H5v16h4M16 8l4 4-4 4M20 12H9"/>',
  proj:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5h6v2M3 13h18"/>',
  plus:'<path d="M12 5v14M5 12h14"/>'};
 const ic=(n,s=20)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
 const BASE_VIEWS=['dash','cal','appts','follow','tasks','reports','settings'];
-const views=()=>window.COMM_ONLY?['comm']:window.HAS_COMM?['dash','cal','appts','follow','tasks','reports','comm',...(window.CTX&&window.CTX.role==='admin'?['proj']:[]),'settings']:BASE_VIEWS;
+const views=()=>window.COMM_ONLY?['comm']:window.HAS_COMM?['dash','cal','appts','follow','tasks','reports','comm',...(window.CTX&&window.CTX.role==='admin'?['proj','logs']:[]),'settings']:BASE_VIEWS;
 
 /* ---------- domain helpers ---------- */
 const PR={high:0,med:1,low:2};
@@ -747,7 +749,7 @@ function vSettings(){
    <div class="tabs">${['auto','light','dark'].map(m=>`<button data-act="set-theme" data-m="${m}" aria-pressed="${S.meta.theme===m}">${t(m)}</button>`).join('')}</div></section>
   <section class="card"><h2>${t('settingsNotif')}</h2><p class="sub">${t('notifState')}: <b>${esc(perm)}</b></p><div class="tabs"><button class="btn pri" data-act="notif-allow">${t('allow')}</button><button class="btn" data-act="notif-test">${t('test')}</button></div><p class="sub">${t('notifNote')}</p></section>
   <section class="card"><h2>${t('backup')}</h2><div class="tabs"><button class="btn" data-act="export-json">${IN_ARTIFACT?t('copyCsv').replace('CSV','JSON'):t('exportJson')}</button><label class="btn" style="flex-direction:row;color:var(--fg)">${t('importJson')}<input type="file" id="imp" accept="application/json" hidden></label></div><p class="sub">${t('syncNote')}</p></section>
-  ${window.accountSection?window.accountSection():''}<section class="card"><h2>${t('wipe')}</h2><button class="btn bad" data-act="wipe" data-confirm="1">${t('wipe')}</button></section></div>`;
+  ${window.accountSection?window.accountSection():''}${window.adminToolsSection?window.adminToolsSection():''}<section class="card"><h2>${t('wipe')}</h2><button class="btn bad" data-act="wipe" data-confirm="1">${t('wipe')}</button></section></div>`;
 }
 
 /* ---------- render ---------- */
@@ -755,17 +757,19 @@ function render(){
   document.documentElement.lang=L();document.documentElement.dir=L()==='ar'?'rtl':'ltr';
   const th=S.meta.theme;if(th==='auto')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',th);
   const VIEWS=views();if(!VIEWS.includes(UI.view))UI.view=VIEWS[0];
+  const signedIn=!!(window.PLANNER_AUTH&&window.PLANNER_AUTH.user&&window.PLANNER_AUTH.user());
   const navHtml=VIEWS.map(v=>`<button data-act="go" data-v="${v}" ${UI.view===v?'aria-current="page"':''}>${ic(v)}<span>${t(v)}</span></button>`).join('');
-  $('#side').innerHTML=`<div class="brand"><img src="logo.png" alt="" width="46" height="46" style="border-radius:50%;background:#fff;padding:2px;display:block;margin-bottom:8px">${esc(window.COMM_ONLY?t('comm'):t('app'))}<small>${esc(window.COMM_ONLY?'':t('appEn'))}</small></div><div class="nav">${navHtml}</div>`;
-  $('#bottom').innerHTML=VIEWS.map(v=>`<button data-act="go" data-v="${v}" ${UI.view===v?'aria-current="page"':''}>${ic(v,22)}<span>${esc(t(v).split(' ')[0])}</span></button>`).join('');
+  $('#side').innerHTML=`<div class="brand"><img src="logo.png" alt="" width="46" height="46" style="border-radius:50%;background:#fff;padding:2px;display:block;margin-bottom:8px">${esc(window.COMM_ONLY?t('comm'):t('app'))}<small>${esc(window.COMM_ONLY?'':t('appEn'))}</small></div><div class="nav">${navHtml}</div>${signedIn?`<div class="nav" style="margin-top:10px"><button data-act="sign-out">${ic('out')}<span>${t('signout')}</span></button></div>`:''}`;
+  $('#bottom').innerHTML=VIEWS.filter(v=>v!=='logs').map(v=>`<button data-act="go" data-v="${v}" ${UI.view===v?'aria-current="page"':''}>${ic(v,22)}<span>${esc(t(v).split(' ')[0])}</span></button>`).join('');
   $('#mtitle').textContent=t(UI.view);
-  $('#fab').innerHTML=ic('plus',18)+'<span>'+t('new')+'</span>';$('#fab').style.display=(window.COMM_ONLY||UI.view==='comm'||UI.view==='proj')?'none':'';
-  const V={comm:window.commView||(()=>''),proj:window.projView||(()=>''),dash:vDash,cal:vCal,appts:vAppts,follow:vFollow,tasks:vTasks,reports:vReports,settings:vSettings};
+  $('#fab').innerHTML=ic('plus',18)+'<span>'+t('new')+'</span>';$('#fab').style.display=(window.COMM_ONLY||UI.view==='comm'||UI.view==='proj'||UI.view==='logs')?'none':'';
+  const V={logs:window.logsView||(()=>''),comm:window.commView||(()=>''),proj:window.projView||(()=>''),dash:vDash,cal:vCal,appts:vAppts,follow:vFollow,tasks:vTasks,reports:vReports,settings:vSettings};
   const keepFocus=document.activeElement&&document.activeElement.id==='fq';
   $('#view').innerHTML=V[UI.view]();
   document.title=window.COMM_ONLY?t('comm'):t('app');
   if(UI.view==='comm'&&window.commMount)window.commMount();
   if(UI.view==='proj'&&window.projMount)window.projMount();
+  if(UI.view==='logs'&&window.logsMount)window.logsMount();
   if(keepFocus){const e=$('#fq');e.focus();e.setSelectionRange(e.value.length,e.value.length)}
 }
 

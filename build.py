@@ -10,7 +10,7 @@ pre = ('<!doctype html>\n<html lang="ar" dir="rtl"><head><meta charset="utf-8">'
        '<style>[hidden]{display:none!important}body{margin:0}</style>\n')
 libs = ('<script src="config.js"></script>\n'
         '<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>\n'
-        '<script src="sync.js"></script>\n<script src="comm.js"></script>\n<script src="ext.js"></script>\n')
+        '<script src="sync.js"></script>\n<script src="comm.js"></script>\n<script src="ext.js"></script>\n<script src="logs.js"></script>\n')
 reg = ("<script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}</script>\n")
 open('index.html', 'w', encoding='utf-8').write(pre + head_part + libs + app_script + reg + '</body></html>\n')
 open('artifact.html', 'w', encoding='utf-8').write(src)

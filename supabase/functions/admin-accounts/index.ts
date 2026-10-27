@@ -58,6 +58,28 @@ Deno.serve(async (req) => {
       return json({ results });
     }
 
+    if (body.action === 'wipe') {
+      // مسح كل المراسلات (قاعدة البيانات ثم الملفات المرفقة). الحسابات تبقى.
+      const w = await admin.rpc('comm_wipe_messages');
+      if (w.error) return json({ error: w.error.message }, 400);
+      let removed = 0;
+      const walk = async (prefix: string, depth: number): Promise<void> => {
+        if (depth > 6) return;
+        const { data: items } = await admin.storage.from('comm-files').list(prefix, { limit: 1000 });
+        const files: string[] = [];
+        for (const it of items ?? []) {
+          const path = prefix ? `${prefix}/${it.name}` : it.name;
+          if (it.id) files.push(path); else await walk(path, depth + 1);
+        }
+        for (let i = 0; i < files.length; i += 100) {
+          const rm = await admin.storage.from('comm-files').remove(files.slice(i, i + 100));
+          if (!rm.error) removed += files.slice(i, i + 100).length;
+        }
+      };
+      try { await walk('', 0); } catch (_e) { /* الملفات تُحذف بأفضل جهد */ }
+      return json({ ok: true, counts: w.data, files: removed });
+    }
+
     if (body.action === 'create') {
       const rows = Array.isArray(body.rows) ? body.rows.slice(0, 300) : [];
       const allowSameName = body.allow_same_name === true;

@@ -1,6 +1,6 @@
 /* Service worker: app shell offline + Web Push display. Bump VERSION when files change. */
-const VERSION = 'planner-v22';
-const SHELL = ['./', './index.html', './config.js', './sync.js', './comm.js', './ext.js', './logo.png', './manifest.json', './icon-192.png', './icon-512.png'];
+const VERSION = 'planner-v23';
+const SHELL = ['./', './index.html', './config.js', './sync.js', './comm.js', './ext.js', './logs.js', './logo.png', './manifest.json', './icon-192.png', './icon-512.png'];
 const CDN = ['https://cdn.jsdelivr.net/', 'https://fonts.googleapis.com/', 'https://fonts.gstatic.com/'];
 
 self.addEventListener('install', e => {

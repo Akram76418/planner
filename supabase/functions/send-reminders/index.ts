@@ -66,10 +66,11 @@ async function messages(): Promise<number> {
     const { data: staff } = await sb.from('profiles').select('id,role,full_name').in('role', ['admin', 'professor', 'staff']);
     const { data: cats } = await sb.from('comm_staff_categories').select('user_id,category');
     const catOf = new Map((cats ?? []).map((c: any) => [c.user_id, c.category]));
+    const roleOf = new Map((staff ?? []).map((u: any) => [u.id, u.role]));
     const nameOf = new Map((staff ?? []).map((u: any) => [u.id, u.full_name]));
     for (const m of ch.data) for (const u of staff ?? []) {
       if (u.id === m.sender_id) continue;
-      if (u.role === 'admin' || m.channel === 'all' || catOf.get(u.id) === m.channel) add(u.id, `قناة ${CH_NAME[m.channel] ?? m.channel}`, `${nameOf.get(m.sender_id) ?? ''}: ${m.body}`);
+      if (u.role === 'admin' || m.channel === 'all' || catOf.get(u.id) === m.channel) add(u.id, `قناة ${CH_NAME[m.channel] ?? m.channel}`, `${u.role !== 'admin' && roleOf.get(m.sender_id) === 'admin' ? 'PCN' : (nameOf.get(m.sender_id) ?? '')}: ${m.body}`);
     }
   }
 

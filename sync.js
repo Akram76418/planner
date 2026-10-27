@@ -50,7 +50,7 @@
     
     form.onsubmit = async function (e) {
       e.preventDefault();
-      var email = (document.getElementById('au-email') || {}).value, pass = (document.getElementById('au-pass') || {}).value;
+      var typed = '', email = (document.getElementById('au-email') || {}).value, pass = (document.getElementById('au-pass') || {}).value;
       if (mode === 'request') {
         var g = function (i) { return ((document.getElementById(i) || {}).value || '').trim(); };
         var num = g('rq-num').replace(/[\u0660-\u0669]/g, function (d) { return d.charCodeAt(0) - 1632; });
@@ -65,10 +65,10 @@
       try {
         var r;
         if (recovery) { r = await sb.auth.updateUser({ password: pass }); if (r.error) throw r.error; el.remove(); await takeSession(); return; }
-        if (mode === 'login') { email = await resolveLogin(email); r = await sb.auth.signInWithPassword({ email: email, password: pass }); if (r.error) throw r.error; el.remove(); await takeSession(); }
+        if (mode === 'login') { typed = email; email = await resolveLogin(email); r = await sb.auth.signInWithPassword({ email: email, password: pass }); if (r.error) throw r.error; try { sb.rpc('comm_log_event', { p_kind: 'login', p_ua: navigator.userAgent }).then(function () {}, function () {}); } catch (e0) {} el.remove(); await takeSession(); }
         else if (mode === 'signup') { r = await sb.auth.signUp({ email: email, password: pass, options: { emailRedirectTo: location.origin + location.pathname } }); if (r.error) throw r.error; if (r.data.session) { el.remove(); await takeSession(); } else authScreen('login', { ok: 1, t: A('checkMail') }); }
         else { r = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname }); if (r.error) throw r.error; authScreen('login', { ok: 1, t: A('checkMail') }); }
-      } catch (err) { authScreen(mode, { t: (err && err.message) || A('bad') }); }
+      } catch (err) { if (mode === 'login') { try { sb.rpc('comm_log_event', { p_kind: 'login_fail', p_who: typed, p_msg: (err && err.message) || '', p_ua: navigator.userAgent }).then(function () {}, function () {}); } catch (e1) {} } authScreen(mode, { t: (err && err.message) || A('bad') }); }
     };
   }
   async function resolveLogin(id) {
@@ -347,7 +347,7 @@
       toast(lang() === 'ar' ? 'تمت الإزالة' : 'Removed'); loadUsers();
     },
     'auth-open': function () { authResolve = function () { location.reload(); }; authScreen('login'); },
-    'sign-out': async function () { try { await sb.auth.signOut(); } catch (e) {} try { localStorage.removeItem(LAST_USER_KEY); } catch (e) {} location.reload(); },
+    'sign-out': async function () { try { await sb.rpc('comm_log_event', { p_kind: 'logout', p_ua: navigator.userAgent }); } catch (e) {} try { await sb.auth.signOut(); } catch (e) {} try { localStorage.removeItem(LAST_USER_KEY); } catch (e) {} location.reload(); },
     'push-enable': async function () {
       try {
         if (!('serviceWorker' in navigator) || !('PushManager' in window)) return toast('Push not supported here');
