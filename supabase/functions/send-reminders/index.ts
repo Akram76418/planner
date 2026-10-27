@@ -46,7 +46,7 @@ async function reminders(): Promise<number> {
 }
 
 // ───── إشعارات التواصل: رسائل فردية، قنوات الموظفين، إعلانات الشعب ─────
-const CH_NAME: Record<string, string> = { all: 'الجميع', academic: 'أكاديمي', practical: 'مدرب عملي', admin: 'إداري' };
+const CH_NAME: Record<string, string> = { all: 'الجميع', academic: 'أكاديمي', practical: 'مشرف عملي', admin: 'إداري' };
 const clip = (t: string, n = 120) => (t ?? '').length > n ? t.slice(0, n) + '…' : (t ?? '');
 
 async function messages(): Promise<number> {
@@ -70,7 +70,7 @@ async function messages(): Promise<number> {
     const nameOf = new Map((staff ?? []).map((u: any) => [u.id, u.full_name]));
     for (const m of ch.data) for (const u of staff ?? []) {
       if (u.id === m.sender_id) continue;
-      if (u.role === 'admin' || m.channel === 'all' || catOf.get(u.id) === m.channel) add(u.id, `قناة ${CH_NAME[m.channel] ?? m.channel}`, `${u.role !== 'admin' && roleOf.get(m.sender_id) === 'admin' ? 'PCN' : (nameOf.get(m.sender_id) ?? '')}: ${m.body}`);
+      if (u.role === 'admin' || u.role === 'professor' || m.channel === 'all' || catOf.get(u.id) === m.channel) add(u.id, `قناة ${CH_NAME[m.channel] ?? m.channel}`, `${u.role !== 'admin' && roleOf.get(m.sender_id) === 'admin' ? 'PCN' : (nameOf.get(m.sender_id) ?? '')}: ${m.body}`);
     }
   }
 
