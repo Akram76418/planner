@@ -285,7 +285,7 @@
     'cm-reject': function (el) { guard(async function () { await rpc('comm_decide_request', { p_id: Number(el.dataset.id), p_status: 'rejected' }); await loadTab(); }); },
     'cm-sfind': function () { ST.admin.q = ($c('#cm-sq') || {}).value || ''; guard(loadTab); },
     'cm-bulk': function () { guard(async function () { var ids = ($c('#bk-ids').value || '').split(/[\s,;]+/).filter(Boolean), c = Number($c('#bk-coh').value); var n = await rpc('comm_bulk_assign_cohort', { p_university_ids: ids, p_cohort: c }); toast_(T('تم إسناد ' + n, 'Assigned ' + n)); await loadTab(); }); },
-    'cm-reset': function (el) { guard(async function () { var r = await sb().functions.invoke(((window.PLANNER_CONFIG||{}).ADMIN_FN||'admin-accounts'), { body: { action: 'reset', user_id: el.dataset.id } }); if (r.error || (r.data && r.data.error)) throw new Error((r.data && r.data.error) || r.error.message); toast_(T('أُعيدت كلمة المرور إلى 12345678 وسيُلزَم بتغييرها', 'Password reset to 12345678; change required')); }); },
+    'cm-reset': function (el) { guard(async function () { var r = await sb().functions.invoke(((window.PLANNER_CONFIG||{}).ADMIN_FN||'admin-accounts'), { body: { action: 'reset', user_id: el.dataset.id } }); if (r.error || (r.data && r.data.error)) throw new Error((r.data && r.data.error) || await ferr(r)); toast_(T('أُعيدت كلمة المرور إلى 12345678 وسيُلزَم بتغييرها', 'Password reset to 12345678; change required')); }); },
     'cm-addcoh': function () { guard(async function () { var n = ($c('#co-name').value || '').trim(); if (!n) return; await rpc('comm_add_cohort', { p_name: n }); await loadTab(); }); },
     'cm-preset': function () { guard(async function () {
       var codes = ['BSN20240', 'BSN20230', 'BSN20231', 'BSN20241', 'BSM20231', 'BSM20241', 'BSN20250', 'BSN20251', 'BSM20251', 'BSN20261', 'BSN20260'];
@@ -381,6 +381,7 @@
       ST.admin.note = T('تم الحفظ: ' + ids.length + ' أكاديمي، وربط ' + n + ' طالب', 'Saved: ' + ids.length + ' academics, ' + n + ' students linked');
     });
   }
+  async function ferr(r) { try { var b = await r.error.context.json(); if (b && b.error) return b.error; } catch (e) {} return (r.error && r.error.message) || 'error'; }
   function staffAoa() {
     var rows = ST.admin.staff || [];
     var cn = { academic: ['أكاديمي', 'Academic'], practical: ['مشرف عملي', 'Practical supervisor'], admin: ['إداري', 'Administrative'] };
@@ -435,7 +436,7 @@
       var del = 0, skip = 0, errs = [], gone = 0;
       for (var i = 0; i < ids.length; i += 100) {
         var r = await sb().functions.invoke(((window.PLANNER_CONFIG || {}).ADMIN_FN || 'admin-accounts'), { body: { action: 'delete', ids: ids.slice(i, i + 100) } });
-        if (r.error || (r.data && r.data.error)) throw new Error((r.data && r.data.error) || r.error.message);
+        if (r.error || (r.data && r.data.error)) throw new Error((r.data && r.data.error) || await ferr(r));
         r.data.results.forEach(function (x) { if (x.status === 'deleted') { del++; gone += Number(x.messages || 0); } else if (x.status === 'error') errs.push(x.message); else skip++; });
       }
       ST.admin.note = T('تم حذف ' + del + (gone ? ' (مع ' + gone + ' رسالة)' : '') + (skip ? ' · تخطّى ' + skip : '') + (errs.length ? ' · تعذّر ' + errs.length + ': ' + errs[0] : ''), 'Deleted ' + del + (skip ? ' · skipped ' + skip : '') + (errs.length ? ' · failed ' + errs.length + ': ' + errs[0] : ''));
@@ -505,7 +506,7 @@
       for (var i = 0; i < list.length; i += 100) {
         var part = list.slice(i, i + 100);
         var r = await sb().functions.invoke(((window.PLANNER_CONFIG || {}).ADMIN_FN || 'admin-accounts'), { body: { action: 'create', rows: part.map(function (q) { return { number: q.number, name: q.full_name, role: q.kind === 'staff' ? 'staff' : 'student', major: q.major, cohort_id: q.kind === 'staff' ? null : (coh ? Number(coh) : null) }; }) } });
-        if (r.error || (r.data && r.data.error)) throw new Error((r.data && r.data.error) || r.error.message);
+        if (r.error || (r.data && r.data.error)) throw new Error((r.data && r.data.error) || await ferr(r));
         for (var j = 0; j < r.data.results.length; j++) {
           var x = r.data.results[j];
           if (x.status === 'created' || x.status === 'exists') await rpc('comm_decide_request', { p_id: part[j].id, p_status: 'approved' }); else if (x.status === 'dup_name') heldNames.push(part[j].full_name);
@@ -531,7 +532,7 @@
       var tot = { created: 0, exists: 0, invalid: 0, error: 0, dup_name: 0 }, errs = [], dups = [], bad = [], ex = [];
       for (var i = 0; i < rows.length; i += 100) {
         var r = await sb().functions.invoke(((window.PLANNER_CONFIG||{}).ADMIN_FN||'admin-accounts'), { body: { action: 'create', allow_same_name: same, rows: rows.slice(i, i + 100) } });
-        if (r.error || (r.data && r.data.error)) throw new Error((r.data && r.data.error) || r.error.message);
+        if (r.error || (r.data && r.data.error)) throw new Error((r.data && r.data.error) || await ferr(r));
         r.data.results.forEach(function (x) { tot[x.status] = (tot[x.status] || 0) + 1; if (x.status === 'error') errs.push(x.number + ': ' + x.message); if (x.status === 'dup_name') dups.push(x.name); if (x.status === 'invalid') bad.push(x.number || '(فارغ)'); if (x.status === 'exists') ex.push(x.number); });
       }
       ST.admin.res = T('أُنشئ ' + tot.created + ' · موجود مسبقاً ' + tot.exists + ' · اسم متشابه تُخطّي ' + tot.dup_name + ' · غير صالح ' + tot.invalid + ' · أخطاء ' + tot.error, 'Created ' + tot.created + ' · existing ' + tot.exists + ' · invalid ' + tot.invalid + ' · similar-name skipped ' + tot.dup_name + ' · errors ' + tot.error) + (dups.length ? ' — ' + T('أسماء مُتخطّاة: ', 'Skipped names: ') + dups.slice(0, 5).join('، ') : '') + (errs.length ? ' — ' + errs.slice(0, 3).join(' | ') : '');

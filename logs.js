@@ -66,6 +66,7 @@
       '<button class="btn bad" data-act="lg-wipe">' + h(T('مسح كل المراسلات عند الجميع', 'Delete all messages for everyone')) + '</button></section>';
   };
 
+  async function ferr(r) { try { var b = await r.error.context.json(); if (b && b.error) return b.error; } catch (e) {} return (r.error && r.error.message) || 'error'; }
   var ACTS = {
     'lg-kind': function (el) { L.kind = el.dataset.k || ''; load(); },
     'lg-refresh': function () { load(); },
@@ -79,7 +80,7 @@
         if (!w || ['مسح الكل', 'wipe all'].indexOf(w.trim().toLowerCase()) < 0) return;
         toast_(T('جارٍ المسح…', 'Wiping…'));
         var r = await sb().functions.invoke(((window.PLANNER_CONFIG || {}).ADMIN_FN || 'admin-accounts'), { body: { action: 'wipe' } });
-        if (r.error || (r.data && r.data.error)) throw new Error((r.data && r.data.error) || r.error.message);
+        if (r.error || (r.data && r.data.error)) throw new Error((r.data && r.data.error) || await ferr(r));
         window.alert(T('تم المسح: ' + r.data.counts.messages + ' رسالة، ' + r.data.counts.conversations + ' محادثة، ' + (r.data.files || 0) + ' ملف.', 'Done: ' + r.data.counts.messages + ' messages, ' + r.data.counts.conversations + ' chats, ' + (r.data.files || 0) + ' files.'));
       } catch (e) { window.alert(T('تعذّر المسح: ', 'Wipe failed: ') + ((e && e.message) || e) + (/comm_wipe|schema cache|does not exist/i.test((e && e.message) || '') ? T(' — شغّل admin-tools.sql أولاً.', ' — run admin-tools.sql first.') : '')); }
     }
