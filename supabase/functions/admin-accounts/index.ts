@@ -24,13 +24,35 @@ Deno.serve(async (req) => {
     const body = await req.json();
 
     if (body.action === 'reset') {
-      const { data: t } = await admin.from('profiles').select('id, role').eq('id', body.user_id).maybeSingle();
-      if (!t) return json({ error: 'not found' }, 404);
-      if (t.role === 'admin') return json({ error: 'cannot reset an admin' }, 400);
-      const r = await admin.auth.admin.updateUserById(t.id, { password: DEFAULT_PW });
-      if (r.error) return json({ error: r.error.message }, 400);
-      await admin.from('comm_pw_status').upsert({ user_id: t.id, must_change: true, changed_at: null });
-      return json({ ok: true });
+      // إعادة كلمة المرور إلى الافتراضية: لحساب واحد (user_id) أو لقائمة (ids) أو لمجموعة كاملة (scope + after، على دفعات).
+      const resetOne = async (id: string) => {
+        const { data: t } = await admin.from('profiles').select('id, role').eq('id', id).maybeSingle();
+        if (!t) return 'missing';
+        if (t.role === 'admin') return 'skipped';
+        const r = await admin.auth.admin.updateUserById(t.id, { password: DEFAULT_PW });
+        if (r.error) return 'error:' + r.error.message;
+        await admin.from('comm_pw_status').upsert({ user_id: t.id, must_change: true, changed_at: null });
+        return 'ok';
+      };
+      let ids: string[] = [];
+      let next: string | null = null, done = true;
+      if (body.scope) {
+        const roles = body.scope === 'students' ? ['student'] : body.scope === 'staff' ? ['professor', 'staff'] : ['student', 'professor', 'staff'];
+        let q = admin.from('profiles').select('id').in('role', roles).order('id', { ascending: true }).limit(40);
+        if (typeof body.after === 'string' && body.after) q = q.gt('id', body.after);
+        const { data: rows } = await q;
+        ids = (rows ?? []).map((x: any) => x.id);
+        if (ids.length === 40) { next = ids[ids.length - 1]; done = false; }
+      } else {
+        ids = (Array.isArray(body.ids) ? body.ids : body.user_id ? [body.user_id] : []).filter((x: unknown) => typeof x === 'string').slice(0, 40);
+      }
+      let okN = 0, skipped = 0; const errs: string[] = [];
+      for (const id of ids) {
+        const res = await resetOne(id);
+        if (res === 'ok') okN++; else if (res.startsWith('error:')) errs.push(res.slice(6)); else skipped++;
+      }
+      if (!body.scope && ids.length === 1 && errs.length) return json({ error: errs[0] }, 400);
+      return json({ ok: true, reset: okN, skipped, errors: errs.slice(0, 3), next, done });
     }
 
     if (body.action === 'delete') {
