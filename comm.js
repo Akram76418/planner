@@ -447,7 +447,7 @@
   async function loadSched() { ST.sched.rows = (await rpc('comm_sched_list', { p_from: todayStr() })) || []; }
   async function loadPolls() { ST.polls.rows = (await rpc('comm_poll_list')) || []; }
   async function loadHome() {
-    try { ST.home.sup = ((await rpc('comm_my_supervisor')) || [])[0] || null; } catch (e) { ST.home.sup = null; }
+    try { ST.home.sup = (await rpc('comm_my_supervisor')) || []; } catch (e) { ST.home.sup = []; }
     try { await loadSched(); } catch (e) {}
     try { await loadPolls(); } catch (e) {}
     try { ST.home.ann = ST.cohort ? ((await rpc('comm_ann_list', { p_cohort: ST.cohort, p_limit: 3 })) || []) : []; } catch (e) { ST.home.ann = []; }
@@ -455,10 +455,10 @@
   function unvoted() { return (ST.polls.rows || []).filter(function (p) { return !p.closed && p.my_vote == null; }).length; }
 
   function homeHtml() {
-    var c = ctx(), sup = ST.home.sup, nx = (ST.sched.rows || []).slice(0, 4), an = (ST.home.ann || [])[0], uv = unvoted();
+    var c = ctx(), sups = ST.home.sup || [], nx = (ST.sched.rows || []).slice(0, 4), an = (ST.home.ann || [])[0], uv = unvoted();
     var quick = '<div class="tabs" style="margin:10px 0">' +
       '<button class="btn pri" data-act="cm-tab" data-t="dm">💬 ' + h(T('المحادثات', 'Chats')) + (ST.dmUnread ? ' (' + ST.dmUnread + ')' : '') + '</button>' +
-      (sup ? '<button class="btn" data-act="cm-start" data-id="' + h(sup.id) + '" data-n="' + h(sup.full_name) + '">✉ ' + h(T('راسل مشرفي: ', 'Message my supervisor: ')) + h(dn(sup.full_name, sup.id)) + '</button>' : '') +
+      sups.map(function (sup) { return '<button class="btn" data-act="cm-start" data-id="' + h(sup.id) + '" data-n="' + h(sup.full_name) + '">✉ ' + h(T('راسل: ', 'Message: ')) + h(dn(sup.full_name, sup.id)) + '</button>'; }).join('') +
       '<button class="btn" data-act="cm-tab" data-t="ann">📢 ' + h(T('الإعلانات', 'Announcements')) + (ST.unread.ann ? ' (' + ST.unread.ann + ')' : '') + '</button></div>';
     var annCard = '<div class="card"><h2>' + h(T('آخر إعلان', 'Latest announcement')) + '</h2>' + (an ? '<div class="cm-msgs" style="max-height:none">' + annMsg(an) + '</div><button class="btn sm" data-act="cm-tab" data-t="ann">' + h(T('كل الإعلانات', 'All announcements')) + '</button>' : '<div class="empty">' + h(T('لا إعلانات', 'No announcements')) + '</div>') + '</div>';
     var schCard = '<div class="card"><h2>' + h(T('الأقرب في الجدول', 'Coming up')) + '</h2>' + (nx.length ? '<div class="list">' + nx.map(schedRow).join('') + '</div><button class="btn sm" data-act="cm-tab" data-t="sched">' + h(T('الجدول كاملاً', 'Full schedule')) + '</button>' : '<div class="empty">' + h(T('لا مواعيد قادمة', 'Nothing scheduled')) + '</div>') + '</div>';
