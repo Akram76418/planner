@@ -50,7 +50,7 @@ create or replace function public.comm_clear_logs() returns void
 language plpgsql security definer set search_path = public as $$
 begin
   if public.current_user_role() <> 'admin' then raise exception 'admin only'; end if;
-  delete from comm_app_log;
+  delete from comm_app_log where true;
 end $$;
 revoke execute on function public.comm_list_logs(text, integer), public.comm_clear_logs() from public, anon;
 grant execute on function public.comm_list_logs(text, integer), public.comm_clear_logs() to authenticated;
@@ -79,18 +79,18 @@ begin
     'messages', (select count(*) from communication_messages),
     'channel', (select count(*) from comm_channel_messages),
     'announcements', (select count(*) from comm_announcements));
-  update communication_messages set reply_to_id = null, forwarded_from_id = null;
-  delete from communication_message_attachments;
-  delete from comm_dm_files;
-  delete from communication_notifications;
-  delete from communication_messages;
-  delete from communication_conversation_participants;
-  delete from communication_conversations;
-  delete from communication_drafts;
-  delete from comm_channel_messages;
-  delete from comm_announcements;
-  delete from comm_reads;
-  delete from messages;
+  update communication_messages set reply_to_id = null, forwarded_from_id = null where true;
+  delete from communication_message_attachments where true;
+  delete from comm_dm_files where true;
+  delete from communication_notifications where true;
+  delete from communication_messages where true;
+  delete from communication_conversation_participants where true;
+  delete from communication_conversations where true;
+  delete from communication_drafts where true;
+  delete from comm_channel_messages where true;
+  delete from comm_announcements where true;
+  delete from comm_reads where true;
+  delete from messages where true;
   insert into comm_app_log (kind, msg) values ('wipe', 'تم مسح كل المراسلات: ' || r::text);
   return r;
 end $$;

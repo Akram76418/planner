@@ -6,7 +6,7 @@
   if (!P) return;
   var h = P.h;
   var ST = { tab: null, conv: null, convs: [], msgs: [], recips: null, q: '', chan: 'all', cohorts: [], cohort: null,
-    items: [], unread: {}, dmUnread: 0, busy: false, err: '', draft: '', file: null, admin: { pending: [], students: [], staff: [], reqs: [], rows: null, rowsInfo: '', sheet: null, sel: {}, dups: null, dupSel: {}, note: '', q: '', res: null, sub: 'create' }, timer: null, loaded: false };
+    items: [], home: { sup: null, ann: [] }, sched: { rows: [], form: null }, polls: { rows: [], form: false }, week: { rows: [], note: '' }, unread: {}, dmUnread: 0, busy: false, err: '', draft: '', file: null, admin: { pending: [], students: [], staff: [], reqs: [], rows: null, rowsInfo: '', sheet: null, sel: {}, dups: null, dupSel: {}, note: '', q: '', res: null, sub: 'create' }, timer: null, loaded: false };
   var CHAN = { all: ['الجميع', 'Everyone'], academic: ['أكاديمي', 'Academic'], practical: ['مشرف عملي', 'Practical supervisor'], admin: ['إداري', 'Administrative'] };
   var ROLE = { student: ['طالب', 'Student'], professor: ['عضو هيئة تدريس', 'Faculty'], staff: ['موظف', 'Staff'], admin: ['إدارة', 'Admin'] };
 
@@ -42,7 +42,7 @@
   /* ---------- entry points used by app.html ---------- */
   window.commView = function () { return '<div id="cm-root"></div>'; };
   window.commMount = function () {
-    if (!ST.tab) ST.tab = 'dm';
+    if (!ST.tab) ST.tab = role() === 'student' ? 'home' : 'dm';
     draw();
     if (!ST.loaded) { ST.loaded = true; boot(); }
     clearInterval(ST.timer); ST.timer = setInterval(poll, 8000);
@@ -55,6 +55,7 @@
       else if (ST.cohorts[0]) ST.cohort = ST.cohorts[0].id;
       if (isAdmin()) { ST.admin.pending = await rpc('comm_pending_passwords'); ST.admin.reqs = await rpc('comm_list_requests').catch(function () { return []; }); }
       await loadDm(); await loadUnread(); await loadTab();
+      if (role() === 'student') { try { await loadPolls(); } catch (e) {} }
     } catch (e) { ST.err = e.message; }
     draw();
   }
@@ -80,6 +81,10 @@
     if (!keepScroll) { try { await rpc('mark_communication_conversation_read', { target_conversation_id: ST.conv.id }); } catch (e) {} }
   }
   async function loadTab(quiet) {
+    if (ST.tab === 'home') return loadHome();
+    if (ST.tab === 'sched') return loadSched();
+    if (ST.tab === 'poll') return loadPolls();
+    if (ST.tab === 'week') return loadWeek();
     if (ST.tab === 'staff') {
       var rows = await rpc('comm_channel_list', { p_channel: ST.chan, p_limit: 60 });
       ST.items = (rows || []).slice().reverse();
@@ -87,6 +92,7 @@
     } else if (ST.tab === 'ann' && ST.cohort) {
       ST.items = (await rpc('comm_ann_list', { p_cohort: ST.cohort })) || [];
       await sb().from('comm_reads').upsert({ user_id: me(), scope: 'ann', last_read_at: new Date().toISOString() });
+      if (!isAdmin()) { try { await rpc('comm_ann_mark_read', { p_cohort: ST.cohort }); } catch (e) {} }
     } else if (ST.tab === 'admin') {
       if (ST.admin.sub === 'requests') ST.admin.reqs = await rpc('comm_list_requests');
       if (ST.admin.sub === 'pending') ST.admin.pending = await rpc('comm_pending_passwords');
@@ -117,9 +123,13 @@
   function badge(n) { return n > 0 ? '<span class="cm-b">' + n + '</span>' : ''; }
   function tabs() {
     var chU = 0; Object.keys(ST.unread).forEach(function (k) { if (k.indexOf('ch:') === 0) chU += ST.unread[k]; });
-    var t = [['dm', T('المحادثات', 'Chats'), ST.dmUnread]];
+    var t = role() === 'student' ? [['home', T('الرئيسية', 'Home'), 0]] : [];
+    t.push(['dm', T('المحادثات', 'Chats'), ST.dmUnread]);
     if (isStaff()) t.push(['staff', T('قنوات الموظفين', 'Staff channels'), chU]);
     t.push(['ann', T('إعلانات الشعب', 'Cohort announcements'), ST.unread.ann || 0]);
+    t.push(['sched', T('الجدول', 'Schedule'), 0]);
+    t.push(['poll', T('استبيانات', 'Polls'), role() === 'student' ? unvoted() : 0]);
+    if (isStaff()) t.push(['week', T('جدول الدوام', 'Weekly roster'), 0]);
     if (isAdmin()) t.push(['admin', T('إدارة', 'Admin'), 0]);
     t.push(['me', T('حسابي', 'My account'), 0]);
     return '<div class="cm-tabs">' + t.map(function (x) { return '<button class="btn' + (ST.tab === x[0] ? ' pri' : '') + '" data-act="cm-tab" data-t="' + x[0] + '">' + h(x[1]) + badge(x[2]) + '</button>'; }).join('') + '</div>';
@@ -128,10 +138,11 @@
     var root = $c('#cm-root'); if (!root) return;
     var body = '';
     if (ST.tab === 'dm') body = dmHtml(); else if (ST.tab === 'staff') body = staffHtml(); else if (ST.tab === 'ann') body = annHtml();
+    else if (ST.tab === 'home') body = homeHtml(); else if (ST.tab === 'sched') body = schedHtml(); else if (ST.tab === 'poll') body = pollHtml(); else if (ST.tab === 'week') body = weekHtml();
     else if (ST.tab === 'admin') body = adminHtml(); else body = meHtml();
     root.innerHTML = '<header class="top"><h1>' + h(T('التواصل', 'Communication')) + '</h1></header>' + tabs() +
       (ST.err ? '<p class="pill bad">' + h(ST.err) + '</p>' : '') + body;
-    var box = root.querySelector('.cm-msgs'); if (box) box.scrollTop = box.scrollHeight;
+    var box = root.querySelector('.cm-msgs'); if (box) box.scrollTop = ST.tab === 'ann' ? 0 : box.scrollHeight;
     var ta = root.querySelector('#cm-text'); if (ta) ta.value = ST.draft;
   }
   function softDraw() { var a = document.activeElement; if (a && (a.id === 'cm-text' || a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT')) return; draw(); }
@@ -187,7 +198,7 @@
     else sel = '<b>' + h(ctx().cohort_name || '') + '</b>';
     var post = isAdmin() ? '<div style="margin-top:10px"><label class="ck" style="margin-bottom:6px"><input type="checkbox" data-cm="annall"' + (ST.annAll ? ' checked' : '') + '> ' + h(T('إرسال إلى جميع الشعب دفعة واحدة', 'Send to all cohorts at once')) + '</label><input id="cm-title" placeholder="' + h(T('عنوان الإعلان (اختياري)', 'Title (optional)')) + '" data-cm="title" style="width:100%;margin-bottom:6px">' + composer(T('نص الإعلان…', 'Announcement…')) + '</div>' : '';
     return '<div class="card">' + sel + '<p class="sub">' + h(T('الإعلانات من الإدارة فقط، ولا يمكن الرد عليها.', 'Announcements come from the administration only; replies are not possible.')) + '</p>' +
-      '<div class="cm-msgs">' + (ST.items.map(function (m) { return msgHtml(m, false, true); }).join('') || '<div class="empty">' + h(T('لا إعلانات', 'No announcements')) + '</div>') + '</div>' + post + '</div>';
+      '<div class="cm-msgs">' + (ST.items.map(annMsg).join('') || '<div class="empty">' + h(T('لا إعلانات', 'No announcements')) + '</div>') + '</div>' + post + '</div>';
   }
 
   function meHtml() {
@@ -262,7 +273,7 @@
     'cm-tab': function (el) { ST.tab = el.dataset.t; ST.err = ''; ST.items = []; ST.file = null; ST.draft = ''; draw(); guard(async function () { await loadTab(); if (ST.tab === 'dm') await loadDm(); }); },
     'cm-new': function () { ST.recips = []; ST.q = ''; draw(); searchRecips(); },
     'cm-newclose': function () { ST.recips = null; draw(); },
-    'cm-start': function (el) { guard(async function () { var id = await rpc('ensure_direct_communication_conversation', { target_user_id: el.dataset.id, conversation_subject: null }); ST.recips = null; ST.conv = { id: id, name: el.dataset.n }; ST.msgs = []; await loadMsgs(); await loadDm(); }); },
+    'cm-start': function (el) { guard(async function () { var id = await rpc('ensure_direct_communication_conversation', { target_user_id: el.dataset.id, conversation_subject: null }); ST.recips = null; ST.tab = 'dm'; ST.conv = { id: id, name: el.dataset.n }; ST.msgs = []; await loadMsgs(); await loadDm(); }); },
     'cm-open': function (el) { var c = ST.convs.filter(function (x) { return x.id === el.dataset.id; })[0]; if (!c) return; guard(async function () { ST.conv = { id: c.id, name: dn(c.counterpart_name, c.counterpart_id || c.other_user_id || c.counterpart_user_id || c.participant_id) }; await loadMsgs(); await loadDm(); await loadUnread(); }); },
     'cm-back': function () { ST.conv = null; draw(); },
     'cm-file': function (el) { openFile(el.dataset.p); },
@@ -277,6 +288,34 @@
     'cm-exp-staff-xlsx': function () { guard(async function () { var a = staffAoa(); await loadXlsx(); var wb = window.XLSX.utils.book_new(); window.XLSX.utils.book_append_sheet(wb, window.XLSX.utils.aoa_to_sheet(a), 'Staff'); var out = window.XLSX.write(wb, { bookType: 'xlsx', type: 'array' }); saveFile('staff-' + new Date().toISOString().slice(0, 10) + '.xlsx', new Blob([out], { type: 'application/octet-stream' })); }); },
     'cm-exp-staff-csv': function () { var a = staffAoa(); var csv = '\ufeff' + a.map(function (r) { return r.map(function (c) { c = String(c == null ? '' : c); return /[",\n\r]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c; }).join(','); }).join('\r\n'); saveFile('staff-' + new Date().toISOString().slice(0, 10) + '.csv', new Blob([csv], { type: 'text/csv;charset=utf-8' })); },
     'cm-assign-prof': function (el) { var ids = Array.prototype.map.call(document.querySelectorAll('.ap-c-' + el.dataset.id + ':checked'), function (x) { return x.value; }); assignProf(Number(el.dataset.id), ids); },
+    'cm-pin': function (el) { guard(async function () { await rpc('comm_ann_pin', { p_id: Number(el.dataset.id), p_pinned: el.dataset.p === '1' }); await loadTab(); }); },
+    'sc-new': function () { ST.sched.form = { kind: 'lecture' }; draw(); },
+    'sc-cancel': function () { ST.sched.form = null; draw(); },
+    'sc-edit': function (el) { ST.sched.form = (ST.sched.rows.filter(function (x) { return String(x.id) === el.dataset.id; })[0]) || null; draw(); },
+    'sc-save': function () {
+      var f = ST.sched.form || {}, title = val('sf-title').trim(), date = val('sf-date');
+      if (!title || !date) { toast_(T('العنوان والتاريخ مطلوبان', 'Title and date are required')); return; }
+      guard(async function () {
+        await rpc('comm_sched_save', { p_id: f.id || null, p_cohort: val('sf-cohort') ? Number(val('sf-cohort')) : null, p_kind: val('sf-kind'), p_title: title, p_date: date, p_start: val('sf-start') || null, p_end: val('sf-end') || null, p_place: val('sf-place'), p_notes: val('sf-notes') });
+        ST.sched.form = null; await loadSched(); toast_(T('تم الحفظ', 'Saved'));
+      });
+    },
+    'sc-del': function (el) { guard(async function () { await rpc('comm_sched_delete', { p_id: Number(el.dataset.id) }); await loadSched(); }); },
+    'pl-new': function () { ST.polls.form = true; draw(); },
+    'pl-cancel': function () { ST.polls.form = false; draw(); },
+    'pl-create': function () {
+      var q = val('pf-q').trim(), opts = val('pf-opts').split(/\r?\n/).map(function (x) { return x.trim(); }).filter(Boolean);
+      if (!q || opts.length < 2) { toast_(T('اكتب السؤال وخيارين على الأقل', 'Write a question and at least two options')); return; }
+      guard(async function () { await rpc('comm_poll_create', { p_cohort: val('pf-cohort') ? Number(val('pf-cohort')) : null, p_question: q, p_options: opts }); ST.polls.form = false; await loadPolls(); toast_(T('تم النشر', 'Published')); });
+    },
+    'pl-vote': function (el) { guard(async function () { await rpc('comm_poll_vote', { p_poll: Number(el.dataset.p), p_opt: Number(el.dataset.o) }); await loadPolls(); toast_(T('تم تسجيل إجابتك', 'Answer recorded')); }); },
+    'pl-close': function (el) { guard(async function () { await rpc('comm_poll_close', { p_id: Number(el.dataset.id), p_closed: el.dataset.c === '1' }); await loadPolls(); }); },
+    'pl-del': function (el) { guard(async function () { await rpc('comm_poll_delete', { p_id: Number(el.dataset.id) }); await loadPolls(); }); },
+    'wk-add': function () { var n = window.prompt(T('اسم الموظف:', 'Name:')); if (!n || !n.trim()) return; guard(async function () { await rpc('comm_weekly_save', { p_id: null, p_name: n.trim(), p_cells: {}, p_notes: '', p_user: null }); await loadWeek(); }); },
+    'wk-fill': function () { guard(async function () { var n = await rpc('comm_weekly_fill'); await loadWeek(); ST.week.note = T('أُضيف ' + n + ' موظف', n + ' added'); }); },
+    'wk-del': function (el) { guard(async function () { await rpc('comm_weekly_delete', { p_id: Number(el.dataset.id) }); await loadWeek(); }); },
+    'wk-clear': function () { guard(async function () { await rpc('comm_weekly_clear'); await loadWeek(); ST.week.note = T('تم مسح الجدول', 'Cleared'); }); },
+    'wk-export': function () { saveWord('weekly-schedule-' + new Date().toISOString().slice(0, 10) + '.doc', weekDoc()); },
     'cm-del-staff': function () { var ids = (ST.admin.staff || []).filter(function (p) { return ST.admin.sel[p.id]; }).map(function (p) { return p.id; }); deleteIds(ids, async function () { ST.admin.staff = await rpc('comm_list_staff'); }); },
     'cm-del-pend': function () { var ids = ST.admin.pending.filter(function (p) { return ST.admin.sel[p.user_id]; }).map(function (p) { return p.user_id; }); deleteIds(ids, async function () { ST.admin.pending = await rpc('comm_pending_passwords'); }); },
     'cm-del-dups': function () { var ids = Object.keys(ST.admin.dupSel).filter(function (k) { return ST.admin.dupSel[k]; }); deleteIds(ids, findDups); },
@@ -335,6 +374,11 @@
     else if (k === 'stselall') { (ST.admin.staff || []).forEach(function (x) { ST.admin.sel[x.id] = e.target.checked; }); draw(); }
     else if (k === 'cf') { var cv = e.target.type === 'checkbox' ? e.target.checked : e.target.value; ST.admin['c' + e.target.dataset.k] = cv; }
     else if (k === 'srole') guard(async function () { await rpc('comm_set_staff_role', { p_user: e.target.dataset.id, p_role: e.target.value }); ST.admin.staff = await rpc('comm_list_staff'); toast_('OK'); });
+    else if (k === 'wk') {
+      var wid = e.target.dataset.id, v = weekRowValues(wid), row = (ST.week.rows || []).filter(function (x) { return String(x.id) === wid; })[0] || {};
+      if (!(v.name || '').trim()) { toast_(T('الاسم مطلوب', 'Name is required')); return; }
+      rpc('comm_weekly_save', { p_id: Number(wid), p_name: v.name, p_cells: v.cells, p_notes: v.notes, p_user: row.user_id || null }).then(function () { row.name = v.name; row.cells = v.cells; row.notes = v.notes; toast_(T('تم الحفظ', 'Saved')); }, function (er) { toast_((er && er.message) || 'error'); });
+    }
     else if (k === 'annall') { ST.annAll = e.target.checked; draw(); }
     else if (k === 'chan') { ST.chan = e.target.value; guard(loadTab); }
     else if (k === 'coh') { ST.cohort = Number(e.target.value); guard(loadTab); }
@@ -390,6 +434,146 @@
     return out;
   }
   function saveFile(name, blob) { var u = URL.createObjectURL(blob), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 4000); }
+  /* ---------- ميزات الطلبة: الرئيسية، الجدول، الاستبيانات ---------- */
+  var KINDS = { lecture: ['محاضرة', 'Lecture', ''], clinical: ['تدريب عملي', 'Clinical', 'warn'], exam: ['امتحان', 'Exam', 'bad'], event: ['فعالية', 'Event', 'ok'], other: ['أخرى', 'Other', ''] };
+  function todayStr() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function dayLabel(ds) {
+    var t = todayStr(); if (ds === t) return T('اليوم', 'Today');
+    var d = new Date(ds + 'T00:00:00'), n = new Date(t + 'T00:00:00'), diff = Math.round((d - n) / 86400000);
+    if (diff === 1) return T('غداً', 'Tomorrow');
+    return d.toLocaleDateString(ar() ? 'ar' : 'en', { weekday: 'long', month: 'long', day: 'numeric' });
+  }
+  function hhmm(t) { return t ? String(t).slice(0, 5) : ''; }
+  async function loadSched() { ST.sched.rows = (await rpc('comm_sched_list', { p_from: todayStr() })) || []; }
+  async function loadPolls() { ST.polls.rows = (await rpc('comm_poll_list')) || []; }
+  async function loadHome() {
+    try { ST.home.sup = ((await rpc('comm_my_supervisor')) || [])[0] || null; } catch (e) { ST.home.sup = null; }
+    try { await loadSched(); } catch (e) {}
+    try { await loadPolls(); } catch (e) {}
+    try { ST.home.ann = ST.cohort ? ((await rpc('comm_ann_list', { p_cohort: ST.cohort, p_limit: 3 })) || []) : []; } catch (e) { ST.home.ann = []; }
+  }
+  function unvoted() { return (ST.polls.rows || []).filter(function (p) { return !p.closed && p.my_vote == null; }).length; }
+
+  function homeHtml() {
+    var c = ctx(), sup = ST.home.sup, nx = (ST.sched.rows || []).slice(0, 4), an = (ST.home.ann || [])[0], uv = unvoted();
+    var quick = '<div class="tabs" style="margin:10px 0">' +
+      '<button class="btn pri" data-act="cm-tab" data-t="dm">💬 ' + h(T('المحادثات', 'Chats')) + (ST.dmUnread ? ' (' + ST.dmUnread + ')' : '') + '</button>' +
+      (sup ? '<button class="btn" data-act="cm-start" data-id="' + h(sup.id) + '" data-n="' + h(sup.full_name) + '">✉ ' + h(T('راسل مشرفي: ', 'Message my supervisor: ')) + h(dn(sup.full_name, sup.id)) + '</button>' : '') +
+      '<button class="btn" data-act="cm-tab" data-t="ann">📢 ' + h(T('الإعلانات', 'Announcements')) + (ST.unread.ann ? ' (' + ST.unread.ann + ')' : '') + '</button></div>';
+    var annCard = '<div class="card"><h2>' + h(T('آخر إعلان', 'Latest announcement')) + '</h2>' + (an ? '<div class="cm-msgs" style="max-height:none">' + annMsg(an) + '</div><button class="btn sm" data-act="cm-tab" data-t="ann">' + h(T('كل الإعلانات', 'All announcements')) + '</button>' : '<div class="empty">' + h(T('لا إعلانات', 'No announcements')) + '</div>') + '</div>';
+    var schCard = '<div class="card"><h2>' + h(T('الأقرب في الجدول', 'Coming up')) + '</h2>' + (nx.length ? '<div class="list">' + nx.map(schedRow).join('') + '</div><button class="btn sm" data-act="cm-tab" data-t="sched">' + h(T('الجدول كاملاً', 'Full schedule')) + '</button>' : '<div class="empty">' + h(T('لا مواعيد قادمة', 'Nothing scheduled')) + '</div>') + '</div>';
+    var pollCard = uv ? '<div class="card"><h2>' + h(T('استبيانات بانتظارك', 'Polls waiting for you')) + '</h2><p class="sub">' + h(T('لديك ' + uv + ' استبيان لم تجب عنه.', 'You have ' + uv + ' unanswered poll(s).')) + '</p><button class="btn pri" data-act="cm-tab" data-t="poll">' + h(T('أجب الآن', 'Answer now')) + '</button></div>' : '';
+    return '<div class="card"><h2>' + h(T('مرحباً ', 'Welcome ') + (c.name || '')) + '</h2><p class="sub">' + h(c.cohort_name ? T('شعبتك: ', 'Your cohort: ') + c.cohort_name : T('لم تُسنَد إلى شعبة بعد، راجع الإدارة.', 'No cohort assigned yet.')) + '</p>' + quick + '</div>' + annCard + schCard + pollCard;
+  }
+
+  function schedRow(s) {
+    var k = KINDS[s.kind] || KINDS.other, tm = hhmm(s.start_time) + (s.end_time ? ' – ' + hhmm(s.end_time) : '');
+    return '<div class="row"><div class="main"><div class="t"><span class="pill ' + k[2] + '">' + h(k[ar() ? 0 : 1]) + '</span> ' + h(s.title) + '</div><div class="sub">' + h(dayLabel(s.event_date)) + (tm.trim() ? ' · ' + h(tm) : '') + (s.place ? ' · ' + h(s.place) : '') + (isStaff() ? ' · ' + h(s.cohort_name || T('كل الشعب', 'All cohorts')) : '') + (s.notes ? ' · ' + h(s.notes) : '') + '</div></div>' +
+      (isAdmin() ? '<div class="act"><button class="btn sm" data-act="sc-edit" data-id="' + s.id + '">' + h(T('تعديل', 'Edit')) + '</button> <button class="btn sm bad" data-act="sc-del" data-id="' + s.id + '" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button></div>' : '') + '</div>';
+  }
+  function schedForm() {
+    var f = ST.sched.form; if (!f) return '';
+    var coh = '<option value="">' + h(T('كل الشعب', 'All cohorts')) + '</option>' + ST.cohorts.filter(function (c) { return c.is_active; }).map(function (c) { return '<option value="' + c.id + '"' + (String(f.cohort_id || '') === String(c.id) ? ' selected' : '') + '>' + h(c.name) + '</option>'; }).join('');
+    var kinds = Object.keys(KINDS).map(function (k) { return '<option value="' + k + '"' + ((f.kind || 'lecture') === k ? ' selected' : '') + '>' + h(KINDS[k][ar() ? 0 : 1]) + '</option>'; }).join('');
+    return '<div class="card" style="margin:8px 0"><b>' + h(f.id ? T('تعديل موعد', 'Edit entry') : T('إضافة موعد', 'Add entry')) + '</b><div class="form">' +
+      '<label>' + h(T('الشعبة', 'Cohort')) + '<select id="sf-cohort">' + coh + '</select></label>' +
+      '<label>' + h(T('النوع', 'Type')) + '<select id="sf-kind">' + kinds + '</select></label>' +
+      '<label>' + h(T('العنوان *', 'Title *')) + '<input id="sf-title" value="' + h(f.title || '') + '"></label>' +
+      '<label>' + h(T('التاريخ *', 'Date *')) + '<input id="sf-date" type="date" value="' + h(f.event_date || todayStr()) + '"></label>' +
+      '<label>' + h(T('من', 'From')) + '<input id="sf-start" type="time" value="' + h(hhmm(f.start_time)) + '"></label>' +
+      '<label>' + h(T('إلى', 'To')) + '<input id="sf-end" type="time" value="' + h(hhmm(f.end_time)) + '"></label>' +
+      '<label>' + h(T('المكان', 'Place')) + '<input id="sf-place" value="' + h(f.place || '') + '"></label>' +
+      '<label>' + h(T('ملاحظات', 'Notes')) + '<input id="sf-notes" value="' + h(f.notes || '') + '"></label></div>' +
+      '<div class="tabs"><button class="btn pri" data-act="sc-save"' + (ST.busy ? ' disabled' : '') + '>' + h(T('حفظ', 'Save')) + '</button><button class="btn" data-act="sc-cancel">' + h(T('إلغاء', 'Cancel')) + '</button></div></div>';
+  }
+  function schedHtml() {
+    var rows = ST.sched.rows || [], byDay = {}, days = [];
+    rows.forEach(function (s) { if (!byDay[s.event_date]) { byDay[s.event_date] = []; days.push(s.event_date); } byDay[s.event_date].push(s); });
+    return '<div class="card"><h2>' + h(T('الجدول والمواعيد', 'Schedule')) + '</h2>' +
+      '<p class="sub">' + h(isAdmin() ? T('أضف المحاضرات والتدريب العملي والامتحانات لشعبة أو لكل الشعب، فتظهر للطلبة في جدولهم.', 'Add lectures, clinical sessions and exams for a cohort or all cohorts.') : T('المواعيد القادمة لشعبتك.', 'Upcoming entries for your cohort.')) + '</p>' +
+      (isAdmin() && !ST.sched.form ? '<button class="btn pri" data-act="sc-new">+ ' + h(T('إضافة موعد', 'Add entry')) + '</button>' : '') + schedForm() +
+      (days.map(function (d) { return '<h3 style="margin:12px 0 4px">' + h(dayLabel(d)) + '</h3><div class="list">' + byDay[d].map(schedRow).join('') + '</div>'; }).join('') || '<div class="empty">' + h(T('لا مواعيد قادمة', 'Nothing scheduled')) + '</div>') + '</div>';
+  }
+
+  function pollHtml() {
+    var rows = ST.polls.rows || [], form = '';
+    if (isAdmin()) {
+      form = ST.polls.form ? '<div class="card" style="margin:8px 0"><b>' + h(T('استبيان جديد', 'New poll')) + '</b><div class="form"><label>' + h(T('لمن؟', 'For')) + '<select id="pf-cohort"><option value="">' + h(T('كل الطلبة', 'All students')) + '</option>' + ST.cohorts.filter(function (c) { return c.is_active; }).map(function (c) { return '<option value="' + c.id + '">' + h(c.name) + '</option>'; }).join('') + '</select></label>' +
+        '<label style="grid-column:1/-1">' + h(T('السؤال *', 'Question *')) + '<input id="pf-q"></label></div><label>' + h(T('الخيارات: خيار في كل سطر (2 إلى 8)', 'Options: one per line (2 to 8)')) + '<textarea id="pf-opts" class="cm-ta" style="direction:rtl;font-family:inherit"></textarea></label>' +
+        '<div class="tabs"><button class="btn pri" data-act="pl-create"' + (ST.busy ? ' disabled' : '') + '>' + h(T('نشر', 'Publish')) + '</button><button class="btn" data-act="pl-cancel">' + h(T('إلغاء', 'Cancel')) + '</button></div></div>'
+        : '<button class="btn pri" data-act="pl-new">+ ' + h(T('استبيان جديد', 'New poll')) + '</button>';
+    }
+    return '<div class="card"><h2>' + h(T('الاستبيانات', 'Polls')) + '</h2>' + form +
+      (rows.map(function (p) {
+        var canVote = !isStaff() && !p.closed, showRes = p.counts != null, total = Number(p.total) || 0;
+        var opts = (p.options || []).map(function (o, i) {
+          var n = showRes ? Number((p.counts || [])[i]) || 0 : 0, pc = total ? Math.round(n * 100 / total) : 0, mine = p.my_vote === i;
+          var bar = showRes ? '<div style="height:6px;border-radius:4px;background:rgba(127,127,127,.2);margin-top:4px"><div style="height:6px;border-radius:4px;background:var(--accent,#0b8a97);width:' + pc + '%"></div></div>' : '';
+          var label = h(o) + (showRes ? ' — ' + n + ' (' + pc + '%)' : '');
+          return canVote ? '<button class="btn" style="display:block;width:100%;text-align:start;margin:4px 0' + (mine ? ';outline:2px solid var(--accent,#0b8a97)' : '') + '" data-act="pl-vote" data-p="' + p.id + '" data-o="' + i + '">' + (mine ? '✓ ' : '') + label + bar + '</button>' : '<div style="margin:6px 0">' + (mine ? '✓ ' : '') + label + bar + '</div>';
+        }).join('');
+        return '<div class="card" style="margin:10px 0"><b>' + h(p.question) + '</b> ' + (p.closed ? '<span class="pill">' + h(T('مغلق', 'Closed')) + '</span>' : '') +
+          '<div class="sub">' + h(p.cohort_name || T('كل الطلبة', 'All students')) + (isStaff() ? ' · ' + h(T('أجاب ', 'Answered ') + total + T(' من ', ' of ') + p.eligible) : '') + '</div>' + opts +
+          (isAdmin() ? '<div class="tabs"><button class="btn sm" data-act="pl-close" data-id="' + p.id + '" data-c="' + (p.closed ? 0 : 1) + '">' + h(p.closed ? T('إعادة فتح', 'Reopen') : T('إغلاق', 'Close')) + '</button> <button class="btn sm bad" data-act="pl-del" data-id="' + p.id + '" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button></div>' : '') + '</div>';
+      }).join('') || '<div class="empty">' + h(T('لا استبيانات', 'No polls')) + '</div>') + '</div>';
+  }
+
+  function annMsg(m) {
+    var base = msgHtml(m, false, true), extra = '';
+    if (m.pinned) extra += '<div><span class="pill warn">📌 ' + h(T('مثبّت', 'Pinned')) + '</span></div>';
+    if (isAdmin() && m.id) {
+      var coh = ST.cohorts.filter(function (c) { return c.id === ST.cohort; })[0], mem = coh ? Number(coh.members) : 0;
+      extra += '<div class="sub">👁 ' + h(T('اطّلع ' + (m.readers || 0) + ' من ' + mem, 'Seen by ' + (m.readers || 0) + ' of ' + mem)) + ' · <button class="btn sm" data-act="cm-pin" data-id="' + m.id + '" data-p="' + (m.pinned ? 0 : 1) + '">' + h(m.pinned ? T('إلغاء التثبيت', 'Unpin') : T('📌 تثبيت', '📌 Pin')) + '</button></div>';
+    }
+    return base.slice(0, -6) + extra + '</div>';
+  }
+  function val(id) { var e = $c('#' + id); return e ? e.value : ''; }
+  /* ---------- الجدول الأسبوعي للمحاضرين والموظفين ---------- */
+  var DAYS = [['sun', 'الأحد', 'Sun'], ['mon', 'الاثنين', 'Mon'], ['tue', 'الثلاثاء', 'Tue'], ['wed', 'الأربعاء', 'Wed'], ['thu', 'الخميس', 'Thu']];
+  async function loadWeek() { ST.week.rows = (await rpc('comm_weekly_list')) || []; }
+  function weekHtml() {
+    var adm = isAdmin(), rows = ST.week.rows || [];
+    var head = '<tr><th>#</th><th>' + h(T('الاسم', 'Name')) + '</th>' + DAYS.map(function (d) { return '<th>' + h(d[ar() ? 1 : 2]) + '</th>'; }).join('') + '<th>' + h(T('ملاحظات', 'Notes')) + '</th>' + (adm ? '<th></th>' : '') + '</tr>';
+    var body = rows.map(function (r, i) {
+      var c = r.cells || {};
+      var cell = function (k, v, ph) { return adm ? '<input data-cm="wk" data-id="' + r.id + '" data-k="' + k + '" value="' + h(v || '') + '" placeholder="' + h(ph || '') + '" style="width:100%;min-width:90px">' : h(v || ''); };
+      return '<tr><td>' + (i + 1) + '</td><td>' + (adm ? cell('name', r.name) : '<b>' + h(r.name) + '</b>') + '</td>' + DAYS.map(function (d) { return '<td>' + cell(d[0], c[d[0]]) + '</td>'; }).join('') + '<td>' + cell('notes', r.notes) + '</td>' +
+        (adm ? '<td><button class="btn sm bad" data-act="wk-del" data-id="' + r.id + '" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button></td>' : '') + '</tr>';
+    }).join('');
+    return '<div class="card"><h2>' + h(T('الجدول الأسبوعي للمحاضرين والموظفين', 'Weekly schedule: faculty & staff')) + '</h2>' +
+      '<p class="sub">' + h(adm ? T('اكتب مكان عمل كل موظف في كل يوم (مثل: الكلية، مستشفى الشفاء، إجازة). يُحفظ التعديل تلقائياً عند الخروج من الخانة.', 'Type each person\'s workplace per day. Edits save automatically when you leave a cell.') : T('جدول أماكن العمل الأسبوعي.', 'Weekly workplace table.')) + '</p>' +
+      (ST.week.note ? '<p class="pill ok">' + h(ST.week.note) + '</p>' : '') +
+      '<div class="tabs" style="margin:8px 0">' + (adm ? '<button class="btn pri" data-act="wk-add">+ ' + h(T('إضافة صف', 'Add row')) + '</button><button class="btn" data-act="wk-fill">' + h(T('إضافة كل الموظفين المسجلين', 'Add all registered staff')) + '</button>' : '') +
+      '<button class="btn" data-act="wk-export">⬇ ' + h(T('تصدير Word', 'Export to Word')) + '</button>' + (adm && rows.length ? '<button class="btn sm bad" data-act="wk-clear" data-confirm="1">' + h(T('مسح الجدول', 'Clear table')) + '</button>' : '') + '</div>' +
+      '<div style="overflow-x:auto"><table class="cm-wk" style="border-collapse:collapse;width:100%">' + head + (body || '<tr><td colspan="9" class="empty">' + h(T('لا بيانات. أضف صفاً أو أضف الموظفين المسجلين.', 'No rows yet.')) + '</td></tr>') + '</table></div></div>';
+  }
+  function weekRowValues(id) {
+    var o = { cells: {}, notes: '' };
+    Array.prototype.forEach.call(document.querySelectorAll('[data-cm=wk][data-id="' + id + '"]'), function (e) {
+      var k = e.dataset.k; if (k === 'name') o.name = e.value; else if (k === 'notes') o.notes = e.value; else o.cells[k] = e.value;
+    });
+    return o;
+  }
+  function weekDoc() {
+    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+    var rows = ST.week.rows || [], d = new Date();
+    var th = 'style="background:#12304D;color:#ffffff;border:1px solid #12304D;padding:6px 8px;text-align:center;font-size:12pt"';
+    var td = function (x, b) { return '<td style="border:1px solid #8aa0b4;padding:6px 8px;text-align:center;font-size:11pt' + (b ? ';font-weight:bold' : '') + '">' + esc(x) + '</td>'; };
+    return '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>الجدول الأسبوعي</title>' +
+      '<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->' +
+      '<style>@page Section1{size:841.9pt 595.3pt;mso-page-orientation:landscape;margin:40pt 40pt 40pt 40pt}div.Section1{page:Section1}body{font-family:Arial,sans-serif}table{border-collapse:collapse;width:100%}tr{page-break-inside:avoid}</style></head>' +
+      '<body dir="rtl"><div class="Section1">' +
+      '<p style="text-align:center;font-size:13pt;color:#0B8A97;margin:0"><b>كلية فلسطين للتمريض - غزة</b></p>' +
+      '<p style="text-align:center;font-size:20pt;color:#12304D;margin:4pt 0 2pt"><b>الجدول الأسبوعي للمحاضرين والموظفين</b></p>' +
+      '<p style="text-align:center;font-size:10pt;color:#6B7C8A;margin:0 0 10pt">تاريخ الإصدار: ' + esc(d.toLocaleDateString('ar', { year: 'numeric', month: 'long', day: 'numeric' })) + '</p>' +
+      '<table dir="rtl" width="100%" border="1" cellspacing="0" cellpadding="4" style="width:100%;border-collapse:collapse"><thead><tr><th ' + th + ' width="4%">#</th><th ' + th + ' width="20%">الاسم</th>' + DAYS.map(function (x) { return '<th ' + th + ' width="13%">' + x[1] + '</th>'; }).join('') + '<th ' + th + ' width="12%">ملاحظات</th></tr></thead><tbody>' +
+      rows.map(function (r, i) { var c = r.cells || {}; return '<tr>' + td(i + 1) + td(r.name, true) + DAYS.map(function (x) { return td(c[x[0]]); }).join('') + td(r.notes) + '</tr>'; }).join('') +
+      '</tbody></table></div></body></html>';
+  }
+  function saveWord(name, html) {
+    var blob = new Blob(['﻿', html], { type: 'application/msword;charset=utf-8' }), u = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 4000);
+  }
   function pendSelCount() { return ST.admin.pending.filter(function (p) { return ST.admin.sel[p.user_id]; }).length; }
   function selCount() { return Object.keys(ST.admin.sel).filter(function (k) { return ST.admin.sel[k]; }).length; }
   function dupSelCount() { return Object.keys(ST.admin.dupSel).filter(function (k) { return ST.admin.dupSel[k]; }).length; }
