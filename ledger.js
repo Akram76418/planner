@@ -12,7 +12,7 @@
   function val(id) { var e = $q('#' + id); return e ? e.value : ''; }
 
   var CUR = { ILS: ['₪', 'شيكل', 'ILS'], USD: ['$', 'دولار', 'USD'], JOD: ['د.أ', 'دينار أردني', 'JOD'], EUR: ['€', 'يورو', 'EUR'] };
-  var L = { acc: [], pay: [], dir: '', q: '', open: {}, form: null, payForm: null, rep: false, from: '', to: '', loaded: false, busy: false, err: '' };
+  var L = { prof: {}, profForm: false, acc: [], pay: [], dir: '', q: '', open: {}, form: null, payForm: null, rep: false, from: '', to: '', loaded: false, busy: false, err: '' };
 
   function num(n) { return Number(n) || 0; }
   function money(n, cur) { var c = CUR[cur] || CUR.ILS; return (Math.round(num(n) * 100) / 100).toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' ' + c[0]; }
@@ -31,6 +31,7 @@
       var p = await sb().from('ledger_payments').select('*').order('paid_at', { ascending: false }).order('id', { ascending: false }).limit(10000);
       if (p.error) throw p.error;
       L.acc = a.data || []; L.pay = p.data || []; L.loaded = true;
+      try { var pf = await sb().from('ledger_profile').select('*').limit(1); if (!pf.error && pf.data && pf.data[0]) L.prof = pf.data[0]; } catch (e2) {}
     } catch (e) { L.err = (e && e.message) || String(e); if (/ledger_|schema cache|does not exist|relation/i.test(L.err)) L.err += ' — ' + T('شغّل ledger.sql في Supabase أولاً.', 'Run ledger.sql in Supabase first.'); }
     L.busy = false; draw();
   }
@@ -68,7 +69,8 @@
       '<label>' + h(T('نوع الحساب', 'Type')) + '<select id="lf-dir"><option value="in"' + (f.direction !== 'out' ? ' selected' : '') + '>' + h(T('أستلم منه (له عليه مبلغ لي)', 'I receive from him')) + '</option><option value="out"' + (f.direction === 'out' ? ' selected' : '') + '>' + h(T('أدفع له (مبلغ عليّ)', 'I pay him')) + '</option></select></label>' +
       '<label>' + h(T('إجمالي المبلغ *', 'Total amount *')) + '<input id="lf-total" type="number" step="0.01" min="0" inputmode="decimal" value="' + h(f.total == null ? '' : f.total) + '"></label>' +
       '<label>' + h(T('العملة', 'Currency')) + '<select id="lf-cur">' + curOpts + '</select></label>' +
-      '<label style="grid-column:1/-1">' + h(T('ملاحظة', 'Note')) + '<input id="lf-note" value="' + h(f.note || '') + '"></label></div>' +
+      '<label style="grid-column:1/-1">' + h(T('ملاحظة', 'Note')) + '<input id="lf-note" value="' + h(f.note || '') + '"></label>' +
+      '<label style="grid-column:1/-1">' + h(T('وصف الدفعة في الوصل (ثابت لهذا الحساب)', 'Payment description on the receipt (fixed per account)')) + '<textarea id="lf-desc" rows="3" placeholder="' + h(T('مثال: قسط شهري من باقي ثمن بيع قطعة أرض مساحتها (268) متر من أراضي النخيرات، قسيمة رقم (2) قطعة رقم (2346)، وذلك حسب الاتفاق الذي نص عليه عقد البيع بين الطرفين والذي أبرم وحرر بتاريخ 30/9/2023', 'e.g. monthly instalment of the balance of the sale price of ...')) + '">' + h(f.receipt_desc || '') + '</textarea></label></div>' +
       '<div class="tabs"><button class="btn pri" data-act="lg-acc-save"' + (L.busy ? ' disabled' : '') + '>' + h(T('حفظ', 'Save')) + '</button><button class="btn" data-act="lg-acc-cancel">' + h(T('إلغاء', 'Cancel')) + '</button></div></div>';
   }
   function payForm(a) {
@@ -89,7 +91,7 @@
       '<div style="height:7px;border-radius:5px;background:rgba(127,127,127,.2);margin:6px 0"><div style="height:7px;border-radius:5px;background:var(--accent,#0b8a97);width:' + pc + '%"></div></div>' +
       (a.note ? '<div class="sub">' + h(a.note) + '</div>' : '') + payForm(a) +
       (open ? '<div class="list" style="margin-top:6px">' + (pays.map(function (p) {
-        return '<div class="row"><div class="main"><div class="t">' + h(money(p.amount, a.currency)) + '</div><div class="sub">' + h(dayDate(p.paid_at)) + (p.note ? ' · ' + h(p.note) : '') + '</div></div><div class="act"><button class="btn sm" data-act="lg-pay-edit" data-id="' + p.id + '">' + h(T('تعديل', 'Edit')) + '</button> <button class="btn sm bad" data-act="lg-pay-del" data-id="' + p.id + '" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button></div></div>';
+        return '<div class="row"><div class="main"><div class="t">' + h(money(p.amount, a.currency)) + '</div><div class="sub">' + h(dayDate(p.paid_at)) + (p.note ? ' · ' + h(p.note) : '') + '</div></div><div class="act"><button class="btn sm pri" data-act="lg-receipt" data-id="' + p.id + '">' + h(T('وصل', 'Receipt')) + '</button> <button class="btn sm" data-act="lg-receipt-word" data-id="' + p.id + '">Word</button> <button class="btn sm" data-act="lg-pay-edit" data-id="' + p.id + '">' + h(T('تعديل', 'Edit')) + '</button> <button class="btn sm bad" data-act="lg-pay-del" data-id="' + p.id + '" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button></div></div>';
       }).join('') || '<div class="empty">' + h(T('لا دفعات بعد', 'No payments yet')) + '</div>') + '</div>' : '') + '</div>';
   }
   function reportData() {
@@ -120,8 +122,8 @@
     el.innerHTML = '<div class="card"><h2>' + h(T('دفتر الدفعات', 'Payments ledger')) + '</h2><p class="sub">' + h(T('سجّل مبلغاً متفقاً عليه مع شخص، ثم وثّق كل دفعة (تُخصم من الإجمالي ويُحسب المتبقي) مع اليوم والتاريخ. البيانات خاصة بك وحدك.', 'Record an agreed amount with a person, then log each payment (deducted from the total). Private to you.')) + '</p>' +
       (L.err ? '<p class="pill bad">' + h(L.err) + '</p>' : '') + (L.busy ? '<p class="sub">…</p>' : '') + '</div>' + summaryHtml() +
       '<div class="card"><div class="tabs">' + chips.map(function (c) { return '<button class="btn sm' + (L.dir === c[0] ? ' pri' : '') + '" data-act="lg-dir" data-d="' + c[0] + '">' + h(c[1]) + '</button>'; }).join('') +
-      ' <input id="lg-q" data-lg="q" placeholder="' + h(T('بحث بالاسم…', 'Search…')) + '" value="' + h(L.q) + '" style="max-width:200px"> <button class="btn pri" data-act="lg-acc-new">+ ' + h(T('حساب جديد', 'New account')) + '</button> <button class="btn" data-act="lg-rep-open">' + h(T('تقرير', 'Report')) + '</button></div>' +
-      accountForm() + reportHtml() + (list.map(accountCard).join('') || '<div class="empty">' + h(T('لا حسابات. اضغط «حساب جديد».', 'No accounts yet.')) + '</div>') + '</div>';
+      ' <input id="lg-q" data-lg="q" placeholder="' + h(T('بحث بالاسم…', 'Search…')) + '" value="' + h(L.q) + '" style="max-width:200px"> <button class="btn pri" data-act="lg-acc-new">+ ' + h(T('حساب جديد', 'New account')) + '</button> <button class="btn" data-act="lg-prof-open">' + h(T('بيانات الوصل', 'Receipt details')) + '</button> <button class="btn" data-act="lg-rep-open">' + h(T('تقرير', 'Report')) + '</button></div>' +
+      profForm() + accountForm() + reportHtml() + (list.map(accountCard).join('') || '<div class="empty">' + h(T('لا حسابات. اضغط «حساب جديد».', 'No accounts yet.')) + '</div>') + '</div>';
   }
 
   /* ---------- تصدير ---------- */
@@ -151,6 +153,70 @@
     return '﻿' + rows.map(function (r) { return r.map(function (c) { c = String(c == null ? '' : c); return /[",\n\r]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c; }).join(','); }).join('\r\n');
   }
 
+
+  /* ---------- وصل الاستلام ---------- */
+  function profForm() {
+    if (!L.profForm) return '';
+    var p = L.prof || {};
+    return '<div class="card" style="margin:8px 0"><b>' + h(T('بيانات الوصل (ثابتة)', 'Receipt details (fixed)')) + '</b><p class="sub">' + h(T('تُحفظ في حسابك الخاص وتظهر في كل وصل. التوقيع: ارفع صورة التوقيع مرة واحدة (يُفضَّل PNG بخلفية شفافة).', 'Saved privately and used on every receipt. Upload your signature image once.')) + '</p><div class="form">' +
+      '<label>' + h(T('الاسم الكامل', 'Full name')) + '<input id="pr-name" value="' + h(p.full_name || '') + '"></label>' +
+      '<label>' + h(T('رقم الهوية', 'ID number')) + '<input id="pr-id" inputmode="numeric" value="' + h(p.id_no || '') + '"></label>' +
+      '<label style="grid-column:1/-1">' + h(T('صورة التوقيع', 'Signature image')) + '<input id="pr-sig" type="file" accept="image/*"></label>' +
+      (p.sig ? '<div style="grid-column:1/-1"><img src="' + h(p.sig) + '" alt="" style="max-height:70px;background:#fff;border:1px solid #ccc;padding:4px;border-radius:6px"> <button class="btn sm bad" data-act="lg-prof-nosig">' + h(T('إزالة التوقيع', 'Remove signature')) + '</button></div>' : '') +
+      '</div><div class="tabs"><button class="btn pri" data-act="lg-prof-save">' + h(T('حفظ', 'Save')) + '</button><button class="btn" data-act="lg-prof-cancel">' + h(T('إلغاء', 'Cancel')) + '</button></div></div>';
+  }
+  function readSig(file) {
+    return new Promise(function (res, rej) {
+      var fr = new FileReader();
+      fr.onerror = function () { rej(new Error('read')); };
+      fr.onload = function () {
+        var im = new Image();
+        im.onerror = function () { rej(new Error('image')); };
+        im.onload = function () {
+          var k = Math.min(1, 500 / im.width), c = document.createElement('canvas'); c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+          c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); res(c.toDataURL('image/png'));
+        };
+        im.src = fr.result;
+      };
+      fr.readAsDataURL(file);
+    });
+  }
+  function dotted(s, n) { s = (s || '').trim(); return s ? esc(s) : '.'.repeat(n || 30); }
+  function receiptHtml(p, word) {
+    var a = findAcc(p.account_id); if (!a) return '';
+    var pr = L.prof || {}, cur = (CUR[a.currency] || CUR.ILS)[1], isIn = a.direction === 'in';
+    var sorted = L.pay.filter(function (x) { return x.account_id === a.id; }).sort(function (x, y) { return x.paid_at < y.paid_at ? -1 : x.paid_at > y.paid_at ? 1 : Number(x.id) - Number(y.id); });
+    var idx = sorted.findIndex(function (x) { return String(x.id) === String(p.id); }), upto = sorted.slice(0, idx + 1).reduce(function (t, x) { return t + num(x.amount); }, 0), rem = num(a.total) - upto;
+    var fmt = function (n) { return (Math.round(num(n) * 100) / 100).toLocaleString('en', { maximumFractionDigits: 2 }); };
+    var name = dotted(pr.full_name, 28), idn = dotted(pr.id_no, 14), who = '<span class="who"' + (word ? '' : ' contenteditable="true"') + '>' + esc(a.person) + '</span>';
+    var desc = (a.receipt_desc || '').trim();
+    var para = 'أقرّ أنا الموقّع أدناه / <b>' + name + '</b> هوية رقم / <b>' + idn + '</b> بأنني قد ' + (isIn ? 'استلمت من السيد/ <b>' + who + '</b>' : 'دفعت إلى السيد/ <b>' + who + '</b>') +
+      ' مبلغاً وقدره (<b>' + fmt(p.amount) + '</b>) ' + esc(cur) + (desc ? '، وهذا المبلغ بمثابة دفعة ' + esc(desc) : '') + '.';
+    var remLine = rem > 0.0001 ? 'ويتبقى <b>' + fmt(rem) + '</b> ' + esc(cur) + (isIn ? ' لدى السيد/ ' + who : ' في ذمتي للسيد/ ' + who) + '.' : 'وبهذه الدفعة يكون المبلغ قد سُدّد بالكامل.';
+    var d = p.paid_at, day = '';
+    try { day = new Date(d + 'T00:00:00').toLocaleDateString('ar', { weekday: 'long' }); } catch (e) {}
+    var sig = pr.sig ? '<img src="' + pr.sig + '" alt="" style="height:60px;vertical-align:middle">' : '';
+    var box = 'border:2px solid #12304D;padding:22px 26px;';
+    return '<div dir="rtl" style="font-family:Arial,Tahoma,sans-serif;max-width:680px;margin:0 auto;' + box + 'line-height:2.1;font-size:15pt">' +
+      '<table width="100%" style="width:100%"><tr><td style="font-size:12pt;color:#555">دفعة رقم ' + (idx + 1) + '</td><td style="text-align:left;font-size:12pt;color:#555">التاريخ: ' + esc(day) + ' ' + esc(d) + '</td></tr></table>' +
+      '<p style="text-align:center;font-size:20pt;margin:4px 0 14px;color:#12304D"><b>' + (isIn ? 'وصل استلام دفعة' : 'وصل دفع') + '</b></p>' +
+      '<p style="margin:0 0 8px;text-align:justify">' + para + '</p>' +
+      '<table dir="rtl" width="100%" border="1" cellspacing="0" cellpadding="5" style="width:100%;border-collapse:collapse;font-size:13pt;text-align:center;margin:6px 0 10px"><tr style="background:#eef3f7"><td>الإجمالي الأصلي</td><td>المدفوع سابقاً</td><td>هذه الدفعة</td><td>المتبقي</td></tr><tr><td>' + fmt(a.total) + ' ' + esc(cur) + '</td><td>' + fmt(upto - num(p.amount)) + ' ' + esc(cur) + '</td><td><b>' + fmt(p.amount) + ' ' + esc(cur) + '</b></td><td><b>' + fmt(rem) + ' ' + esc(cur) + '</b></td></tr></table>' +
+      '<p style="margin:0 0 14px">' + remLine + '</p>' +
+      '<table width="100%" style="width:100%;margin-top:10px"><tr><td style="width:60%">' + (isIn ? 'توقيع المستلم' : 'توقيع الدافع') + ' / <b>' + name + '</b></td><td>' + sig + '</td></tr>' +
+      (isIn ? '' : '<tr><td>توقيع المستلم / ' + who + '</td><td>..............................</td></tr>') +
+      '<tr><td colspan="2" style="padding-top:8px">التاريخ: ' + esc(d) + '</td></tr>' +
+      '<tr><td colspan="2" style="padding-top:14px">توقيع الشهود /</td></tr><tr><td colspan="2">1) ..................................................</td></tr><tr><td colspan="2">2) ..................................................</td></tr></table></div>';
+  }
+  function receiptWindow(p) {
+    var w = window.open('', '_blank'); if (!w) { toast_(T('اسمح بالنوافذ المنبثقة لعرض الوصل', 'Allow pop-ups to view the receipt')); return; }
+    w.document.write('<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>وصل</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:16px;background:#fff;color:#000}.who{border-bottom:1px dashed #0b8a97;outline:none;padding:0 3px}@media print{.who{border:0}}@media print{.np{display:none}body{margin:0}}</style></head><body><div class="np" style="text-align:center;margin-bottom:12px"><button onclick="window.print()" style="padding:8px 18px;font-size:15px">طباعة / حفظ PDF</button><div style="font-size:13px;color:#555;margin-top:6px">للتعديل: اضغط على اسم الشخص داخل الوصل واكتب أي اسم، ثم اطبع.</div></div>' + receiptHtml(p) + '<script>document.addEventListener("input",function(e){var t=e.target.closest&&e.target.closest(".who");if(!t)return;document.querySelectorAll(".who").forEach(function(x){if(x!==t)x.textContent=t.textContent})})<\/script></body></html>');
+    w.document.close();
+  }
+  function receiptWord(p) {
+    return '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml><![endif]--><style>@page Section1{size:595.3pt 841.9pt;margin:50pt}div.Section1{page:Section1}body{font-family:Arial}</style></head><body dir="rtl"><div class="Section1">' + receiptHtml(p, true) + '</div></body></html>';
+  }
+
   /* ---------- الأوامر ---------- */
   function guard(fn) { L.busy = true; L.err = ''; draw(); return Promise.resolve().then(fn).catch(function (e) { L.err = (e && e.message) || String(e); }).then(function () { L.busy = false; draw(); }); }
   function findAcc(id) { return L.acc.filter(function (a) { return String(a.id) === String(id); })[0]; }
@@ -163,7 +229,7 @@
     'lg-acc-save': function () {
       var f = L.form || {}, person = val('lf-person').trim(), total = parseFloat(val('lf-total'));
       if (!person || !(total >= 0)) { toast_(T('اكتب الاسم والمبلغ', 'Enter name and amount')); return; }
-      var row = { person: person, direction: val('lf-dir'), total: total, currency: val('lf-cur'), note: val('lf-note').trim() || null };
+      var row = { person: person, direction: val('lf-dir'), total: total, currency: val('lf-cur'), note: val('lf-note').trim() || null, receipt_desc: val('lf-desc').trim() || null };
       guard(async function () {
         var r = f.id ? await sb().from('ledger_accounts').update(row).eq('id', f.id) : await sb().from('ledger_accounts').insert(row);
         if (r.error) throw r.error; L.form = null; await load2();
@@ -188,6 +254,20 @@
       });
     },
     'lg-pay-del': function (el) { guard(async function () { var r = await sb().from('ledger_payments').delete().eq('id', el.dataset.id); if (r.error) throw r.error; await load2(); }); },
+    'lg-receipt': function (el) { var p = findPay(el.dataset.id); if (p) receiptWindow(p); },
+    'lg-receipt-word': function (el) { var p = findPay(el.dataset.id); if (p) saveBlob('receipt-' + p.paid_at + '.doc', new Blob(['﻿', receiptWord(p)], { type: 'application/msword;charset=utf-8' })); },
+    'lg-prof-open': function () { L.profForm = true; draw(); },
+    'lg-prof-cancel': function () { L.profForm = false; draw(); },
+    'lg-prof-nosig': function () { L.prof = Object.assign({}, L.prof, { sig: null }); draw(); },
+    'lg-prof-save': function () {
+      var f = ($q('#pr-sig') || {}).files, file = f && f[0], me = PA() && PA().user && PA().user();
+      var base = { full_name: val('pr-name').trim() || null, id_no: val('pr-id').trim() || null, sig: L.prof && L.prof.sig || null };
+      guard(async function () {
+        if (file) base.sig = await readSig(file);
+        var r = await sb().from('ledger_profile').upsert(Object.assign({ owner: me && me.id }, base));
+        if (r.error) throw r.error; L.prof = base; L.profForm = false; toast_(T('تم الحفظ', 'Saved'));
+      });
+    },
     'lg-rep-open': function () { L.rep = true; draw(); },
     'lg-rep-close': function () { L.rep = false; draw(); },
     'lg-rep-run': function () { L.from = val('rp-from'); L.to = val('rp-to'); draw(); },

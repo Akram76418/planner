@@ -316,7 +316,8 @@ const IC={
  plus:'<path d="M12 5v14M5 12h14"/>'};
 const ic=(n,s=20)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
 const BASE_VIEWS=['dash','cal','appts','follow','reports','settings'];
-const views=()=>window.COMM_ONLY?['comm']:window.HAS_COMM?['dash','cal','appts','follow','reports','comm',...(window.CAN&&window.CAN('proj')?['proj']:[]),...(window.CAN&&window.CAN('logs')?['logs']:[]),...(window.CAN&&window.CAN('main')?['ledger']:[]),'settings']:BASE_VIEWS;
+const PV=k=>!(window.CTX&&window.CTX.role==='admin')||!!(window.CAN&&window.CAN(k));
+const views=()=>window.COMM_ONLY?['comm']:window.HAS_COMM?[...['dash','cal','appts','follow','reports'].filter(v=>PV('p_'+v)),'comm',...(window.CAN&&window.CAN('proj')?['proj']:[]),...(window.CAN&&window.CAN('logs')?['logs']:[]),...(window.CAN&&window.CAN('main')?['ledger']:[]),'settings']:BASE_VIEWS;
 
 /* ---------- domain helpers ---------- */
 const PR={high:0,med:1,low:2};
