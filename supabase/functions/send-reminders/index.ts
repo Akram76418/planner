@@ -41,6 +41,20 @@ async function reminders(): Promise<number> {
         }
       }
     }
+    // المتابعات اليومية: تنبيه عند حلول تاريخ الاستحقاق (9 صباحاً بتوقيت المستخدم) كأنها مهمة
+    const { data: fl } = await sb.from('records').select('id,data').eq('user_id', userId).eq('kind', 'follows').eq('deleted', false);
+    for (const r of fl ?? []) {
+      const f = r.data; if (!f || f.status === 'done' || !f.due) continue;
+      const at = zonedToUtc(f.due, '09:00', tz);
+      if (at > now || at < now - windowMs) continue;
+      const key = `${r.id}|due|${f.due}`;
+      const ins = await sb.from('reminders_sent').insert({ user_id: userId, key });
+      if (ins.error) continue;
+      for (const s of list) {
+        try { await webpush.sendNotification({ endpoint: s.endpoint, keys: s.keys }, JSON.stringify({ title: '⏰ ' + f.title, body: 'انتهت المدة المخصصة لهذه المتابعة', tag: key })); sent++; }
+        catch (e: any) { if (e.statusCode === 404 || e.statusCode === 410) await sb.from('push_subscriptions').delete().eq('user_id', userId).eq('endpoint', s.endpoint); }
+      }
+    }
   }
   return sent;
 }

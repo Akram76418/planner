@@ -217,6 +217,24 @@
   var SUBPERM = { create: 'create', requests: 'requests', pending: 'reset', students: 'students', dups: 'students', staff: 'staff', assign: 'staff', cohorts: 'cohorts', admins: 'main' };
   function admSubs() { return Object.keys(SUBPERM).filter(function (k) { return CAN(SUBPERM[k]); }).map(function (k) { return [k]; }); }
   var PERM_LIST = [['create', 'إنشاء حسابات', 'Create accounts'], ['requests', 'طلبات التسجيل', 'Sign-up requests'], ['students', 'الطلبة والشعب والتكرار', 'Students, cohorts, duplicates'], ['staff', 'الموظفون والأكاديميون', 'Staff & academics'], ['cohorts', 'إدارة الشعب', 'Manage cohorts'], ['reset', 'إعادة كلمات المرور', 'Reset passwords'], ['delete', 'حذف الحسابات', 'Delete accounts'], ['ann', 'الإعلانات والقنوات', 'Announcements & channels'], ['sched', 'جدول المحاضرات', 'Schedule'], ['poll', 'الاستبيانات', 'Polls'], ['weekly', 'جدول الدوام', 'Weekly roster'], ['logs', 'السجلات', 'Logs'], ['wipe', 'مسح الرسائل', 'Wipe messages'], ['proj', 'المشاريع الخارجية', 'External projects'], ['p_dash', 'منظّم الأعمال: لوحة التحكم', 'Planner: Dashboard'], ['p_cal', 'منظّم الأعمال: التقويم', 'Planner: Calendar'], ['p_appts', 'منظّم الأعمال: المواعيد', 'Planner: Appointments'], ['p_follow', 'منظّم الأعمال: متابعاتي اليومية', 'Planner: Daily follow-ups'], ['p_reports', 'منظّم الأعمال: التقارير والإنجازات', 'Planner: Reports']];
+  function normQ(t) { return String(t || '').toLowerCase().replace(/[\u064B-\u0652\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim(); }
+  function staffTools(A) {
+    var found = A.found ? '<div class="list" style="margin-top:6px">' + (A.found.map(function (x) {
+      var isStf = x.role === 'staff' || x.role === 'professor';
+      return '<div class="row"><div class="main"><div class="t">' + h(x.full_name) + '</div><div class="sub">' + h((ROLE[x.role] || [x.role, x.role])[ar() ? 0 : 1]) + (x.number ? ' · ' + h(x.number) : '') + '</div></div><div class="act">' +
+        (isStf ? '<span class="pill ok">' + h(T('ضمن الموظفين', 'In staff list')) + '</span>' : '<button class="btn sm pri" data-act="cm-mkstaff" data-id="' + h(x.id) + '" data-n="' + h(x.full_name) + '" data-confirm="1">' + h(T('تحويل إلى موظف', 'Make staff')) + '</button>') + '</div></div>';
+    }).join('') || '<div class="empty">' + h(T('لا نتائج في أي نوع حساب', 'No account found')) + '</div>') + '</div>' : '';
+    return '<div class="card" style="margin:8px 0"><div class="form">' +
+      '<label>' + h(T('بحث في قائمة الموظفين (اسم أو رقم)', 'Filter staff list (name or number)')) + '<input id="st-q" data-cm="stq" value="' + h(A.stq || '') + '" placeholder="' + h(T('اكتب ثم Enter', 'Type then Enter')) + '"></label>' +
+      '<label>' + h(T('بحث في كل الحسابات (لو لم تجد الموظف)', 'Search all accounts')) + '<input id="st-fq" data-cm="stfq" value="' + h(A.fq || '') + '" placeholder="' + h(T('اسم أو رقم ثم Enter', 'Name or number, Enter')) + '"></label></div>' + found +
+      '<details style="margin-top:8px"' + (A.addOpen ? ' open' : '') + '><summary><b>' + h(T('+ إضافة موظف جديد', '+ Add a staff member')) + '</b></summary><div class="form" style="margin-top:6px">' +
+      '<label>' + h(T('الاسم الكامل', 'Full name')) + '<input id="sa-name" value="' + h(A.saName || '') + '"></label>' +
+      '<label>' + h(T('الرقم الوظيفي (اسم الدخول)', 'Employee number')) + '<input id="sa-num" dir="ltr" value="' + h(A.saNum || '') + '"></label>' +
+      '<label>' + h(T('النوع', 'Type')) + '<select id="sa-role"><option value="staff">' + h(ROLE.staff[ar() ? 0 : 1]) + '</option><option value="professor">' + h(ROLE.professor[ar() ? 0 : 1]) + '</option></select></label>' +
+      '<label>' + h(T('التصنيف', 'Category')) + '<select id="sa-cat"><option value="">—</option>' + ['academic', 'practical', 'admin'].map(function (k) { return '<option value="' + k + '">' + h(CHAN[k][ar() ? 0 : 1]) + '</option>'; }).join('') + '</select></label>' +
+      '<label class="ck" style="grid-column:1/-1"><input id="sa-same" type="checkbox"> ' + h(T('السماح بإنشائه حتى لو وُجد اسم مشابه', 'Allow even if a similar name exists')) + '</label></div>' +
+      '<button class="btn pri" data-act="cm-addstaff">' + h(T('إضافة', 'Add')) + '</button></details></div>';
+  }
   function adminsPane() {
     var A = ST.admin, list = A.admins || [], cand = (A.staff || []).filter(function (x) { return x.role !== 'admin'; });
     var rows = list.map(function (a) {
@@ -279,9 +297,10 @@
     } else if (A.sub === 'dups') {
       body = dupsHtml();
     } else if (A.sub === 'staff') {
-      var stf = A.staff || [], stSel = stf.filter(function (x) { return A.sel[x.id]; }).length;
+      var nq = normQ(A.stq || '');
+      var stf = (A.staff || []).filter(function (x) { return !nq || normQ(x.full_name).indexOf(nq) >= 0 || String(x.university_id || '').toLowerCase().indexOf(nq) >= 0; }), stSel = stf.filter(function (x) { return A.sel[x.id]; }).length;
       body = '<p class="sub">' + h(T('اسم الدخول للموظف هو رقمه الوظيفي، وكلمة المرور الافتراضية 12345678.', 'Staff sign in with their employee number; default password 12345678.')) + '</p>' +
-        (A.note ? '<p class="pill ok">' + h(A.note) + '</p>' : '') +
+        (A.note ? '<p class="pill ok">' + h(A.note) + '</p>' : '') + staffTools(A) +
         '<div class="tabs" style="margin:8px 0"><button class="btn sm" data-act="cm-exp-staff-xlsx">⬇ ' + h(T('تصدير الموظفين Excel', 'Export staff (Excel)')) + '</button> <button class="btn sm" data-act="cm-exp-staff-csv">⬇ CSV</button></div>' +
         '<div class="tabs" style="margin:8px 0"><label class="ck"><input type="checkbox" data-cm="stselall"' + (stf.length && stSel === stf.length ? ' checked' : '') + '> ' + h(T('تحديد الكل', 'Select all')) + ' (' + stf.length + ')</label><button class="btn sm bad" data-act="cm-del-staff"' + (stSel ? '' : ' disabled') + '>' + h(T('حذف المحدد', 'Delete selected')) + (stSel ? ' (' + stSel + ')' : '') + '</button> <button class="btn sm" data-act="cm-reset-sel"' + (stSel ? '' : ' disabled') + '>' + h(T('كلمة افتراضية للمحدد', 'Reset selected')) + '</button> <button class="btn sm bad" data-act="cm-reset-all" data-scope="staff">' + h(T('إعادة كلمة المرور لكل الموظفين', 'Reset all staff')) + '</button> <button class="btn sm" data-act="cm-titles">' + h(T('تطبيق الألقاب (د./أ.)', 'Apply titles')) + '</button></div>' +
         '<div class="list">' + (stf.map(function (s) { return '<div class="row"><label style="padding-inline-end:8px"><input type="checkbox" data-cm="stsel" data-id="' + h(s.id) + '"' + (A.sel[s.id] ? ' checked' : '') + '></label><div class="main"><div class="t">' + h(s.full_name) + '</div><div class="sub">' + h((ROLE[s.role] || [s.role, s.role])[ar() ? 0 : 1]) + (s.university_id ? ' · ' + h(s.university_id) : '') + '</div></div><div class="act"><select data-cm="srole" data-id="' + h(s.id) + '"><option value="staff"' + (s.role === 'staff' ? ' selected' : '') + '>' + h(ROLE.staff[ar() ? 0 : 1]) + '</option><option value="professor"' + (s.role === 'professor' ? ' selected' : '') + '>' + h(ROLE.professor[ar() ? 0 : 1]) + '</option></select> <select data-cm="cat" data-id="' + h(s.id) + '"><option value="">—</option>' + ['academic', 'practical', 'admin'].map(function (k) { return '<option value="' + k + '"' + (s.category === k ? ' selected' : '') + '>' + h(CHAN[k][ar() ? 0 : 1]) + '</option>'; }).join('') + '</select> <button class="btn sm bad" data-act="cm-reset" data-id="' + h(s.id) + '" data-confirm="1">' + h(T('كلمة افتراضية', 'Reset pw')) + '</button></div></div>'; }).join('') || '<div class="empty">—</div>') + '</div>';
@@ -307,6 +326,19 @@
     'cm-send': function () { send(); },
     'cm-sub': function (el) { ST.admin.sub = el.dataset.s; draw(); guard(loadTab); },
     'cm-create': function () { createAccounts(); },
+    'cm-mkstaff': function (el) { var id = el.dataset.id; guard(async function () { await rpc('comm_make_staff', { p_user: id, p_role: 'staff', p_category: null }); ST.admin.staff = await rpc('comm_list_staff'); ST.admin.found = await rpc('comm_find_account', { p_q: ST.admin.fq }); ST.admin.note = T('تم تحويل «' + el.dataset.n + '» إلى موظف. حدّد تصنيفه من القائمة أدناه.', 'Converted to staff.'); }); },
+    'cm-addstaff': function () {
+      var name = ($c('#sa-name').value || '').trim(), num = normNum(($c('#sa-num').value || '').trim()), role_ = $c('#sa-role').value, cat = $c('#sa-cat').value, same = $c('#sa-same').checked;
+      ST.admin.saName = name; ST.admin.saNum = num; ST.admin.addOpen = true;
+      if (name.length < 3 || !num) { window.alert(T('اكتب الاسم والرقم الوظيفي', 'Enter name and employee number')); return; }
+      guard(async function () {
+        var r = await sb().functions.invoke(((window.PLANNER_CONFIG || {}).ADMIN_FN || 'admin-accounts'), { body: { action: 'create', allow_same_name: same, rows: [{ number: num, name: name, role: role_, category: cat || null }] } });
+        if (r.error || (r.data && r.data.error)) throw new Error((r.data && r.data.error) || await ferr(r));
+        var x = (r.data.results || [])[0] || {}, msg = { created: T('أُضيف الموظف. اسم الدخول: رقمه الوظيفي وكلمة المرور 12345678', 'Added. Login = employee number, password 12345678'), exists: T('هذا الرقم مستخدم لحساب آخر. ابحث عنه في «بحث في كل الحسابات».', 'This number already belongs to an account — search all accounts.'), dup_name: T('يوجد اسم مشابه (ربما كحساب طالب). ابحث عنه وحوّله إلى موظف، أو فعّل «السماح بإنشائه».', 'A similar name exists (maybe as a student). Search and convert, or tick "Allow".'), invalid: T('رقم غير صالح (3–20 حرفاً أو رقماً إنجليزياً)', 'Invalid number') }[x.status] || (x.message || x.status || '?');
+        ST.admin.note = msg; if (x.status === 'created') { ST.admin.saName = ''; ST.admin.saNum = ''; ST.admin.addOpen = false; }
+        ST.admin.staff = await rpc('comm_list_staff');
+      });
+    },
     'cm-adm-add': function () { var id = ST.admin.admNew; if (!id) return; guard(async function () { await rpc('comm_set_admin', { p_user: id, p_on: true, p_perms: {} }); ST.admin.admNew = ''; ST.admin.admins = await rpc('comm_list_admins'); ST.admin.staff = await rpc('comm_list_staff'); toast_(T('تمت الترقية. حدّد الصلاحيات ثم احفظ.', 'Promoted. Pick permissions and save.')); }); },
     'cm-adm-save': function (el) { var id = el.dataset.id, a = (ST.admin.admins || []).filter(function (x) { return x.id === id; })[0] || {}, pr = (ST.admin.permDraft || {})[id] || a.perms || {}; guard(async function () { await rpc('comm_set_admin', { p_user: id, p_on: true, p_perms: pr }); ST.admin.admins = await rpc('comm_list_admins'); if (ST.admin.permDraft) delete ST.admin.permDraft[id]; toast_(T('تم حفظ الصلاحيات', 'Saved')); }); },
     'cm-adm-rm': function (el) { var id = el.dataset.id; guard(async function () { await rpc('comm_set_admin', { p_user: id, p_on: false }); ST.admin.admins = await rpc('comm_list_admins'); ST.admin.staff = await rpc('comm_list_staff'); toast_(T('أُلغيت المسؤولية', 'Removed')); }); },
@@ -406,6 +438,8 @@
     else if (k === 'stselall') { (ST.admin.staff || []).forEach(function (x) { ST.admin.sel[x.id] = e.target.checked; }); draw(); }
     else if (k === 'admperm') { var did = e.target.dataset.id, cur = ((ST.admin.permDraft = ST.admin.permDraft || {})[did] = ST.admin.permDraft[did] || Object.assign({}, ((ST.admin.admins || []).filter(function (x) { return x.id === did; })[0] || {}).perms)); cur[e.target.dataset.k] = e.target.checked; }
     else if (k === 'admnew') { ST.admin.admNew = e.target.value; }
+    else if (k === 'stq') { ST.admin.stq = e.target.value; draw(); }
+    else if (k === 'stfq') { ST.admin.fq = e.target.value; var qv = e.target.value.trim(); if (qv.length < 2) { ST.admin.found = null; draw(); } else guard(async function () { ST.admin.found = await rpc('comm_find_account', { p_q: qv }); }); }
     else if (k === 'cf') { var cv = e.target.type === 'checkbox' ? e.target.checked : e.target.value; ST.admin['c' + e.target.dataset.k] = cv; }
     else if (k === 'srole') guard(async function () { await rpc('comm_set_staff_role', { p_user: e.target.dataset.id, p_role: e.target.value }); ST.admin.staff = await rpc('comm_list_staff'); toast_('OK'); });
     else if (k === 'wk') {

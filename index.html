@@ -179,7 +179,7 @@ const clamp=(n,a,b)=>Math.min(b,Math.max(a,n));
 
 /* ---------- i18n ---------- */
 const TX={
-ar:{app:'منظّم أعمالي اليومية',appEn:'My Daily Planner',dash:'لوحة التحكم',cal:'التقويم',appts:'المواعيد',follow:'متابعاتي اليومية',tasks:'المهام',reports:'التقارير والإنجازات',settings:'الإعدادات',comm:'التواصل',proj:'المشاريع الخارجية',logs:'السجلات',pdfFiles:'ملفات PDF مرفقة',pdfHint:'اختياري — حتى 10 ميغابايت للملف، ويلزم اتصال بالإنترنت للرفع.',pdfNeedLogin:'سجّل الدخول لإرفاق الملفات.',pdfOffline:'رفع الملفات يحتاج اتصالاً بالإنترنت.',pdfOnly:'يُسمح بملفات PDF فقط.',pdfBig:'الملف أكبر من 10 ميغابايت.',pdfOpenErr:'تعذّر فتح الملف.',ledger:'دفتر الدفعات',signout:'خروج / تبديل الحساب',
+ar:{app:'منظّم أعمالي اليومية',appEn:'My Daily Planner',dash:'لوحة التحكم',cal:'التقويم',appts:'المواعيد',follow:'متابعاتي اليومية',tasks:'المهام',reports:'التقارير والإنجازات',settings:'الإعدادات',comm:'التواصل',proj:'المشاريع الخارجية',logs:'السجلات',followEnded:'انتهت المدة المخصصة لهذه المتابعة',pdfFiles:'ملفات PDF مرفقة',pdfHint:'اختياري — حتى 10 ميغابايت للملف، ويلزم اتصال بالإنترنت للرفع.',pdfNeedLogin:'سجّل الدخول لإرفاق الملفات.',pdfOffline:'رفع الملفات يحتاج اتصالاً بالإنترنت.',pdfOnly:'يُسمح بملفات PDF فقط.',pdfBig:'الملف أكبر من 10 ميغابايت.',pdfOpenErr:'تعذّر فتح الملف.',ledger:'دفتر الدفعات',signout:'خروج / تبديل الحساب',
 new:'إضافة جديدة',newAppt:'موعد / اجتماع',newTask:'مهمة',newFollow:'متابعة يومية',save:'حفظ',cancel:'إلغاء',close:'إغلاق',edit:'تعديل',del:'حذف',delOk:'تأكيد الحذف',details:'التفاصيل',
 title:'العنوان',date:'التاريخ',start:'البداية',end:'النهاية',place:'المكان',people:'المشاركون',type:'النوع',prio:'الأولوية',status:'الحالة',optional:'اختياري',
 t_meeting:'اجتماع',t_admin:'عمل إداري',t_teaching:'تدريس',t_research:'بحث علمي',t_personal:'موعد شخصي',t_project:'متابعة مشروع',t_custom:'نوع مخصص',customType:'اسم النوع المخصص',
@@ -220,7 +220,7 @@ sumNoData:'لا توجد بيانات مسجلة في هذه الفترة.',
 nextOpen:'إجراءات اجتماعات غير منفذة',
 timeErr:'وقت النهاية يجب أن يكون بعد البداية',titleErr:'العنوان مطلوب',dateErr:'التاريخ مطلوب',
 wd:['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت']},
-en:{app:'My Daily Planner',appEn:'منظّم أعمالي اليومية',dash:'Dashboard',cal:'Calendar',appts:'Appointments',follow:'Daily Focus',tasks:'Tasks',reports:'Reports & Achievements',settings:'Settings',comm:'Messages',proj:'External projects',logs:'Logs',pdfFiles:'Attached PDF files',pdfHint:'Optional — up to 10 MB each; an internet connection is needed to upload.',pdfNeedLogin:'Sign in to attach files.',pdfOffline:'Uploading files needs an internet connection.',pdfOnly:'PDF files only.',pdfBig:'File is larger than 10 MB.',pdfOpenErr:'Could not open the file.',ledger:'Payments ledger',signout:'Sign out / switch account',
+en:{app:'My Daily Planner',appEn:'منظّم أعمالي اليومية',dash:'Dashboard',cal:'Calendar',appts:'Appointments',follow:'Daily Focus',tasks:'Tasks',reports:'Reports & Achievements',settings:'Settings',comm:'Messages',proj:'External projects',logs:'Logs',followEnded:'The time set for this follow-up has ended',pdfFiles:'Attached PDF files',pdfHint:'Optional — up to 10 MB each; an internet connection is needed to upload.',pdfNeedLogin:'Sign in to attach files.',pdfOffline:'Uploading files needs an internet connection.',pdfOnly:'PDF files only.',pdfBig:'File is larger than 10 MB.',pdfOpenErr:'Could not open the file.',ledger:'Payments ledger',signout:'Sign out / switch account',
 new:'Add new',newAppt:'Appointment / meeting',newTask:'Task',newFollow:'Follow-up',save:'Save',cancel:'Cancel',close:'Close',edit:'Edit',del:'Delete',delOk:'Confirm delete',details:'Details',
 title:'Title',date:'Date',start:'Start',end:'End',place:'Location',people:'Participants',type:'Type',prio:'Priority',status:'Status',optional:'optional',
 t_meeting:'Meeting',t_admin:'Admin work',t_teaching:'Teaching',t_research:'Research',t_personal:'Personal',t_project:'Project follow-up',t_custom:'Custom type',customType:'Custom type name',
@@ -349,6 +349,13 @@ function dueReminders(){
     if((S.meta.snooze[r.key]||0)>now)continue;
     res.push(r);
   }
+  for(const f of S.follows){
+    if(f.status==='done'||!f.due)continue;
+    const at=ts(f.due,'09:00'),key='f|'+f.id+'|'+f.due;
+    if(at>now||at<now-14*86400e3)continue;
+    if(S.meta.fired[key]||(S.meta.snooze[key]||0)>now)continue;
+    res.push({key,at,a:{title:f.title,date:f.due,start:''},off:0,f});
+  }
   return res.sort((x,y)=>x.at-y.at);
 }
 function beep(){try{const C=window.AudioContext||window.webkitAudioContext;const c=new C();const o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=880;g.gain.value=.06;o.start();setTimeout(()=>{o.stop();c.close()},220)}catch(e){}}
@@ -366,9 +373,9 @@ let lastDueCount=-1;
 function checkReminders(){if(window.COMM_ONLY)return;
   const now=Date.now();let changed=false;
   for(const r of dueReminders()){
-    if(!S.meta.notified[r.key]&&now-r.at<5*60000){
+    if(!S.meta.notified[r.key]&&(r.f||now-r.at<5*60000)){
       S.meta.notified[r.key]=1;changed=true;
-      notify(r.a.title,(r.off>0?(t('r_'+r.off)||''):t('r_0'))+' · '+r.a.start);
+      if(r.f)notify('⏰ '+r.a.title,t('followEnded'));else notify(r.a.title,(r.off>0?(t('r_'+r.off)||''):t('r_0'))+' · '+r.a.start);
     }
   }
   if(changed)save('meta');
@@ -536,6 +543,8 @@ function followForm(f){
    <div class="full"><b>${t('pdfFiles')}</b>
     ${(f.files||[]).map(x=>`<div class="ck pdfrow" style="justify-content:space-between"><a href="#" data-act="pdf-open" data-p="${esc(x.path)}">📄 ${esc(x.name)}</a><button type="button" class="btn sm bad" data-act="pdf-mark" data-p="${esc(x.path)}">${t('del')}</button></div>`).join('')}
     <input id="f-pdf" type="file" accept="application/pdf,.pdf" multiple style="margin-top:6px"><div class="sub" style="font-size:12px">${t('pdfHint')}</div></div>
+   <label>${t('linkType')}<select id="f-lt">${opts(['none','person','org','project'],f.linkType||'none',v=>t('l_'+v))}</select></label>
+   <label>${t('linkName')}<input id="f-ln" value="${esc(f.linkName||'')}"></label>
    <label class="ck full"><input id="f-pin" type="checkbox"${f.pinned?' checked':''}>${t('pin')}</label>
   </form><div id="a-err" class="pill bad" hidden></div>
   <footer><button class="btn" data-act="close">${t('cancel')}</button><button class="btn pri" data-act="save-follow" data-id="${esc(f.id||'')}">${t('save')}</button></footer></div>`);
@@ -546,7 +555,7 @@ async function saveFollow(id){
   const title=val('f-title');const err=m=>{const e=$('#a-err');e.textContent=m;e.hidden=false};
   if(!title){err(t('titleErr'));return}
   const st=val('f-status');let prog=parseInt(val('f-prog'))||0;if(st==='done')prog=100;
-  const d={title,desc:val('f-desc'),goal:val('f-goal'),prio:val('f-prio'),status:st,startDate:val('f-start'),due:val('f-due'),next:val('f-next'),progress:prog,pinned:chk('f-pin')};
+  const d={title,desc:val('f-desc'),goal:val('f-goal'),prio:val('f-prio'),status:st,startDate:val('f-start'),due:val('f-due'),next:val('f-next'),progress:prog,linkType:val('f-lt')||'none',linkName:val('f-ln'),pinned:chk('f-pin')};
   const old=id?S.follows.find(x=>x.id===id):null;
   const fid=old?old.id:uid();
   const picked=Array.from(($('#f-pdf')||{}).files||[]);
@@ -604,9 +613,10 @@ function followRank(f){const d=today();const od=(f.next&&f.next<d)||(f.due&&f.du
 function followCmp(a,b){const x=followRank(a),y=followRank(b);for(let i=0;i<x.length;i++){if(x[i]<y[i])return-1;if(x[i]>y[i])return 1}return 0}
 function followRow(f,compact){
   const d=today(),late=f.status!=='done'&&((f.next&&f.next<d)||(f.due&&f.due<d));
+  const lt=f.linkType&&f.linkType!=='none'?(f.linkName||t('l_'+f.linkType)):'';
   const pdfs=(f.files||[]).map(x=>`<a class="pill" href="#" data-act="pdf-open" data-p="${esc(x.path)}">📄 ${esc(x.name)}</a>`).join(' ');
   return `<div class="row"><div class="main"><div class="t">${f.pinned?'📌 ':''}${esc(f.title)}</div>
-  <div class="m"><span class="pill ${f.status==='done'?'ok':late?'bad':''}">${late&&f.status!=='done'?t('late'):t('f_'+f.status)}</span>${prioPill(f.prio)}${f.next?`<span>${t('nextFollow')}: ${esc(fmtD(f.next,{day:'numeric',month:'short'}))}</span>`:''}</div>
+  <div class="m"><span class="pill ${f.status==='done'?'ok':late?'bad':''}">${late&&f.status!=='done'?t('late'):t('f_'+f.status)}</span>${prioPill(f.prio)}${f.next?`<span>${t('nextFollow')}: ${esc(fmtD(f.next,{day:'numeric',month:'short'}))}</span>`:''}${lt?`<span>↔ ${esc(lt)}</span>`:''}</div>
   ${pdfs?`<div class="m">${pdfs}</div>`:''}
   <div class="bar" style="margin-top:8px"><i style="width:${f.progress}%"></i></div><div class="m"><span>${f.progress}%</span><span>${t('updated')}: ${esc(new Date(f.lastUpdate).toLocaleDateString(loc()))}</span></div></div>
   ${compact?'':`<div class="act" style="max-width:210px"><button class="btn sm pri" data-act="follow-update" data-id="${f.id}">${t('addUpdate')}</button><button class="btn sm" data-act="follow-pin" data-id="${f.id}">${f.pinned?t('unpin'):t('pin')}</button>${late?`<button class="btn sm" data-act="follow-plus1" data-id="${f.id}">${t('plus1')}</button>`:''}<button class="btn sm" data-act="edit-follow" data-id="${f.id}">${t('edit')}</button><button class="btn sm bad" data-act="del-follow" data-id="${f.id}" data-confirm="1">${t('del')}</button></div>`}</div>`;
@@ -633,7 +643,7 @@ function vDash(){
     <div class="card stat"><b>${rems.length}</b><span>${t('dRem')}</span></div></div>`+
   `<div class="grid g2">
    <section class="card"><h2>${t('dToday')}<button class="btn sm" data-act="go" data-v="appts">${t('appts')}</button></h2>${list(todays,apptRow)}</section>
-   <section class="card"><h2>${t('dRem')}</h2>${rems.length?`<div class="list">${rems.map(r=>`<div class="row"><div class="main"><div class="t">${esc(r.a.title)}</div><div class="m"><span class="pill ${Date.now()-r.at>5*60000?'warn':''}">${Date.now()-r.at>5*60000?t('missed'):t('today')}</span><span>${esc(r.a.date)} ${esc(r.a.start)}</span></div></div><div class="act"><button class="btn sm" data-act="rem-snooze" data-key="${esc(r.key)}">${t('snooze')}</button><button class="btn sm pri" data-act="rem-done" data-key="${esc(r.key)}">${t('dismiss')}</button></div></div>`).join('')}</div>`:`<div class="empty">${t('noItems')}</div>`}</section>
+   <section class="card"><h2>${t('dRem')}</h2>${rems.length?`<div class="list">${rems.map(r=>`<div class="row"><div class="main"><div class="t">${r.f?'📌 ':''}${esc(r.a.title)}</div><div class="m">${r.f?`<span>${t('followEnded')}</span>`:''}<span class="pill ${Date.now()-r.at>5*60000?'warn':''}">${Date.now()-r.at>5*60000?t('missed'):t('today')}</span><span>${esc(r.a.date)} ${esc(r.a.start)}</span></div></div><div class="act"><button class="btn sm" data-act="rem-snooze" data-key="${esc(r.key)}">${t('snooze')}</button><button class="btn sm pri" data-act="rem-done" data-key="${esc(r.key)}">${t('dismiss')}</button></div></div>`).join('')}</div>`:`<div class="empty">${t('noItems')}</div>`}</section>
    <section class="card"><h2>${t('dUpcoming')}</h2>${list(upc,apptRow,5)}</section>
    <section class="card"><h2>${t('dFollow')}<button class="btn sm" data-act="go" data-v="follow">${t('follow')}</button></h2>${list(fl,f=>followRow(f,true))}</section>
    <section class="card"><h2>${t('dSummary')}</h2><div style="display:flex;gap:24px"><div class="stat"><b>${meetDone}</b><span>${t('meetingsDone')}</span></div><div class="stat"><b>${fDoneW}</b><span>${t('doneFollows')}</span></div></div></section>
