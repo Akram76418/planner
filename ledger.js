@@ -70,11 +70,11 @@
       '<label>' + h(T('إجمالي المبلغ *', 'Total amount *')) + '<input id="lf-total" type="number" step="0.01" min="0" inputmode="decimal" value="' + h(f.total == null ? '' : f.total) + '"></label>' +
       '<label>' + h(T('العملة', 'Currency')) + '<select id="lf-cur">' + curOpts + '</select></label>' +
       '<label style="grid-column:1/-1">' + h(T('ملاحظة', 'Note')) + '<input id="lf-note" value="' + h(f.note || '') + '"></label>' +
-      '<div style="grid-column:1/-1"><b>' + h(T('بيانات القطعة (تظهر في الوصل)', 'Land details (shown on the receipt)')) + '</b> <button type="button" class="btn sm" data-act="lg-land-fill">' + h(T('تعبئة: قطعة 2346 / قسيمة 2 / 268 م² / عقد 30-09-2023', 'Fill: parcel 2346 / plot 2 / 268 m² / contract 30-09-2023')) + '</button></div>' +
+      '<div style="grid-column:1/-1"><b>' + h(T('بيانات القطعة (تظهر في الوصل)', 'Land details (shown on the receipt)')) + '</b> <button type="button" class="btn sm" data-act="lg-land-fill">' + h(T('تعبئة بيانات الأرض والوصف تلقائياً', 'Fill: parcel 2346 / plot 2 / 268 m² / contract 30-09-2023')) + '</button></div>' +
       '<label>' + h(T('رقم القسيمة', 'Plot no.')) + '<input id="lf-plot" value="' + h(f.plot_no || '') + '"></label>' +
       '<label>' + h(T('رقم القطعة', 'Parcel no.')) + '<input id="lf-parcel" value="' + h(f.parcel_no || '') + '"></label>' +
       '<label>' + h(T('المساحة', 'Area')) + '<input id="lf-area" placeholder="268 م²" value="' + h(f.area || '') + '"></label>' +
-      '<label>' + h(T('الموقع / الأراضي', 'Location')) + '<input id="lf-loc" placeholder="أراضي النخيرات - دير البلح" value="' + h(f.location || '') + '"></label>' +
+      '<label>' + h(T('الموقع / الأراضي', 'Location')) + '<input id="lf-loc" placeholder="أراضي النصيرات - قنى دير البلح" value="' + h(f.location || '') + '"></label>' +
       '<label>' + h(T('تاريخ العقد', 'Contract date')) + '<input id="lf-cdate" type="date" value="' + h(f.contract_date || '') + '"></label>' +
       '<label style="grid-column:1/-1">' + h(T('وصف الدفعة في الوصل (ثابت لهذا الحساب)', 'Payment description on the receipt (fixed per account)')) + '<textarea id="lf-desc" rows="3" placeholder="' + h(T('مثال: قسط شهري من باقي ثمن بيع قطعة أرض مساحتها (268) متر من أراضي النخيرات، قسيمة رقم (2) قطعة رقم (2346)، وذلك حسب الاتفاق الذي نص عليه عقد البيع بين الطرفين والذي أبرم وحرر بتاريخ 30/9/2023', 'e.g. monthly instalment of the balance of the sale price of ...')) + '">' + h(f.receipt_desc || '') + '</textarea></label></div>' +
       '<div class="tabs"><button class="btn pri" data-act="lg-acc-save"' + (L.busy ? ' disabled' : '') + '>' + h(T('حفظ', 'Save')) + '</button><button class="btn" data-act="lg-acc-cancel">' + h(T('إلغاء', 'Cancel')) + '</button></div></div>';
@@ -268,7 +268,7 @@
     'lg-pay-del': function (el) { guard(async function () { var r = await sb().from('ledger_payments').delete().eq('id', el.dataset.id); if (r.error) throw r.error; await load2(); }); },
     'lg-receipt': function (el) { var p = findPay(el.dataset.id); if (p) receiptWindow(p); },
     'lg-receipt-word': function (el) { var p = findPay(el.dataset.id); if (p) saveBlob('receipt-' + p.paid_at + '.doc', new Blob(['﻿', receiptWord(p)], { type: 'application/msword;charset=utf-8' })); },
-    'lg-land-fill': function () { var set = function (id, v) { var e = $q('#' + id); if (e) e.value = v; }; set('lf-plot', '2'); set('lf-parcel', '2346'); set('lf-area', '268 م²'); if (!val('lf-loc')) set('lf-loc', 'أراضي النخيرات - دير البلح'); set('lf-cdate', '2023-09-30'); },
+    'lg-land-fill': function () { var set = function (id, v) { var e = $q('#' + id); if (e) e.value = v; }; set('lf-plot', '2'); set('lf-parcel', '2346'); set('lf-area', '268 م²'); set('lf-loc', 'أراضي النصيرات - قنى دير البلح'); set('lf-cdate', '2023-09-30'); set('lf-desc', 'قسط شهري من باقي بيع قطعة أرض مساحتها (268) متر مربع من أراضي النصيرات - قنى دير البلح، قسيمة رقم (2)، قطعة رقم (2346)، وذلك حسب الاتفاق الذي نص عليه عقد البيع بين الطرفين والذي أبرم وحرر بتاريخ 30-09-2023'); },
     'lg-prof-open': function () { L.profForm = true; draw(); },
     'lg-prof-cancel': function () { L.profForm = false; draw(); },
     'lg-prof-nosig': function () { L.prof = Object.assign({}, L.prof, { sig: null }); draw(); },
