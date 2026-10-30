@@ -70,6 +70,12 @@
       '<label>' + h(T('إجمالي المبلغ *', 'Total amount *')) + '<input id="lf-total" type="number" step="0.01" min="0" inputmode="decimal" value="' + h(f.total == null ? '' : f.total) + '"></label>' +
       '<label>' + h(T('العملة', 'Currency')) + '<select id="lf-cur">' + curOpts + '</select></label>' +
       '<label style="grid-column:1/-1">' + h(T('ملاحظة', 'Note')) + '<input id="lf-note" value="' + h(f.note || '') + '"></label>' +
+      '<div style="grid-column:1/-1"><b>' + h(T('بيانات القطعة (تظهر في الوصل)', 'Land details (shown on the receipt)')) + '</b> <button type="button" class="btn sm" data-act="lg-land-fill">' + h(T('تعبئة: قطعة 2346 / قسيمة 2 / 268 م² / عقد 30-09-2023', 'Fill: parcel 2346 / plot 2 / 268 m² / contract 30-09-2023')) + '</button></div>' +
+      '<label>' + h(T('رقم القسيمة', 'Plot no.')) + '<input id="lf-plot" value="' + h(f.plot_no || '') + '"></label>' +
+      '<label>' + h(T('رقم القطعة', 'Parcel no.')) + '<input id="lf-parcel" value="' + h(f.parcel_no || '') + '"></label>' +
+      '<label>' + h(T('المساحة', 'Area')) + '<input id="lf-area" placeholder="268 م²" value="' + h(f.area || '') + '"></label>' +
+      '<label>' + h(T('الموقع / الأراضي', 'Location')) + '<input id="lf-loc" placeholder="أراضي النخيرات - دير البلح" value="' + h(f.location || '') + '"></label>' +
+      '<label>' + h(T('تاريخ العقد', 'Contract date')) + '<input id="lf-cdate" type="date" value="' + h(f.contract_date || '') + '"></label>' +
       '<label style="grid-column:1/-1">' + h(T('وصف الدفعة في الوصل (ثابت لهذا الحساب)', 'Payment description on the receipt (fixed per account)')) + '<textarea id="lf-desc" rows="3" placeholder="' + h(T('مثال: قسط شهري من باقي ثمن بيع قطعة أرض مساحتها (268) متر من أراضي النخيرات، قسيمة رقم (2) قطعة رقم (2346)، وذلك حسب الاتفاق الذي نص عليه عقد البيع بين الطرفين والذي أبرم وحرر بتاريخ 30/9/2023', 'e.g. monthly instalment of the balance of the sale price of ...')) + '">' + h(f.receipt_desc || '') + '</textarea></label></div>' +
       '<div class="tabs"><button class="btn pri" data-act="lg-acc-save"' + (L.busy ? ' disabled' : '') + '>' + h(T('حفظ', 'Save')) + '</button><button class="btn" data-act="lg-acc-cancel">' + h(T('إلغاء', 'Cancel')) + '</button></div></div>';
   }
@@ -182,6 +188,12 @@
     });
   }
   function dotted(s, n) { s = (s || '').trim(); return s ? esc(s) : '.'.repeat(n || 30); }
+  function dmy(d) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d || ''); return m ? m[3] + '-' + m[2] + '-' + m[1] : (d || ''); }
+  function landBlock(a) {
+    var cells = [['الموقع', a.location], ['رقم القسيمة', a.plot_no], ['رقم القطعة', a.parcel_no], ['المساحة', a.area], ['تاريخ العقد', a.contract_date ? dmy(a.contract_date) : '']].filter(function (c) { return c[1]; });
+    if (!cells.length) return '';
+    return '<p style="margin:10px 0 2px;font-size:12pt;color:#12304D"><b>بيانات القطعة محل العقد</b></p><table dir="rtl" width="100%" border="1" cellspacing="0" cellpadding="5" style="width:100%;border-collapse:collapse;font-size:12.5pt;text-align:center;margin:0 0 8px"><tr style="background:#eef3f7">' + cells.map(function (c) { return '<td>' + c[0] + '</td>'; }).join('') + '</tr><tr>' + cells.map(function (c) { return '<td><b>' + esc(c[1]) + '</b></td>'; }).join('') + '</tr></table>';
+  }
   function receiptHtml(p, word) {
     var a = findAcc(p.account_id); if (!a) return '';
     var pr = L.prof || {}, cur = (CUR[a.currency] || CUR.ILS)[1], isIn = a.direction === 'in';
@@ -201,7 +213,7 @@
       '<table width="100%" style="width:100%"><tr><td style="font-size:12pt;color:#555">دفعة رقم ' + (idx + 1) + '</td><td style="text-align:left;font-size:12pt;color:#555">التاريخ: ' + esc(day) + ' ' + esc(d) + '</td></tr></table>' +
       '<p style="text-align:center;font-size:20pt;margin:4px 0 14px;color:#12304D"><b>' + (isIn ? 'وصل استلام دفعة' : 'وصل دفع') + '</b></p>' +
       '<p style="margin:0 0 8px;text-align:justify">' + para + '</p>' +
-      '<table dir="rtl" width="100%" border="1" cellspacing="0" cellpadding="5" style="width:100%;border-collapse:collapse;font-size:13pt;text-align:center;margin:6px 0 10px"><tr style="background:#eef3f7"><td>الإجمالي الأصلي</td><td>المدفوع سابقاً</td><td>هذه الدفعة</td><td>المتبقي</td></tr><tr><td>' + fmt(a.total) + ' ' + esc(cur) + '</td><td>' + fmt(upto - num(p.amount)) + ' ' + esc(cur) + '</td><td><b>' + fmt(p.amount) + ' ' + esc(cur) + '</b></td><td><b>' + fmt(rem) + ' ' + esc(cur) + '</b></td></tr></table>' +
+      landBlock(a) + '<table dir="rtl" width="100%" border="1" cellspacing="0" cellpadding="5" style="width:100%;border-collapse:collapse;font-size:13pt;text-align:center;margin:6px 0 10px"><tr style="background:#eef3f7"><td>الإجمالي الأصلي</td><td>المدفوع سابقاً</td><td>هذه الدفعة</td><td>المتبقي</td></tr><tr><td>' + fmt(a.total) + ' ' + esc(cur) + '</td><td>' + fmt(upto - num(p.amount)) + ' ' + esc(cur) + '</td><td><b>' + fmt(p.amount) + ' ' + esc(cur) + '</b></td><td><b>' + fmt(rem) + ' ' + esc(cur) + '</b></td></tr></table>' +
       '<p style="margin:0 0 14px">' + remLine + '</p>' +
       '<table width="100%" style="width:100%;margin-top:10px"><tr><td style="width:60%">' + (isIn ? 'توقيع المستلم' : 'توقيع الدافع') + ' / <b>' + name + '</b></td><td>' + sig + '</td></tr>' +
       (isIn ? '' : '<tr><td>توقيع المستلم / ' + who + '</td><td>..............................</td></tr>') +
@@ -229,7 +241,7 @@
     'lg-acc-save': function () {
       var f = L.form || {}, person = val('lf-person').trim(), total = parseFloat(val('lf-total'));
       if (!person || !(total >= 0)) { toast_(T('اكتب الاسم والمبلغ', 'Enter name and amount')); return; }
-      var row = { person: person, direction: val('lf-dir'), total: total, currency: val('lf-cur'), note: val('lf-note').trim() || null, receipt_desc: val('lf-desc').trim() || null };
+      var row = { person: person, direction: val('lf-dir'), total: total, currency: val('lf-cur'), note: val('lf-note').trim() || null, receipt_desc: val('lf-desc').trim() || null, plot_no: val('lf-plot').trim() || null, parcel_no: val('lf-parcel').trim() || null, area: val('lf-area').trim() || null, location: val('lf-loc').trim() || null, contract_date: val('lf-cdate') || null };
       guard(async function () {
         var r = f.id ? await sb().from('ledger_accounts').update(row).eq('id', f.id) : await sb().from('ledger_accounts').insert(row);
         if (r.error) throw r.error; L.form = null; await load2();
@@ -256,6 +268,7 @@
     'lg-pay-del': function (el) { guard(async function () { var r = await sb().from('ledger_payments').delete().eq('id', el.dataset.id); if (r.error) throw r.error; await load2(); }); },
     'lg-receipt': function (el) { var p = findPay(el.dataset.id); if (p) receiptWindow(p); },
     'lg-receipt-word': function (el) { var p = findPay(el.dataset.id); if (p) saveBlob('receipt-' + p.paid_at + '.doc', new Blob(['﻿', receiptWord(p)], { type: 'application/msword;charset=utf-8' })); },
+    'lg-land-fill': function () { var set = function (id, v) { var e = $q('#' + id); if (e) e.value = v; }; set('lf-plot', '2'); set('lf-parcel', '2346'); set('lf-area', '268 م²'); if (!val('lf-loc')) set('lf-loc', 'أراضي النخيرات - دير البلح'); set('lf-cdate', '2023-09-30'); },
     'lg-prof-open': function () { L.profForm = true; draw(); },
     'lg-prof-cancel': function () { L.profForm = false; draw(); },
     'lg-prof-nosig': function () { L.prof = Object.assign({}, L.prof, { sig: null }); draw(); },

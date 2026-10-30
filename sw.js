@@ -1,5 +1,5 @@
 /* Service worker: app shell offline + Web Push display. Bump VERSION when files change. */
-const VERSION = 'planner-v33';
+const VERSION = 'planner-v34';
 const SHELL = ['./', './index.html', './config.js', './sync.js', './comm.js', './ext.js', './logs.js', './ledger.js', './logo.png', './manifest.json', './icon-192.png', './icon-512.png'];
 const CDN = ['https://cdn.jsdelivr.net/', 'https://fonts.googleapis.com/', 'https://fonts.gstatic.com/'];
 
