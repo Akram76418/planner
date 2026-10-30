@@ -1,0 +1,899 @@
+<title>My Daily Planner</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Readex+Pro:wght@500;600&display=swap">
+<style>
+/* Layout: navy sidebar (desktop) / bottom bar (phone) beside a calm working surface; turquoise marks the one thing to act on. */
+:root{
+  --bg:#eef4f7;--surface:#ffffff;--fg:#0f2236;--muted:#5a6f80;--line:#d7e2e9;
+  --navy:#12304d;--navy-fg:#e8f1f6;--accent:#0b8f9c;--accent-fg:#ffffff;--accent-soft:#d9f1f3;
+  --ok:#1f8a5b;--warn:#b7791f;--bad:#c0392b;--ok-soft:#dff3e8;--warn-soft:#fbefd5;--bad-soft:#fbe3df;
+  --f-body:'IBM Plex Sans Arabic','Segoe UI',Tahoma,sans-serif;--f-disp:'Readex Pro','IBM Plex Sans Arabic','Segoe UI',sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0a1520;--surface:#112230;--fg:#e4edf3;--muted:#8fa6b6;--line:#223646;
+  --navy:#0d2238;--navy-fg:#e8f1f6;--accent:#3cc7d0;--accent-fg:#06222a;--accent-soft:#12383f;
+  --ok:#4cc38a;--warn:#e0a84a;--bad:#ef7d6f;--ok-soft:#133a2a;--warn-soft:#3b2f12;--bad-soft:#40201c;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0a1520;--surface:#112230;--fg:#e4edf3;--muted:#8fa6b6;--line:#223646;
+  --navy:#0d2238;--navy-fg:#e8f1f6;--accent:#3cc7d0;--accent-fg:#06222a;--accent-soft:#12383f;
+  --ok:#4cc38a;--warn:#e0a84a;--bad:#ef7d6f;--ok-soft:#133a2a;--warn-soft:#3b2f12;--bad-soft:#40201c;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:auto}
+body{background:var(--bg);color:var(--fg);font:15px/1.6 var(--f-body);margin:0;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0}
+h1,h2,h3{font-family:var(--f-disp);margin:0;text-wrap:balance;font-weight:600}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.shell{display:grid;grid-template-columns:230px minmax(0,1fr);gap:24px;max-width:1280px;margin:0 auto;padding-block:16px 96px}
+.side{position:sticky;top:16px;align-self:start;background:var(--navy);color:var(--navy-fg);border-radius:14px;padding:18px 12px;display:flex;flex-direction:column;gap:4px}
+.brand{padding:4px 10px 14px;font-family:var(--f-disp);font-weight:600;line-height:1.3}
+.brand small{display:block;font-weight:400;opacity:.7;font-size:12px;font-family:var(--f-body)}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav button{display:flex;align-items:center;gap:10px;background:none;border:0;color:inherit;padding:10px;border-radius:9px;text-align:start;width:100%}
+.nav button svg{flex:none;opacity:.85}
+.nav button:hover{background:rgba(255,255,255,.08)}
+.nav button[aria-current="page"]{background:rgba(255,255,255,.16);font-weight:600}
+.side .tools{display:flex;gap:8px;padding:12px 6px 0;border-top:1px solid rgba(255,255,255,.14);margin-top:10px}
+.chip-btn{background:rgba(255,255,255,.1);border:0;color:inherit;border-radius:8px;padding:6px 10px;font-size:13px}
+main{min-width:0}
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.top h1{font-size:26px}
+.top .sub{color:var(--muted);font-size:14px}
+.btn{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:8px 14px;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--accent)}
+.btn.pri{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
+.btn.bad{color:var(--bad)}
+.btn.sm{padding:4px 10px;font-size:13px}
+.btn[data-armed]{background:var(--bad);color:#fff;border-color:var(--bad)}
+.fab{position:fixed;inset-inline-end:max(16px,env(safe-area-inset-right,0px));bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:30;background:var(--accent);color:var(--accent-fg);border:0;border-radius:999px;padding:12px 20px;font-weight:600;box-shadow:0 6px 18px rgba(0,0,0,.25);display:flex;gap:8px;align-items:center}
+.grid{display:grid;gap:14px}
+.g4{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.g2{grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr))}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+.card h2{font-size:16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.stat{display:flex;flex-direction:column;gap:2px}
+.stat b{font-family:var(--f-disp);font-size:26px;font-variant-numeric:tabular-nums;line-height:1.2}
+.stat span{color:var(--muted);font-size:13px}
+.banner{border-radius:10px;padding:10px 14px;background:var(--warn-soft);color:var(--fg);border:1px solid var(--warn);margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.banner.bad{background:var(--bad-soft);border-color:var(--bad)}
+.list{display:flex;flex-direction:column;gap:8px}
+.row{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);min-width:0}
+.row.click{cursor:pointer}
+.row.click:hover{border-color:var(--accent)}
+.row .main{min-width:0;flex:1}
+.row .t{font-weight:600;overflow-wrap:anywhere}
+.row .m{color:var(--muted);font-size:13px;display:flex;gap:6px 12px;flex-wrap:wrap;margin-top:2px}
+.row .act{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.pill{display:inline-block;font-size:12px;padding:1px 9px;border-radius:999px;background:var(--accent-soft);color:var(--fg);white-space:nowrap}
+.pill.ok{background:var(--ok-soft)}.pill.warn{background:var(--warn-soft)}.pill.bad{background:var(--bad-soft)}
+.pill.hi{background:var(--bad-soft)}.pill.med{background:var(--warn-soft)}.pill.low{background:var(--ok-soft)}
+.bar{height:8px;border-radius:99px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:99px}
+.empty{color:var(--muted);padding:14px;text-align:center;border:1px dashed var(--line);border-radius:10px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.tabs button{background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px 14px;font-size:14px}
+.tabs button[aria-pressed="true"]{background:var(--navy);color:var(--navy-fg);border-color:var(--navy)}
+.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px}
+input,select,textarea{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+textarea{min-height:70px;resize:vertical}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);min-width:0}
+label.ck{flex-direction:row;align-items:center;gap:6px;color:var(--fg);font-size:14px}
+label.ck input{width:auto}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:12px}
+.form .full{grid-column:1/-1}
+.form h3{grid-column:1/-1;font-size:15px;padding-top:6px;border-top:1px solid var(--line)}
+.checks{display:flex;gap:6px 14px;flex-wrap:wrap}
+#modal{position:fixed;inset:0;z-index:50;background:rgba(5,15,25,.55);display:none;align-items:flex-start;justify-content:center;padding:max(16px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px));overflow:auto}
+#modal.on{display:flex}
+.dlg{background:var(--surface);border-radius:14px;width:min(760px,100%);padding:18px;border:1px solid var(--line);display:flex;flex-direction:column;gap:14px;min-width:0}
+.dlg header{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.dlg header h2{font-size:19px}
+.dlg footer{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.dl{display:grid;grid-template-columns:130px minmax(0,1fr);gap:6px 12px}
+.dl dt{color:var(--muted);font-size:13px}.dl dd{margin:0;overflow-wrap:anywhere;white-space:pre-wrap}
+@media (max-width:560px){.dl{grid-template-columns:1fr}.dl dd{margin-bottom:6px}}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.cal .h{text-align:center;color:var(--muted);font-size:12px;padding:4px 0}
+.cal .d{min-height:66px;border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:4px 6px;text-align:start;display:flex;flex-direction:column;gap:3px;min-width:0}
+.cal .d.out{opacity:.45}
+.cal .d.today{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.cal .d.sel{background:var(--accent-soft)}
+.cal .d b{font-size:13px;font-weight:500}
+.cal .dots{display:flex;gap:3px;flex-wrap:wrap}
+.cal .dots i{width:7px;height:7px;border-radius:50%;background:var(--accent)}
+.cal .dots i.t{background:var(--warn)}
+.cal .cnt{font-size:11px;color:var(--muted)}
+.bottom{display:none}
+.toast{position:fixed;inset-inline:0;bottom:calc(130px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center;z-index:60;pointer-events:none}
+.toast div{background:var(--navy);color:var(--navy-fg);padding:10px 16px;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.3);max-width:90%}
+.rep h3{margin:14px 0 6px;font-size:16px}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:start;vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:13px}
+td.n,th.n{font-variant-numeric:tabular-nums}
+.mbar,.scrim{display:none}
+.userbar{display:flex;direction:ltr;justify-content:flex-start;align-items:center;gap:8px;margin-bottom:10px}
+.userbar .ub-name{font-size:13px;color:var(--muted);max-width:46vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.userbar button{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:13px}
+.mbar .ub-name{font-size:12px;opacity:.85;margin-inline-start:auto;max-width:40vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:860px){
+  .userbar{display:none}
+  .shell{grid-template-columns:1fr;padding-block:0 96px}
+  .mbar{display:flex;align-items:center;gap:10px;position:sticky;top:env(safe-area-inset-top,0px);z-index:40;background:var(--navy);color:var(--navy-fg);margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding:10px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));margin-bottom:12px}
+  .mbar button{background:rgba(255,255,255,.12);border:0;color:inherit;border-radius:9px;width:42px;height:42px;display:flex;align-items:center;justify-content:center}
+  .mbar b{font-family:var(--f-disp);font-size:17px;font-weight:600}
+  body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:41;background:var(--navy)}
+  .side{display:none;position:fixed;top:0;bottom:0;inset-inline-start:0;width:min(290px,86vw);z-index:80;border-radius:0;overflow-y:auto;padding-top:calc(18px + env(safe-area-inset-top,0px));align-self:auto}
+  .side.open{display:flex}
+  .scrim.open{display:block;position:fixed;inset:0;z-index:75;background:rgba(5,15,25,.55)}
+  .nav button{padding:13px 10px;font-size:16px}
+  .bottom{display:none!important}
+  .fab{bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+  .toast{bottom:calc(80px + env(safe-area-inset-bottom,0px))}
+  .top h1{font-size:22px}
+}
+@media print{
+  .side,.bottom,.mbar,.scrim,.fab,.top .btn,.noprint,#modal{display:none!important}
+  .shell{display:block;padding:0}body{background:#fff;color:#000;padding:0}.card{border:1px solid #999}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<header class="mbar"><button data-act="menu" aria-label="Menu" id="menuBtn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><b id="mtitle"></b><span class="ub-name" id="mname"></span><button data-act="sign-out" id="outBtn" aria-label="Sign out" title="Sign out"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H5v16h4M16 8l4 4-4 4M20 12H9"/></svg></button></header>
+<div class="scrim" id="scrim" data-act="menu-close"></div>
+<div class="shell">
+  <aside class="side" id="side"></aside>
+  <main id="view"></main>
+</div>
+<nav class="bottom" id="bottom"></nav>
+<button class="fab" id="fab" data-act="new"></button>
+<div id="modal" role="dialog" aria-modal="true"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+/* ---------- helpers ---------- */
+const $=(s,r=document)=>r.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad=n=>String(n).padStart(2,'0');
+const dstr=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const today=()=>dstr(new Date());
+const pd=s=>{const[a,b,c]=s.split('-').map(Number);return new Date(a,b-1,c)};
+const addDays=(s,n)=>{const d=pd(s);d.setDate(d.getDate()+n);return dstr(d)};
+const addMonths=(s,n)=>{const d=pd(s),day=d.getDate();d.setDate(1);d.setMonth(d.getMonth()+n);const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();d.setDate(Math.min(day,last));return dstr(d)};
+const ts=(d,t)=>new Date(d+'T'+(t||'00:00')).getTime();
+const weekStart=s=>{const d=pd(s);d.setDate(d.getDate()-d.getDay());return dstr(d)};
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const nowISO=()=>new Date().toISOString();
+const clamp=(n,a,b)=>Math.min(b,Math.max(a,n));
+
+/* ---------- i18n ---------- */
+const TX={
+ar:{app:'منظّم أعمالي اليومية',appEn:'My Daily Planner',dash:'لوحة التحكم',cal:'التقويم',appts:'المواعيد',follow:'متابعاتي اليومية',tasks:'المهام',reports:'التقارير والإنجازات',settings:'الإعدادات',comm:'التواصل',proj:'المشاريع الخارجية',logs:'السجلات',pdfFiles:'ملفات PDF مرفقة',pdfHint:'اختياري — حتى 10 ميغابايت للملف، ويلزم اتصال بالإنترنت للرفع.',pdfNeedLogin:'سجّل الدخول لإرفاق الملفات.',pdfOffline:'رفع الملفات يحتاج اتصالاً بالإنترنت.',pdfOnly:'يُسمح بملفات PDF فقط.',pdfBig:'الملف أكبر من 10 ميغابايت.',pdfOpenErr:'تعذّر فتح الملف.',ledger:'دفتر الدفعات',signout:'خروج / تبديل الحساب',
+new:'إضافة جديدة',newAppt:'موعد / اجتماع',newTask:'مهمة',newFollow:'متابعة يومية',save:'حفظ',cancel:'إلغاء',close:'إغلاق',edit:'تعديل',del:'حذف',delOk:'تأكيد الحذف',details:'التفاصيل',
+title:'العنوان',date:'التاريخ',start:'البداية',end:'النهاية',place:'المكان',people:'المشاركون',type:'النوع',prio:'الأولوية',status:'الحالة',optional:'اختياري',
+t_meeting:'اجتماع',t_admin:'عمل إداري',t_teaching:'تدريس',t_research:'بحث علمي',t_personal:'موعد شخصي',t_project:'متابعة مشروع',t_custom:'نوع مخصص',customType:'اسم النوع المخصص',
+p_high:'مرتفعة',p_med:'متوسطة',p_low:'منخفضة',
+s_upcoming:'قادم',s_ongoing:'جارٍ',s_done:'مكتمل',s_postponed:'مؤجل',s_cancelled:'ملغى',
+agenda:'الأجندة',goal:'الهدف',topics:'الموضوعات المطلوب مناقشتها (سطر لكل موضوع)',focus:'نقاط التركيز',questions:'الأسئلة والمقترحات',notes:'ملاحظات',docs:'الوثائق المطلوب تجهيزها',decisions:'القرارات المتخذة',actions:'الإجراءات اللاحقة (سطر لكل إجراء، والمسؤول بعد | )',outcome:'ملاحظات الاجتماع والنتائج النهائية',
+reminders:'التذكيرات',r_0:'عند الموعد',r_5:'قبل 5 دقائق',r_15:'قبل 15 دقيقة',r_30:'قبل 30 دقيقة',r_60:'قبل ساعة',r_1440:'قبل يوم',r_custom:'تذكير بتاريخ ووقت مخصصين',
+repeat:'التكرار',rep_none:'بدون تكرار',rep_daily:'يومي',rep_weekly:'أسبوعي',rep_monthly:'شهري',repN:'عدد المرات (عند الإنشاء)',
+search:'بحث بالعنوان',allTypes:'كل الأنواع',allPrio:'كل الأولويات',allStatus:'كل الحالات',from:'من',to:'إلى',
+toTask:'← مهمة',linkedTask:'مرتبطة بمهمة',owner:'المسؤول',postpone:'تأجيل',reschedule:'إعادة جدولة',markDone:'تحديد كمكتمل',
+updated:'آخر تحديث',history:'سجل التحديثات',
+today:'اليوم',tomorrow:'غداً',noItems:'لا توجد عناصر',
+dToday:'مواعيد اليوم',dNext:'أقرب موعد',dUpcoming:'المواعيد القادمة',dTasks:'مهام مطلوبة ومتأخرة',dRem:'تذكيرات مستحقة وفائتة',dFollow:'أهم المتابعات اليومية',dRateDay:'إنجاز اليوم',dRateWeek:'إنجاز الأسبوع',dSummary:'ملخص الإنجاز',
+meetingsDone:'اجتماعات مكتملة',tasksDone:'مهام مكتملة',overdue:'متأخر',none:'لا يوجد',
+unsynced:'البيانات محفوظة على هذا الجهاز فقط ولم تتم مزامنتها مع جهاز آخر. استخدم النسخ الاحتياطي في الإعدادات لنقلها.',
+snooze:'تأجيل 10 د',dismiss:'تم',missed:'فائت',
+f_notstarted:'لم تبدأ',f_inprogress:'قيد التنفيذ',f_waiting:'بانتظار رد',f_action:'تحتاج إلى إجراء',f_done:'مكتملة',
+desc:'الوصف',startDate:'تاريخ البدء',due:'تاريخ الاستحقاق',nextFollow:'موعد المتابعة القادمة',nextStep:'الخطوة التالية',progress:'نسبة الإنجاز',
+linkType:'مرتبطة بـ',l_none:'بدون',l_person:'شخص',l_org:'جهة',l_project:'مشروع',l_meeting:'اجتماع',linkName:'اسم الشخص / الجهة / المشروع',linkMeeting:'الاجتماع المرتبط',
+pin:'تثبيت',unpin:'إلغاء التثبيت',pinned:'مثبّتة',addUpdate:'إضافة تحديث',updateText:'نص التحديث',plus1:'تأجيل يوم',late:'متأخرة',
+k_all:'الكل',k_notstarted:'لم تبدأ',k_inprogress:'قيد التنفيذ',k_done:'مكتملة',k_overdue:'متأخرة',
+minutes:'المدة المتوقعة (دقيقة)',subtasks:'الخطوات الفرعية (سطر لكل خطوة)',delayReason:'سبب التأخير (إن وجد)',linkedAppt:'الموعد المرتبط',sortBy:'الترتيب',sortPrio:'حسب الأولوية',sortDate:'حسب التاريخ',
+rQuick:'اليوم',rWeek:'الأسبوع',rMonth:'الشهر',rYear:'السنة',compare:'مقارنة مع الفترة السابقة المماثلة',
+rMeet:'أولاً: تقرير الاجتماعات',rAch:'ثانياً: تقرير الإنجازات',rExec:'ثالثاً: الملخص التنفيذي',
+total:'الإجمالي',completed:'مكتمل',postponedN:'مؤجل',cancelledN:'ملغى',upcomingN:'قادم',needFollow:'اجتماعات تحتاج متابعة لاحقة',
+doneTasks:'المهام المنجزة',doneFollows:'المتابعات المكتملة',progressFollows:'تقدم المتابعات المستمرة',rate:'نسبة إنجاز المهام المستحقة في الفترة',lateWork:'أعمال متأخرة وغير مكتملة',decisionsDone:'أهم القرارات',
+period:'الفترة',prevPeriod:'الفترة السابقة',summary:'الملخص',myNotes:'ملاحظاتي',approve:'اعتماد التقرير',approved:'معتمد',unapprove:'إلغاء الاعتماد',
+exportCsv:'تنزيل CSV',exportWord:'تصدير إلى Word',copyCsv:'نسخ CSV',printPdf:'طباعة',copied:'تم النسخ',suggest:'أولويات مقترحة للفترة التالية',
+settingsNotif:'الإشعارات',allow:'السماح بالإشعارات',test:'إشعار تجريبي',notifState:'حالة الإذن',
+notifNote:'تعمل الإشعارات الفورية عندما يكون التطبيق مفتوحاً أو يعمل في الخلفية. المتصفحات لا تضمن تنبيهاً دقيقاً عندما يكون التطبيق مغلقاً أو الجهاز مغلقاً تماماً، وتعمل الإشعارات المجدولة في الخلفية بشكل موثوق فقط في تطبيق أصلي أو عبر Web Push من خادم. أي تذكير يفوتك يظهر في لوحة التحكم عند فتح التطبيق.',
+backup:'النسخ الاحتياطي',exportJson:'تصدير نسخة (JSON)',importJson:'استيراد نسخة',imported:'تم الاستيراد',lang:'اللغة',theme:'المظهر',light:'فاتح',dark:'داكن',auto:'تلقائي',
+wipe:'حذف كل البيانات',deleted:'تم الحذف',saved:'تم الحفظ',
+syncNote:'المزامنة السحابية والحسابات المستقلة تحتاج خادماً. هذه النسخة تعمل محلياً وتحفظ في IndexedDB على هذا الجهاز.',
+prev:'السابق',next:'التالي',month:'شهر',week:'أسبوع',day:'يوم',
+sumMeet:(n,d,p,c)=>`عُقد ${d} من ${n} اجتماعاً وموعداً خلال الفترة، وأُجّل ${p} وأُلغي ${c}.`,
+sumTasks:(a,b,r)=>`أُنجزت ${a} مهمة من ${b} مهمة مستحقة في الفترة`+(r==null?'.':` (${r}%).`),
+sumNoData:'لا توجد بيانات مسجلة في هذه الفترة.',
+nextOpen:'إجراءات اجتماعات غير منفذة',
+timeErr:'وقت النهاية يجب أن يكون بعد البداية',titleErr:'العنوان مطلوب',dateErr:'التاريخ مطلوب',
+wd:['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت']},
+en:{app:'My Daily Planner',appEn:'منظّم أعمالي اليومية',dash:'Dashboard',cal:'Calendar',appts:'Appointments',follow:'Daily Focus',tasks:'Tasks',reports:'Reports & Achievements',settings:'Settings',comm:'Messages',proj:'External projects',logs:'Logs',pdfFiles:'Attached PDF files',pdfHint:'Optional — up to 10 MB each; an internet connection is needed to upload.',pdfNeedLogin:'Sign in to attach files.',pdfOffline:'Uploading files needs an internet connection.',pdfOnly:'PDF files only.',pdfBig:'File is larger than 10 MB.',pdfOpenErr:'Could not open the file.',ledger:'Payments ledger',signout:'Sign out / switch account',
+new:'Add new',newAppt:'Appointment / meeting',newTask:'Task',newFollow:'Follow-up',save:'Save',cancel:'Cancel',close:'Close',edit:'Edit',del:'Delete',delOk:'Confirm delete',details:'Details',
+title:'Title',date:'Date',start:'Start',end:'End',place:'Location',people:'Participants',type:'Type',prio:'Priority',status:'Status',optional:'optional',
+t_meeting:'Meeting',t_admin:'Admin work',t_teaching:'Teaching',t_research:'Research',t_personal:'Personal',t_project:'Project follow-up',t_custom:'Custom type',customType:'Custom type name',
+p_high:'High',p_med:'Medium',p_low:'Low',
+s_upcoming:'Upcoming',s_ongoing:'Ongoing',s_done:'Completed',s_postponed:'Postponed',s_cancelled:'Cancelled',
+agenda:'Agenda',goal:'Goal',topics:'Topics to discuss (one per line)',focus:'Focus points',questions:'Questions & proposals',notes:'Notes',docs:'Documents to prepare',decisions:'Decisions made',actions:'Follow-up actions (one per line, owner after | )',outcome:'Meeting notes & final outcome',
+reminders:'Reminders',r_0:'At the time',r_5:'5 minutes before',r_15:'15 minutes before',r_30:'30 minutes before',r_60:'1 hour before',r_1440:'1 day before',r_custom:'Custom date & time reminder',
+repeat:'Repeat',rep_none:'No repeat',rep_daily:'Daily',rep_weekly:'Weekly',rep_monthly:'Monthly',repN:'Occurrences (on create)',
+search:'Search title',allTypes:'All types',allPrio:'All priorities',allStatus:'All statuses',from:'From',to:'To',
+toTask:'→ Task',linkedTask:'Linked to a task',owner:'Owner',postpone:'Postpone',reschedule:'Reschedule',markDone:'Mark completed',
+updated:'Last update',history:'Update history',
+today:'Today',tomorrow:'Tomorrow',noItems:'Nothing here',
+dToday:"Today's appointments",dNext:'Next appointment',dUpcoming:'Upcoming appointments',dTasks:'Tasks due and overdue',dRem:'Due and missed reminders',dFollow:'Top daily follow-ups',dRateDay:"Today's completion",dRateWeek:"This week's completion",dSummary:'Achievement summary',
+meetingsDone:'Meetings completed',tasksDone:'Tasks completed',overdue:'Overdue',none:'None',
+unsynced:'Your data is saved on this device only and is not synced to another device. Use Backup in Settings to move it.',
+snooze:'Snooze 10m',dismiss:'Done',missed:'Missed',
+f_notstarted:'Not started',f_inprogress:'In progress',f_waiting:'Waiting for reply',f_action:'Needs action',f_done:'Completed',
+desc:'Description',startDate:'Start date',due:'Due date',nextFollow:'Next follow-up date',nextStep:'Next step',progress:'Progress',
+linkType:'Linked to',l_none:'None',l_person:'Person',l_org:'Organization',l_project:'Project',l_meeting:'Meeting',linkName:'Person / organization / project name',linkMeeting:'Linked meeting',
+pin:'Pin',unpin:'Unpin',pinned:'Pinned',addUpdate:'Add update',updateText:'Update text',plus1:'Push 1 day',late:'Overdue',
+k_all:'All',k_notstarted:'Not started',k_inprogress:'In progress',k_done:'Completed',k_overdue:'Overdue',
+minutes:'Estimated minutes',subtasks:'Subtasks (one per line)',delayReason:'Reason for delay (if any)',linkedAppt:'Linked appointment',sortBy:'Sort',sortPrio:'By priority',sortDate:'By date',
+rQuick:'Today',rWeek:'Week',rMonth:'Month',rYear:'Year',compare:'Compare with the previous equal period',
+rMeet:'1. Meetings report',rAch:'2. Achievements report',rExec:'3. Executive summary',
+total:'Total',completed:'Completed',postponedN:'Postponed',cancelledN:'Cancelled',upcomingN:'Upcoming',needFollow:'Meetings needing follow-up',
+doneTasks:'Completed tasks',doneFollows:'Completed follow-ups',progressFollows:'Progress on ongoing follow-ups',rate:'Completion of tasks due in the period',lateWork:'Overdue and unfinished work',decisionsDone:'Key decisions',
+period:'Period',prevPeriod:'Previous period',summary:'Summary',myNotes:'My notes',approve:'Approve report',approved:'Approved',unapprove:'Remove approval',
+exportCsv:'Download CSV',exportWord:'Export to Word',copyCsv:'Copy CSV',printPdf:'Print',copied:'Copied',suggest:'Suggested priorities for the next period',
+settingsNotif:'Notifications',allow:'Allow notifications',test:'Test notification',notifState:'Permission',
+notifNote:'Notifications fire while the app is open or running in the background. Browsers do not guarantee a timely alert when the app is closed or the device is fully off; reliable scheduled alerts need a native app or Web Push from a server. Any reminder you miss shows on the dashboard when you reopen the app.',
+backup:'Backup',exportJson:'Export backup (JSON)',importJson:'Import backup',imported:'Imported',lang:'Language',theme:'Theme',light:'Light',dark:'Dark',auto:'Auto',
+wipe:'Delete all data',deleted:'Deleted',saved:'Saved',
+syncNote:'Cloud sync and separate user accounts need a server. This build works locally and stores data in IndexedDB on this device.',
+prev:'Previous',next:'Next',month:'Month',week:'Week',day:'Day',
+sumMeet:(n,d,p,c)=>`${d} of ${n} meetings and appointments were held in the period; ${p} postponed and ${c} cancelled.`,
+sumTasks:(a,b,r)=>`${a} of ${b} tasks due in the period were completed`+(r==null?'.':` (${r}%).`),
+sumNoData:'No data was recorded in this period.',
+nextOpen:'Open meeting actions',timeErr:'End time must be after start time',titleErr:'Title is required',dateErr:'Date is required',
+wd:['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']}
+};
+
+/* ---------- state + IndexedDB ---------- */
+const S={appts:[],tasks:[],follows:[],meta:{lang:'ar',theme:'auto',fired:{},notified:{},snooze:{},reportEdits:{}}};
+let UI={view:'dash',cal:{mode:'month',date:today(),sel:today()},af:{q:'',type:'',prio:'',status:'',from:'',to:''},tk:{tab:'all',sort:'prio'},rp:null,persisted:true};
+const L=()=>S.meta.lang||'ar';
+const t=k=>{const v=TX[L()][k];return v==null?(TX.ar[k]==null?k:TX.ar[k]):v};
+const loc=()=>L()==='ar'?'ar-u-nu-latn':'en-GB';
+const fmtD=(s,o)=>s?pd(s).toLocaleDateString(loc(),o||{day:'numeric',month:'short',year:'numeric'}):'';
+const wdName=s=>TX[L()].wd[pd(s).getDay()];
+
+let DB=null,DBNAME='my-daily-planner-local';window.setDbName=n=>{DBNAME=n};
+function idbOpen(){return new Promise((res,rej)=>{try{const r=indexedDB.open(DBNAME,1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}catch(e){rej(e)}})}
+function idbGet(k){return new Promise((res,rej)=>{const q=DB.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)})}
+function idbPut(k,v){return new Promise((res,rej)=>{const tx=DB.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)})}
+async function load(){
+  try{DB=await idbOpen();
+    for(const k of['appts','tasks','follows']){const v=await idbGet(k);if(Array.isArray(v))S[k]=v}
+    const m=await idbGet('meta');if(m)Object.assign(S.meta,m);
+    if(!await idbGet('seeded')&&!window.SKIP_SEED){await seed();await idbPut('seeded',1)}
+  }catch(e){UI.persisted=false;if(!S.appts.length)await seed()}
+}
+async function save(k){if(DB){try{await idbPut(k,S[k])}catch(e){UI.persisted=false}}if(window.onLocalSave)window.onLocalSave(k)}
+const saveAll=()=>Promise.all(['appts','tasks','follows','meta'].map(save));
+
+async function seed(){
+  const d=today();
+  const mk=(o)=>Object.assign({id:uid(),type:'meeting',prio:'med',status:'upcoming',place:'',people:'',goal:'',topics:[],focus:'',questions:'',notes:'',docs:'',decisions:'',actions:[],outcome:'',rem:{offs:[15],custom:''},seriesId:'',history:[],updatedAt:nowISO()},o);
+  S.appts=[
+    mk({title:'اجتماع مجلس القسم (مثال)',date:d,start:'11:00',end:'12:00',place:'قاعة الاجتماعات',people:'أعضاء القسم',goal:'مراجعة خطة الفصل الدراسي',topics:[{id:uid(),text:'جدول المحاضرات',owner:'',taskId:''},{id:uid(),text:'توزيع المقررات',owner:'',taskId:''}],prio:'high',rem:{offs:[15,60],custom:''}}),
+    mk({title:'مراجعة مسودة البحث (مثال)',date:addDays(d,1),start:'09:30',end:'10:30',type:'research'}),
+  ];
+  S.tasks=[];
+  S.follows=[
+    {id:uid(),title:'متابعة اعتماد الخطة الدراسية (مثال)',desc:'',goal:'الحصول على الاعتماد النهائي',prio:'high',startDate:addDays(d,-3),due:addDays(d,4),next:d,nextStep:'مراسلة رئيس القسم',status:'waiting',progress:40,linkType:'person',linkName:'رئيس القسم',linkAppt:'',repeat:'none',repeatN:3,pinned:true,log:[{at:nowISO(),text:'أُرسلت المسودة وبانتظار الرد',progress:40}],lastUpdate:nowISO(),doneOn:''},
+  ];
+  await saveAll();
+}
+
+/* ---------- icons ---------- */
+const IC={
+ dash:'<path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+ cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+ appts:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+ follow:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
+ tasks:'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l3 3 5-6"/>',
+ reports:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+ settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
+ comm:'<path d="M4 5h16v11H9l-5 4z"/>',
+ ledger:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/><path d="M6 6l9-3 2 3"/>',
+ logs:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 12h7M9 16h7"/>',
+ out:'<path d="M9 4H5v16h4M16 8l4 4-4 4M20 12H9"/>',
+ proj:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5h6v2M3 13h18"/>',
+ plus:'<path d="M12 5v14M5 12h14"/>'};
+const ic=(n,s=20)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
+const BASE_VIEWS=['dash','cal','appts','follow','reports','settings'];
+const views=()=>window.COMM_ONLY?['comm']:window.HAS_COMM?['dash','cal','appts','follow','reports','comm',...(window.CAN&&window.CAN('proj')?['proj']:[]),...(window.CAN&&window.CAN('logs')?['logs']:[]),...(window.CAN&&window.CAN('main')?['ledger']:[]),'settings']:BASE_VIEWS;
+
+/* ---------- domain helpers ---------- */
+const PR={high:0,med:1,low:2};
+const prioPill=p=>`<span class="pill ${p==='high'?'hi':p==='med'?'med':'low'}">${t('p_'+p)}</span>`;
+const typeName=a=>a.type==='custom'?(a.customType||t('t_custom')):t('t_'+a.type);
+const apptStatusPill=s=>`<span class="pill ${s==='done'?'ok':s==='cancelled'?'bad':s==='postponed'?'warn':''}">${t('s_'+s)}</span>`;
+const isLate=x=>x.status!=='done'&&x.due&&x.due<today();
+const taskById=id=>S.tasks.find(x=>x.id===id);
+const apptById=id=>S.appts.find(x=>x.id===id);
+const sortAppts=a=>a.sort((x,y)=>(x.date+x.start).localeCompare(y.date+y.start));
+const timeRange=a=>a.start?(a.start+(a.end?' – '+a.end:'')):'';
+const actionDone=x=>x.taskId&&taskById(x.taskId)&&taskById(x.taskId).status==='done';
+function pct(n,d){return d?Math.round(100*n/d):null}
+function taskRate(from,to){return{n:0,d:0,p:null}}   /* المهام أُزيلت من الواجهة */
+
+/* ---------- reminders ---------- */
+function remTimes(a){
+  if(a.status==='done'||a.status==='cancelled')return[];
+  const out=[];const base=ts(a.date,a.start||'09:00');
+  for(const o of (a.rem&&a.rem.offs)||[]){const at=base-o*60000;out.push({key:a.id+'|'+at,at,a,off:o})}
+  if(a.rem&&a.rem.custom){const at=new Date(a.rem.custom).getTime();if(!isNaN(at))out.push({key:a.id+'|'+at,at,a,off:-1})}
+  return out;
+}
+function dueReminders(){
+  const now=Date.now(),res=[];
+  for(const a of S.appts)for(const r of remTimes(a)){
+    if(r.at>now||r.at<now-48*3600e3)continue;
+    if(S.meta.fired[r.key])continue;
+    if((S.meta.snooze[r.key]||0)>now)continue;
+    res.push(r);
+  }
+  return res.sort((x,y)=>x.at-y.at);
+}
+function beep(){try{const C=window.AudioContext||window.webkitAudioContext;const c=new C();const o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=880;g.gain.value=.06;o.start();setTimeout(()=>{o.stop();c.close()},220)}catch(e){}}
+function notify(title,body){
+  try{navigator.vibrate&&navigator.vibrate([200,100,200])}catch(e){}
+  beep();toast(title);
+  try{
+    if(!('Notification' in window)||Notification.permission!=='granted')return;
+    if(navigator.serviceWorker&&navigator.serviceWorker.getRegistration){
+      navigator.serviceWorker.getRegistration().then(r=>{if(r)r.showNotification(title,{body,tag:title+body,vibrate:[200,100,200]});else new Notification(title,{body})}).catch(()=>{try{new Notification(title,{body})}catch(e){}});
+    }else new Notification(title,{body});
+  }catch(e){}
+}
+let lastDueCount=-1;
+function checkReminders(){if(window.COMM_ONLY)return;
+  const now=Date.now();let changed=false;
+  for(const r of dueReminders()){
+    if(!S.meta.notified[r.key]&&now-r.at<5*60000){
+      S.meta.notified[r.key]=1;changed=true;
+      notify(r.a.title,(r.off>0?(t('r_'+r.off)||''):t('r_0'))+' · '+r.a.start);
+    }
+  }
+  if(changed)save('meta');
+  const c=dueReminders().length;
+  if(c!==lastDueCount){lastDueCount=c;if(UI.view==='dash'&&!$('#modal').classList.contains('on'))render()}
+}
+
+/* ---------- toast + modal ---------- */
+let toastTimer;
+function toast(m){const el=$('#toast');el.innerHTML='<div>'+esc(m)+'</div>';clearTimeout(toastTimer);toastTimer=setTimeout(()=>{el.innerHTML=''},2600)}
+function openModal(html){const m=$('#modal');m.innerHTML=html;m.classList.add('on');m.scrollTop=0}
+function closeModal(){const m=$('#modal');m.classList.remove('on');m.innerHTML='';UI.after=null}
+const val=id=>{const e=document.getElementById(id);return e?e.value.trim():''};
+const chk=id=>{const e=document.getElementById(id);return !!(e&&e.checked)};
+const lines=s=>s.split('\n').map(x=>x.trim()).filter(Boolean);
+const opts=(list,cur,labelFn)=>list.map(v=>`<option value="${esc(v)}"${v===cur?' selected':''}>${esc(labelFn(v))}</option>`).join('');
+
+/* ---------- appointment form ---------- */
+const TYPES=['meeting','admin','teaching','research','personal','project','custom'];
+const APST=['upcoming','ongoing','done','postponed','cancelled'];
+const OFFS=[0,5,15,30,60,1440];
+function apptForm(a){
+  const isNew=!a.id;
+  const topics=(a.topics||[]).map(x=>x.text).join('\n');
+  const acts=(a.actions||[]).map(x=>x.text+(x.owner?' | '+x.owner:'')).join('\n');
+  openModal(`<div class="dlg"><header><h2>${esc(isNew?t('newAppt'):t('edit'))}</h2><button class="btn sm" data-act="close">${t('close')}</button></header>
+  <form class="form" id="af" onsubmit="return false">
+   <label class="full">${t('title')}<input id="a-title" value="${esc(a.title||'')}"></label>
+   <label>${t('date')}<input id="a-date" type="date" value="${esc(a.date||today())}"></label>
+   <label>${t('start')}<input id="a-start" type="time" value="${esc(a.start||'09:00')}"></label>
+   <label>${t('end')}<input id="a-end" type="time" value="${esc(a.end||'10:00')}"></label>
+   <label class="full" style="margin-top:-6px"><span id="a-wd" style="color:var(--accent);font-weight:600"></span></label>
+   <label>${t('place')} (${t('optional')})<input id="a-place" value="${esc(a.place||'')}"></label>
+   <label>${t('people')} (${t('optional')})<input id="a-people" value="${esc(a.people||'')}"></label>
+   <label>${t('type')}<select id="a-type">${opts(TYPES,a.type||'meeting',v=>t('t_'+v))}</select></label>
+   <label>${t('customType')}<input id="a-ctype" value="${esc(a.customType||'')}"></label>
+   <label>${t('prio')}<select id="a-prio">${opts(['high','med','low'],a.prio||'med',v=>t('p_'+v))}</select></label>
+   <label>${t('status')}<select id="a-status">${opts(APST,a.status||'upcoming',v=>t('s_'+v))}</select></label>
+   <h3>${t('agenda')}</h3>
+   <label class="full">${t('goal')}<textarea id="a-goal">${esc(a.goal||'')}</textarea></label>
+   <label class="full">${t('topics')}<textarea id="a-topics">${esc(topics)}</textarea></label>
+   <label class="full">${t('focus')}<textarea id="a-focus">${esc(a.focus||'')}</textarea></label>
+   <label class="full">${t('questions')}<textarea id="a-questions">${esc(a.questions||'')}</textarea></label>
+   <label class="full">${t('docs')}<textarea id="a-docs">${esc(a.docs||'')}</textarea></label>
+   <label class="full">${t('notes')}<textarea id="a-notes">${esc(a.notes||'')}</textarea></label>
+   <h3>${t('decisions')}</h3>
+   <label class="full">${t('decisions')}<textarea id="a-decisions">${esc(a.decisions||'')}</textarea></label>
+   <label class="full">${t('actions')}<textarea id="a-actions">${esc(acts)}</textarea></label>
+   <label class="full">${t('outcome')}<textarea id="a-outcome">${esc(a.outcome||'')}</textarea></label>
+   <h3>${t('reminders')}</h3>
+   <div class="full checks">${OFFS.map(o=>`<label class="ck"><input type="checkbox" class="a-off" value="${o}"${((a.rem&&a.rem.offs)||[15]).includes(o)?' checked':''}>${t('r_'+o)}</label>`).join('')}</div>
+   <label class="full">${t('r_custom')}<input id="a-remc" type="datetime-local" value="${esc((a.rem&&a.rem.custom)||'')}"></label>
+   ${isNew?`<h3>${t('repeat')}</h3><label>${t('repeat')}<select id="a-rep">${opts(['none','daily','weekly','monthly'],'none',v=>t('rep_'+v))}</select></label><label>${t('repN')}<input id="a-repn" type="number" min="2" max="60" value="4"></label>`:''}
+  </form>
+  <div id="a-err" class="pill bad" hidden></div>
+  <footer><button class="btn" data-act="close">${t('cancel')}</button><button class="btn pri" data-act="save-appt" data-id="${esc(a.id||'')}">${t('save')}</button></footer></div>`);
+  const upd=()=>{const d=val('a-date');$('#a-wd').textContent=d?wdName(d):''};
+  $('#a-date').addEventListener('input',upd);upd();
+}
+function saveAppt(id){
+  const err=m=>{const e=$('#a-err');e.textContent=m;e.hidden=false;return};
+  const title=val('a-title'),date=val('a-date'),start=val('a-start'),end=val('a-end');
+  if(!title)return err(t('titleErr'));if(!date)return err(t('dateErr'));
+  if(start&&end&&end<=start)return err(t('timeErr'));
+  const old=id?apptById(id):null;
+  const mapItems=(txt,prev)=>lines(txt).map(l=>{const[a,...r]=l.split('|');const text=a.trim(),owner=r.join('|').trim();const m=(prev||[]).find(p=>p.text===text);return m?Object.assign({},m,{owner}):{id:uid(),text,owner,taskId:''}});
+  const offs=[...document.querySelectorAll('.a-off:checked')].map(e=>Number(e.value));
+  const base={title,date,start,end,place:val('a-place'),people:val('a-people'),type:val('a-type'),customType:val('a-ctype'),prio:val('a-prio'),status:val('a-status'),
+    goal:val('a-goal'),topics:mapItems(val('a-topics'),old&&old.topics),focus:val('a-focus'),questions:val('a-questions'),docs:val('a-docs'),notes:val('a-notes'),
+    decisions:val('a-decisions'),actions:mapItems(val('a-actions'),old&&old.actions),outcome:val('a-outcome'),rem:{offs,custom:val('a-remc')},updatedAt:nowISO()};
+  if(old){
+    const hist=(old.history||[]).concat([{at:nowISO(),text:L()==='ar'?'تم تحديث الموعد':'Appointment updated'}]);
+    Object.assign(old,base,{history:hist});
+    Object.keys(S.meta.fired).forEach(k=>{if(k.startsWith(old.id+'|'))delete S.meta.fired[k]});
+    save('meta');
+  }else{
+    const rep=val('a-rep')||'none',n=rep==='none'?1:clamp(parseInt(val('a-repn'))||2,2,60),sid=n>1?uid():'';
+    for(let i=0;i<n;i++){
+      const dt=rep==='daily'?addDays(date,i):rep==='weekly'?addDays(date,7*i):rep==='monthly'?addMonths(date,i):date;
+      S.appts.push(Object.assign({id:uid(),seriesId:sid,history:[{at:nowISO(),text:L()==='ar'?'تم الإنشاء':'Created'}]},base,{date:dt,topics:base.topics.map(x=>Object.assign({},x,{id:uid()})),actions:base.actions.map(x=>Object.assign({},x,{id:uid()}))}));
+    }
+  }
+  save('appts');closeModal();toast(t('saved'));render();
+}
+
+/* ---------- appointment detail ---------- */
+function apptDetail(id){
+  const a=apptById(id);if(!a)return;
+  const itemRow=(x,list)=>`<div class="row"><div class="main"><div class="t">${esc(x.text)}</div><div class="m">${x.owner?`<span>${t('owner')}: ${esc(x.owner)}</span>`:''}</div></div></div>`;
+  const dd=(k,v)=>v?`<dt>${t(k)}</dt><dd>${esc(v)}</dd>`:'';
+  openModal(`<div class="dlg"><header><h2>${esc(a.title)}</h2><button class="btn sm" data-act="close">${t('close')}</button></header>
+  <div class="m" style="display:flex;gap:8px;flex-wrap:wrap">${apptStatusPill(a.status)}${prioPill(a.prio)}<span class="pill">${esc(typeName(a))}</span></div>
+  <dl class="dl"><dt>${t('date')}</dt><dd>${esc(wdName(a.date))} · ${esc(fmtD(a.date))} · ${esc(timeRange(a))}</dd>
+   ${dd('place',a.place)}${dd('people',a.people)}${dd('goal',a.goal)}${dd('focus',a.focus)}${dd('questions',a.questions)}${dd('docs',a.docs)}${dd('notes',a.notes)}${dd('decisions',a.decisions)}${dd('outcome',a.outcome)}
+   <dt>${t('reminders')}</dt><dd>${esc(((a.rem&&a.rem.offs)||[]).sort((x,y)=>x-y).map(o=>t('r_'+o)).concat(a.rem&&a.rem.custom?[a.rem.custom.replace('T',' ')]:[]).join(' · ')||'—')}</dd>
+   <dt>${t('updated')}</dt><dd>${esc(new Date(a.updatedAt).toLocaleString(loc()))}</dd></dl>
+  ${(a.topics||[]).length?`<h3>${t('topics').split('(')[0]}</h3><div class="list">${a.topics.map(x=>itemRow(x,'topics')).join('')}</div>`:''}
+  ${(a.actions||[]).length?`<h3>${t('actions').split('(')[0]}</h3><div class="list">${a.actions.map(x=>itemRow(x,'actions')).join('')}</div>`:''}
+  ${(a.history||[]).length?`<h3>${t('history')}</h3><div class="m" style="color:var(--muted);font-size:13px">${a.history.slice(-6).reverse().map(h=>`<div>${esc(new Date(h.at).toLocaleString(loc()))} — ${esc(h.text)}</div>`).join('')}</div>`:''}
+  <footer><button class="btn bad" data-act="del-appt" data-id="${a.id}" data-confirm="1">${t('del')}</button>
+   <button class="btn" data-act="postpone" data-id="${a.id}">${t('postpone')}</button>
+   <button class="btn" data-act="reschedule" data-id="${a.id}">${t('reschedule')}</button>
+   ${a.status!=='done'?`<button class="btn" data-act="done-appt" data-id="${a.id}">${t('markDone')}</button>`:''}
+   <button class="btn pri" data-act="edit-appt" data-id="${a.id}">${t('edit')}</button></footer></div>`);
+}
+function reschedForm(a,postpone){
+  openModal(`<div class="dlg"><header><h2>${postpone?t('postpone'):t('reschedule')}</h2><button class="btn sm" data-act="close">${t('close')}</button></header>
+  <div class="form"><label>${t('date')}<input id="r-date" type="date" value="${esc(postpone?addDays(a.date,1):a.date)}"></label>
+  <label>${t('start')}<input id="r-start" type="time" value="${esc(a.start||'')}"></label><label>${t('end')}<input id="r-end" type="time" value="${esc(a.end||'')}"></label></div>
+  <footer><button class="btn" data-act="open-appt" data-id="${a.id}">${t('cancel')}</button><button class="btn pri" data-act="save-resched" data-id="${a.id}" data-p="${postpone?1:0}">${t('save')}</button></footer></div>`);
+}
+
+/* ---------- tasks ---------- */
+function taskForm(x){
+  const isNew=!x.createdAt;
+  openModal(`<div class="dlg"><header><h2>${esc(isNew?t('newTask'):t('edit'))}</h2><button class="btn sm" data-act="close">${t('close')}</button></header>
+  <form class="form" onsubmit="return false">
+   <label class="full">${t('title')}<input id="k-title" value="${esc(x.title||'')}"></label>
+   <label>${t('prio')}<select id="k-prio">${opts(['high','med','low'],x.prio||'med',v=>t('p_'+v))}</select></label>
+   <label>${t('due')}<input id="k-due" type="date" value="${esc(x.due||today())}"></label>
+   <label>${t('minutes')}<input id="k-min" type="number" min="0" value="${esc(x.minutes||'')}"></label>
+   <label>${t('status')}<select id="k-status">${opts(['notstarted','inprogress','done'],x.status||'notstarted',v=>t('k_'+v))}</select></label>
+   <label>${t('repeat')}<select id="k-rep">${opts(['none','daily','weekly'],x.repeat||'none',v=>t('rep_'+v))}</select></label>
+   <label>${t('linkedAppt')}<select id="k-appt"><option value="">—</option>${sortAppts(S.appts.slice()).map(a=>`<option value="${a.id}"${a.id===x.apptId?' selected':''}>${esc(a.date+' · '+a.title)}</option>`).join('')}</select></label>
+   <label class="full">${t('subtasks')}<textarea id="k-subs">${esc((x.subtasks||[]).map(s=>s.t).join('\n'))}</textarea></label>
+   <label class="full">${t('notes')}<textarea id="k-notes">${esc(x.notes||'')}</textarea></label>
+   <label class="full">${t('delayReason')}<input id="k-delay" value="${esc(x.delayReason||'')}"></label>
+  </form><div id="a-err" class="pill bad" hidden></div>
+  <footer><button class="btn" data-act="close">${t('cancel')}</button><button class="btn pri" data-act="save-task" data-id="${esc(x.id||'')}">${t('save')}</button></footer></div>`);
+}
+function nextDue(x){return x.repeat==='daily'?addDays(x.due||today(),1):addDays(x.due||today(),7)}
+function setTaskDone(x,done){
+  if(done){x.status='done';x.doneOn=today();(x.subtasks||[]).forEach(s=>s.done=true);
+    if(x.repeat&&x.repeat!=='none'){S.tasks.push(Object.assign({},x,{id:uid(),status:'notstarted',doneOn:'',due:nextDue(x),createdAt:nowISO(),subtasks:(x.subtasks||[]).map(s=>({t:s.t,done:false}))}))}
+  }else{x.status='inprogress';x.doneOn=''}
+}
+function saveTask(id){
+  const title=val('k-title');const err=m=>{const e=$('#a-err');e.textContent=m;e.hidden=false};
+  if(!title)return err(t('titleErr'));
+  const old=id?taskById(id):null;
+  const subs=lines(val('k-subs')).map(s=>{const m=old&&(old.subtasks||[]).find(o=>o.t===s);return{t:s,done:m?m.done:false}});
+  const f={title,prio:val('k-prio'),due:val('k-due'),minutes:val('k-min'),repeat:val('k-rep'),apptId:val('k-appt'),subtasks:subs,notes:val('k-notes'),delayReason:val('k-delay')};
+  const st=val('k-status');
+  if(old){Object.assign(old,f);if(st==='done'&&old.status!=='done')setTaskDone(old,true);else if(st!=='done'){old.status=st;if(old.doneOn)old.doneOn=''}}
+  else{const n=Object.assign({id:uid(),status:'notstarted',doneOn:'',createdAt:nowISO()},f,UI.pre||{});UI.pre=null;S.tasks.push(n);if(st==='done')setTaskDone(n,true);else n.status=st;
+    if(n.itemRef){const a=apptById(n.itemRef.appt);const it=a&&(a[n.itemRef.list]||[]).find(z=>z.id===n.itemRef.item);if(it){it.taskId=n.id;save('appts')}delete n.itemRef}}
+  const back=UI.after;save('tasks');closeModal();toast(t('saved'));render();if(back)apptDetail(back);
+}
+
+/* ---------- follow-ups ---------- */
+const FST=['notstarted','inprogress','waiting','action','done'];
+function followForm(f){
+  const isNew=!f.id;UI.pdfRm=[];
+  openModal(`<div class="dlg"><header><h2>${esc(isNew?t('newFollow'):t('edit'))}</h2><button class="btn sm" data-act="close">${t('close')}</button></header>
+  <form class="form" onsubmit="return false">
+   <label class="full">${t('title')}<input id="f-title" value="${esc(f.title||'')}"></label>
+   <label class="full">${t('desc')}<textarea id="f-desc">${esc(f.desc||'')}</textarea></label>
+   <label class="full">${t('goal')}<input id="f-goal" value="${esc(f.goal||'')}"></label>
+   <label>${t('prio')}<select id="f-prio">${opts(['high','med','low'],f.prio||'med',v=>t('p_'+v))}</select></label>
+   <label>${t('status')}<select id="f-status">${opts(FST,f.status||'notstarted',v=>t('f_'+v))}</select></label>
+   <label>${t('startDate')}<input id="f-start" type="date" value="${esc(f.startDate||today())}"></label>
+   <label>${t('due')}<input id="f-due" type="date" value="${esc(f.due||'')}"></label>
+   <label>${t('nextFollow')}<input id="f-next" type="date" value="${esc(f.next||today())}"></label>
+   <label>${t('progress')} <b id="f-pv">${esc(f.progress||0)}%</b><input id="f-prog" type="range" min="0" max="100" step="5" value="${esc(f.progress||0)}" oninput="document.getElementById('f-pv').textContent=this.value+'%'"></label>
+   <div class="full"><b>${t('pdfFiles')}</b>
+    ${(f.files||[]).map(x=>`<div class="ck pdfrow" style="justify-content:space-between"><a href="#" data-act="pdf-open" data-p="${esc(x.path)}">📄 ${esc(x.name)}</a><button type="button" class="btn sm bad" data-act="pdf-mark" data-p="${esc(x.path)}">${t('del')}</button></div>`).join('')}
+    <input id="f-pdf" type="file" accept="application/pdf,.pdf" multiple style="margin-top:6px"><div class="sub" style="font-size:12px">${t('pdfHint')}</div></div>
+   <label class="ck full"><input id="f-pin" type="checkbox"${f.pinned?' checked':''}>${t('pin')}</label>
+  </form><div id="a-err" class="pill bad" hidden></div>
+  <footer><button class="btn" data-act="close">${t('cancel')}</button><button class="btn pri" data-act="save-follow" data-id="${esc(f.id||'')}">${t('save')}</button></footer></div>`);
+}
+const PDF_MAX=10*1024*1024;
+function pdfSb(){return window.PLANNER_AUTH&&window.PLANNER_AUTH.sb&&window.PLANNER_AUTH.sb()}
+async function saveFollow(id){
+  const title=val('f-title');const err=m=>{const e=$('#a-err');e.textContent=m;e.hidden=false};
+  if(!title){err(t('titleErr'));return}
+  const st=val('f-status');let prog=parseInt(val('f-prog'))||0;if(st==='done')prog=100;
+  const d={title,desc:val('f-desc'),goal:val('f-goal'),prio:val('f-prio'),status:st,startDate:val('f-start'),due:val('f-due'),next:val('f-next'),progress:prog,pinned:chk('f-pin')};
+  const old=id?S.follows.find(x=>x.id===id):null;
+  const fid=old?old.id:uid();
+  const picked=Array.from(($('#f-pdf')||{}).files||[]);
+  const added=[];
+  if(picked.length){
+    const c=pdfSb(),me=window.PLANNER_AUTH&&window.PLANNER_AUTH.user&&window.PLANNER_AUTH.user();
+    if(!c||!me){err(t('pdfNeedLogin'));return}
+    if(!navigator.onLine){err(t('pdfOffline'));return}
+    for(const f of picked){
+      if(!(f.type==='application/pdf'||/\.pdf$/i.test(f.name))){err(f.name+' — '+t('pdfOnly'));return}
+      if(f.size>PDF_MAX){err(f.name+' — '+t('pdfBig'));return}
+    }
+    const btn=document.querySelector('[data-act="save-follow"]');if(btn){btn.disabled=true;btn.textContent='…'}
+    for(const f of picked){
+      const path=me.id+'/'+fid+'/'+uid()+'.pdf';
+      const r=await c.storage.from('follow-files').upload(path,f,{contentType:'application/pdf'});
+      if(r.error){if(btn){btn.disabled=false;btn.textContent=t('save')}err(f.name+' — '+r.error.message);for(const a of added)c.storage.from('follow-files').remove([a.path]);return}
+      added.push({path,name:f.name.slice(0,120),size:f.size});
+    }
+  }
+  const rm=UI.pdfRm||[];
+  if(rm.length&&pdfSb())pdfSb().storage.from('follow-files').remove(rm).catch(()=>{});
+  const keep=((old&&old.files)||[]).filter(x=>!rm.includes(x.path)).concat(added);
+  d.files=keep;
+  if(old){Object.assign(old,d);old.lastUpdate=nowISO();old.doneOn=st==='done'?(old.doneOn||today()):''}
+  else S.follows.push(Object.assign({id:fid,log:[{at:nowISO(),text:L()==='ar'?'تم الإنشاء':'Created',progress:prog}],lastUpdate:nowISO(),doneOn:st==='done'?today():''},d));
+  save('follows');closeModal();toast(t('saved'));render();
+}
+function followUpdateForm(f){
+  openModal(`<div class="dlg"><header><h2>${esc(f.title)}</h2><button class="btn sm" data-act="close">${t('close')}</button></header>
+  <div class="form"><label class="full">${t('updateText')}<textarea id="u-text"></textarea></label>
+  <label>${t('progress')} <b id="u-pv">${f.progress}%</b><input id="u-prog" type="range" min="0" max="100" step="5" value="${f.progress}" oninput="document.getElementById('u-pv').textContent=this.value+'%'"></label>
+  <label>${t('status')}<select id="u-status">${opts(FST,f.status,v=>t('f_'+v))}</select></label>
+  <label>${t('nextFollow')}<input id="u-next" type="date" value="${esc(f.next||today())}"></label>
+  </div>
+  ${(f.log||[]).length?`<h3>${t('history')}</h3><div style="color:var(--muted);font-size:13px">${f.log.slice(-8).reverse().map(h=>`<div>${esc(new Date(h.at).toLocaleDateString(loc()))} — ${esc(h.text)} (${h.progress}%)</div>`).join('')}</div>`:''}
+  <footer><button class="btn" data-act="close">${t('cancel')}</button><button class="btn pri" data-act="save-update" data-id="${f.id}">${t('save')}</button></footer></div>`);
+}
+
+/* ---------- views ---------- */
+function head(title,sub,extra){return `<div class="top"><div><h1>${esc(title)}</h1>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div><div>${extra||''}</div></div>`}
+function apptRow(a){
+  return `<div class="row click" data-act="open-appt" data-id="${a.id}"><div class="main"><div class="t">${esc(a.title)}</div><div class="m"><span>${esc(wdName(a.date))} ${esc(fmtD(a.date,{day:'numeric',month:'short'}))}</span><span>${esc(timeRange(a))}</span>${a.place?`<span>${esc(a.place)}</span>`:''}<span>${esc(typeName(a))}</span></div></div><div class="act">${prioPill(a.prio)}${apptStatusPill(a.status)}</div></div>`;
+}
+function taskRow(x){
+  const late=isLate(x),ap=x.apptId&&apptById(x.apptId);
+  const subs=(x.subtasks||[]);const sd=subs.filter(s=>s.done).length;
+  return `<div class="row"><div style="padding-top:3px"><input type="checkbox" style="width:18px;height:18px" data-act="toggle-task" data-id="${x.id}"${x.status==='done'?' checked':''} aria-label="${t('markDone')}"></div>
+  <div class="main"><div class="t" style="${x.status==='done'?'text-decoration:line-through;opacity:.6':''}">${esc(x.title)}</div>
+  <div class="m"><span class="pill ${late?'bad':x.status==='done'?'ok':''}">${late?t('k_overdue'):t('k_'+x.status)}</span>${prioPill(x.prio)}${x.due?`<span>${esc(fmtD(x.due,{day:'numeric',month:'short'}))}</span>`:''}${x.minutes?`<span>${esc(x.minutes)} ${L()==='ar'?'د':'min'}</span>`:''}${subs.length?`<span>${sd}/${subs.length}</span>`:''}${ap?`<span>↔ ${esc(ap.title)}</span>`:''}</div>
+  ${subs.length&&x.status!=='done'?`<div style="margin-top:6px;display:flex;flex-direction:column;gap:2px">${subs.map((s,i)=>`<label class="ck" style="font-size:13px"><input type="checkbox" data-act="toggle-sub" data-id="${x.id}" data-i="${i}"${s.done?' checked':''}>${esc(s.t)}</label>`).join('')}</div>`:''}</div>
+  <div class="act">${x.status!=='done'&&x.due?`<button class="btn sm" data-act="task-plus1" data-id="${x.id}" title="${t('reschedule')}">+1</button>`:''}<button class="btn sm" data-act="edit-task" data-id="${x.id}">${t('edit')}</button><button class="btn sm bad" data-act="del-task" data-id="${x.id}" data-confirm="1">${t('del')}</button></div></div>`;
+}
+function followRank(f){const d=today();const od=(f.next&&f.next<d)||(f.due&&f.due<d)?0:1;return [f.pinned?0:1,od,PR[f.prio],f.next||'9999']}
+function followCmp(a,b){const x=followRank(a),y=followRank(b);for(let i=0;i<x.length;i++){if(x[i]<y[i])return-1;if(x[i]>y[i])return 1}return 0}
+function followRow(f,compact){
+  const d=today(),late=f.status!=='done'&&((f.next&&f.next<d)||(f.due&&f.due<d));
+  const pdfs=(f.files||[]).map(x=>`<a class="pill" href="#" data-act="pdf-open" data-p="${esc(x.path)}">📄 ${esc(x.name)}</a>`).join(' ');
+  return `<div class="row"><div class="main"><div class="t">${f.pinned?'📌 ':''}${esc(f.title)}</div>
+  <div class="m"><span class="pill ${f.status==='done'?'ok':late?'bad':''}">${late&&f.status!=='done'?t('late'):t('f_'+f.status)}</span>${prioPill(f.prio)}${f.next?`<span>${t('nextFollow')}: ${esc(fmtD(f.next,{day:'numeric',month:'short'}))}</span>`:''}</div>
+  ${pdfs?`<div class="m">${pdfs}</div>`:''}
+  <div class="bar" style="margin-top:8px"><i style="width:${f.progress}%"></i></div><div class="m"><span>${f.progress}%</span><span>${t('updated')}: ${esc(new Date(f.lastUpdate).toLocaleDateString(loc()))}</span></div></div>
+  ${compact?'':`<div class="act" style="max-width:210px"><button class="btn sm pri" data-act="follow-update" data-id="${f.id}">${t('addUpdate')}</button><button class="btn sm" data-act="follow-pin" data-id="${f.id}">${f.pinned?t('unpin'):t('pin')}</button>${late?`<button class="btn sm" data-act="follow-plus1" data-id="${f.id}">${t('plus1')}</button>`:''}<button class="btn sm" data-act="edit-follow" data-id="${f.id}">${t('edit')}</button><button class="btn sm bad" data-act="del-follow" data-id="${f.id}" data-confirm="1">${t('del')}</button></div>`}</div>`;
+}
+
+function vDash(){
+  const d=today(),now=Date.now();
+  const todays=sortAppts(S.appts.filter(a=>a.date===d&&a.status!=='cancelled'));
+  const upc=sortAppts(S.appts.filter(a=>a.status!=='cancelled'&&a.status!=='done'&&ts(a.date,a.end||a.start||'23:59')>=now));
+  const next=upc[0];
+  const openF=S.follows.filter(f=>f.status!=='done').length;
+  const rems=dueReminders();
+  const fl=S.follows.filter(f=>f.status!=='done').sort(followCmp).slice(0,5);
+  const ws=weekStart(d),we=addDays(ws,6);
+  const meetDone=S.appts.filter(a=>a.status==='done'&&a.date>=ws&&a.date<=we).length;
+  const fDoneW=S.follows.filter(f=>f.status==='done'&&f.doneOn>=ws&&f.doneOn<=we).length;
+  const list=(arr,fn,max)=>arr.length?`<div class="list">${arr.slice(0,max||99).map(fn).join('')}</div>`:`<div class="empty">${t('noItems')}</div>`;
+  return head(fmtD(d,{weekday:'long',day:'numeric',month:'long',year:'numeric'}),t('app'))+
+  (()=>{const m=window.syncBanner?window.syncBanner():(UI.persisted?t('unsynced'):(L()==='ar'?'تعذّر حفظ البيانات في هذا المتصفح. الحفظ المحلي غير متاح الآن.':'Local storage is unavailable in this browser, so nothing is being saved.'));return m?`<div class="banner noprint"><span>${esc(m)}</span></div>`:''})()+
+  `<div class="grid g4" style="margin-bottom:14px">
+    <div class="card stat"><b>${todays.length}</b><span>${t('dToday')}</span></div>
+    <div class="card stat"><b>${next?esc(next.start||'—'):'—'}</b><span>${t('dNext')}${next?': '+esc(next.title):''}</span></div>
+    <div class="card stat"><b>${openF}</b><span>${t('follow')}</span></div>
+    <div class="card stat"><b>${rems.length}</b><span>${t('dRem')}</span></div></div>`+
+  `<div class="grid g2">
+   <section class="card"><h2>${t('dToday')}<button class="btn sm" data-act="go" data-v="appts">${t('appts')}</button></h2>${list(todays,apptRow)}</section>
+   <section class="card"><h2>${t('dRem')}</h2>${rems.length?`<div class="list">${rems.map(r=>`<div class="row"><div class="main"><div class="t">${esc(r.a.title)}</div><div class="m"><span class="pill ${Date.now()-r.at>5*60000?'warn':''}">${Date.now()-r.at>5*60000?t('missed'):t('today')}</span><span>${esc(r.a.date)} ${esc(r.a.start)}</span></div></div><div class="act"><button class="btn sm" data-act="rem-snooze" data-key="${esc(r.key)}">${t('snooze')}</button><button class="btn sm pri" data-act="rem-done" data-key="${esc(r.key)}">${t('dismiss')}</button></div></div>`).join('')}</div>`:`<div class="empty">${t('noItems')}</div>`}</section>
+   <section class="card"><h2>${t('dUpcoming')}</h2>${list(upc,apptRow,5)}</section>
+   <section class="card"><h2>${t('dFollow')}<button class="btn sm" data-act="go" data-v="follow">${t('follow')}</button></h2>${list(fl,f=>followRow(f,true))}</section>
+   <section class="card"><h2>${t('dSummary')}</h2><div style="display:flex;gap:24px"><div class="stat"><b>${meetDone}</b><span>${t('meetingsDone')}</span></div><div class="stat"><b>${fDoneW}</b><span>${t('doneFollows')}</span></div></div></section>
+  </div>`;
+}
+
+function itemsOn(date){
+  return{a:sortAppts(S.appts.filter(x=>x.date===date)),k:[]};
+}
+function vCal(){
+  const c=UI.cal;const sel=c.sel||c.date;
+  const nav=`<div class="tabs"><button data-act="cal-prev" aria-label="${t('prev')}">${L()==='ar'?'›':'‹'}</button><button data-act="cal-today">${t('today')}</button><button data-act="cal-next" aria-label="${t('next')}">${L()==='ar'?'‹':'›'}</button>${['month','week','day'].map(m=>`<button data-act="cal-mode" data-m="${m}" aria-pressed="${c.mode===m}">${t(m)}</button>`).join('')}</div>`;
+  const dayList=date=>{const it=itemsOn(date);return `<div class="card" style="margin-top:12px"><h2>${esc(wdName(date))} · ${esc(fmtD(date))}<button class="btn sm pri" data-act="new-appt-on" data-d="${date}">+ ${t('newAppt')}</button></h2>${it.a.length||it.k.length?`<div class="list">${it.a.map(apptRow).join('')}${it.k.map(taskRow).join('')}</div>`:`<div class="empty">${t('noItems')}</div>`}</div>`};
+  let body='',title='';
+  if(c.mode==='month'){
+    const d0=pd(c.date);const first=new Date(d0.getFullYear(),d0.getMonth(),1);const gs=weekStart(dstr(first));
+    title=d0.toLocaleDateString(loc(),{month:'long',year:'numeric'});
+    const cells=[];for(let i=0;i<42;i++){const ds=addDays(gs,i);const it=itemsOn(ds);const inM=pd(ds).getMonth()===d0.getMonth();
+      cells.push(`<button class="d${inM?'':' out'}${ds===today()?' today':''}${ds===sel?' sel':''}" data-act="cal-sel" data-d="${ds}"><b>${pd(ds).getDate()}</b><span class="dots">${it.a.slice(0,4).map(()=>'<i></i>').join('')}${it.k.slice(0,3).map(()=>'<i class="t"></i>').join('')}</span>${it.a.length+it.k.length>0?`<span class="cnt">${it.a.length+it.k.length}</span>`:''}</button>`)}
+    body=`<div class="cal">${TX[L()].wd.map(w=>`<div class="h">${esc(w.slice(0,L()==='ar'?5:3))}</div>`).join('')}${cells.join('')}</div>`+dayList(sel);
+  }else if(c.mode==='week'){
+    const ws=weekStart(c.date);title=fmtD(ws,{day:'numeric',month:'short'})+' – '+fmtD(addDays(ws,6),{day:'numeric',month:'short',year:'numeric'});
+    body=Array.from({length:7},(_,i)=>addDays(ws,i)).map(dayList).join('');
+  }else{title=wdName(c.date)+' · '+fmtD(c.date);body=dayList(c.date)}
+  return head(t('cal'),title)+nav+body;
+}
+
+function vAppts(){
+  const f=UI.af;
+  let arr=S.appts.filter(a=>(!f.q||a.title.toLowerCase().includes(f.q.toLowerCase()))&&(!f.type||a.type===f.type)&&(!f.prio||a.prio===f.prio)&&(!f.status||a.status===f.status)&&(!f.from||a.date>=f.from)&&(!f.to||a.date<=f.to));
+  sortAppts(arr);
+  return head(t('appts'),'',`<button class="btn pri" data-act="new-appt">+ ${t('newAppt')}</button>`)+
+  `<div class="filters"><input id="fq" placeholder="${t('search')}" value="${esc(f.q)}" data-f="q">
+   <select data-f="type"><option value="">${t('allTypes')}</option>${opts(TYPES,f.type,v=>t('t_'+v))}</select>
+   <select data-f="prio"><option value="">${t('allPrio')}</option>${opts(['high','med','low'],f.prio,v=>t('p_'+v))}</select>
+   <select data-f="status"><option value="">${t('allStatus')}</option>${opts(APST,f.status,v=>t('s_'+v))}</select>
+   <label>${t('from')}<input type="date" data-f="from" value="${esc(f.from)}"></label><label>${t('to')}<input type="date" data-f="to" value="${esc(f.to)}"></label></div>`+
+  (arr.length?`<div class="list">${arr.map(apptRow).join('')}</div>`:`<div class="empty">${t('noItems')}</div>`);
+}
+function vFollow(){
+  const arr=S.follows.slice().sort((a,b)=>(a.status==='done')-(b.status==='done')||followCmp(a,b));
+  return head(t('follow'),'',`<button class="btn pri" data-act="new-follow">+ ${t('newFollow')}</button>`)+(arr.length?`<div class="list">${arr.map(f=>followRow(f)).join('')}</div>`:`<div class="empty">${t('noItems')}</div>`);
+}
+
+/* ---------- reports ---------- */
+function reportData(from,to){
+  const ap=sortAppts(S.appts.filter(a=>a.date>=from&&a.date<=to));
+  const c=s=>ap.filter(a=>a.status===s||(s==='upcoming'&&a.status==='ongoing')).length;
+  const done=S.tasks.filter(x=>x.status==='done'&&x.doneOn&&x.doneOn>=from&&x.doneOn<=to);
+  const rate=taskRate(from,to);
+  const fdone=S.follows.filter(f=>f.status==='done'&&f.doneOn>=from&&f.doneOn<=to);
+  const fprog=S.follows.filter(f=>(f.log||[]).some(l=>l.at.slice(0,10)>=from&&l.at.slice(0,10)<=to)&&f.status!=='done');
+  const lateT=S.tasks.filter(x=>x.status!=='done'&&x.due&&x.due>=from&&x.due<=to&&x.due<today());
+  const openActs=[];ap.forEach(a=>(a.actions||[]).forEach(x=>{if(!actionDone(x))openActs.push({a,x})}));
+  const needFollow=ap.filter(a=>a.status==='postponed'||(a.actions||[]).some(x=>!actionDone(x)));
+  const decisions=ap.filter(a=>a.decisions);
+  return{ap,n:ap.length,done:c('done'),post:c('postponed'),canc:c('cancelled'),up:c('upcoming'),doneT:done,rate,fdone,fprog,lateT,openActs,needFollow,decisions};
+}
+function autoSummary(r){
+  if(!r.n&&!r.rate.d&&!r.doneT.length)return t('sumNoData');
+  const parts=[];
+  if(r.n)parts.push(TX[L()].sumMeet(r.n,r.done,r.post,r.canc));
+  if(r.rate.d||r.doneT.length)parts.push(TX[L()].sumTasks(r.rate.n,r.rate.d,r.rate.p));
+  if(r.fdone.length)parts.push((L()==='ar'?'اكتملت ':'Completed follow-ups: ')+r.fdone.length+(L()==='ar'?' متابعة.':'.'));
+  return parts.join(' ');
+}
+function suggestions(r){
+  const out=[];
+  S.follows.filter(f=>f.status==='action'||f.status==='waiting').slice(0,2).forEach(f=>out.push((L()==='ar'?'متابعة: ':'Follow up: ')+f.title));
+  r.openActs.slice(0,3).forEach(o=>out.push((L()==='ar'?'تنفيذ إجراء من اجتماع: ':'Action from meeting: ')+o.x.text));
+  return out;
+}
+function rpRange(){
+  if(!UI.rp){const d=today();UI.rp={from:d,to:d,cmp:false}}
+  return UI.rp;
+}
+function csvFor(from,to){
+  const r=reportData(from,to);const rows=[['type','date','title','kind','status','details']];
+  r.ap.forEach(a=>rows.push(['meeting',a.date,a.title,typeName(a),t('s_'+a.status),[a.goal,a.decisions,a.outcome].filter(Boolean).join(' / ')]));
+  r.doneT.forEach(x=>rows.push(['task_done',x.doneOn,x.title,'',t('k_done'),'']));
+  r.lateT.forEach(x=>rows.push(['task_late',x.due,x.title,'',t('k_'+x.status),x.delayReason||'']));
+  r.fdone.forEach(f=>rows.push(['follow_done',f.doneOn,f.title,'',t('f_done'),'']));
+  r.openActs.forEach(o=>rows.push(['open_action',o.a.date,o.x.text,o.a.title,'',o.x.owner||'']));
+  return '﻿'+rows.map(r=>r.map(c=>'"'+String(c==null?'':c).replace(/"/g,'""')+'"').join(',')).join('\r\n');
+}
+const IN_ARTIFACT=!!window.claude;
+function vReports(){
+  const R=rpRange();const key=R.from+'|'+R.to;
+  const r=reportData(R.from,R.to);
+  const ed=S.meta.reportEdits[key]||{summary:'',notes:'',approved:false};
+  const days=Math.round((pd(R.to)-pd(R.from))/864e5)+1,pf=addDays(R.from,-days),pt=addDays(R.from,-1);
+  const rp=R.cmp?reportData(pf,pt):null;
+  const tbl=(heads,rows)=>rows.length?`<div class="tbl"><table><thead><tr>${heads.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(rw=>`<tr>${rw.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`:`<div class="empty">${t('noItems')}</div>`;
+  const sugg=suggestions(r);
+  return head(t('reports'),fmtD(R.from)+' – '+fmtD(R.to),'')+
+  `<div class="card noprint" style="margin-bottom:14px"><div class="tabs">${['rQuick','rWeek','rMonth','rYear'].map(q=>`<button data-act="rp-quick" data-q="${q}">${t(q)}</button>`).join('')}</div>
+   <div class="form"><label>${t('from')}<input type="date" data-rp="from" value="${esc(R.from)}"></label><label>${t('to')}<input type="date" data-rp="to" value="${esc(R.to)}"></label>
+   <label class="ck" style="align-self:end"><input type="checkbox" data-rp="cmp"${R.cmp?' checked':''}>${t('compare')}</label></div></div>`+
+  `<div class="card rep">
+   <h3 style="margin-top:0">${t('rMeet')}</h3>
+   <div class="grid g4"><div class="stat"><b>${r.n}</b><span>${t('total')}</span></div><div class="stat"><b>${r.done}</b><span>${t('completed')}</span></div><div class="stat"><b>${r.post}</b><span>${t('postponedN')}</span></div><div class="stat"><b>${r.canc}</b><span>${t('cancelledN')}</span></div><div class="stat"><b>${r.up}</b><span>${t('upcomingN')}</span></div></div>
+   ${tbl([t('date'),t('title'),t('type'),t('status'),t('goal'),t('decisions')],r.ap.map(a=>[esc(a.date),esc(a.title),esc(typeName(a)),esc(t('s_'+a.status)),esc(a.goal||'—'),esc(a.decisions||a.outcome||'—')]))}
+   ${r.openActs.length?`<h3>${t('nextOpen')}</h3>`+tbl([t('actions').split('(')[0],t('owner'),t('appts')],r.openActs.map(o=>[esc(o.x.text),esc(o.x.owner||'—'),esc(o.a.title)])):''}
+   ${r.needFollow.length?`<h3>${t('needFollow')}</h3><div>${r.needFollow.map(a=>esc(a.title)).join(' · ')}</div>`:''}
+   <h3>${t('rAch')}</h3>
+   <div class="grid g4"><div class="stat"><b>${r.fdone.length}</b><span>${t('doneFollows')}</span></div><div class="stat"><b>${r.lateT.length}</b><span>${t('lateWork')}</span></div></div>
+   ${r.doneT.length?`<h3>${t('doneTasks')}</h3>`+tbl([t('title'),t('date')],r.doneT.map(x=>[esc(x.title),esc(x.doneOn)])):''}
+   ${r.fprog.length?`<h3>${t('progressFollows')}</h3>`+tbl([t('title'),t('progress'),t('status')],r.fprog.map(f=>[esc(f.title),f.progress+'%',esc(t('f_'+f.status))])):''}
+   ${r.lateT.length?`<h3>${t('lateWork')}</h3>`+tbl([t('title'),t('due'),t('delayReason')],r.lateT.map(x=>[esc(x.title),esc(x.due),esc(x.delayReason||'—')])):''}
+   ${r.decisions.length?`<h3>${t('decisionsDone')}</h3>`+tbl([t('appts'),t('decisions')],r.decisions.map(a=>[esc(a.title),esc(a.decisions)])):''}
+   ${rp?`<h3>${t('compare')}</h3>`+tbl([' ',t('period'),t('prevPeriod')],[[t('appts'),r.n,rp.n],[t('meetingsDone'),r.done,rp.done],[t('doneFollows'),r.fdone.length,rp.fdone.length]].map(x=>x.map(esc))):''}
+   <h3>${t('rExec')}</h3>
+   <label>${t('summary')}<textarea id="rp-sum" style="min-height:90px" ${ed.approved?'readonly':''}>${esc(ed.summary||autoSummary(r))}</textarea></label>
+   ${sugg.length?`<div style="margin-top:8px"><b>${t('suggest')}</b><ul style="margin:4px 0 0;padding-inline-start:20px">${sugg.map(s=>`<li>${esc(s)}</li>`).join('')}</ul></div>`:''}
+   <label style="margin-top:10px">${t('myNotes')}<textarea id="rp-notes" ${ed.approved?'readonly':''}>${esc(ed.notes||'')}</textarea></label>
+   <div class="noprint" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+    <button class="btn ${ed.approved?'':'pri'}" data-act="rp-approve">${ed.approved?t('unapprove'):t('approve')}</button>${ed.approved?`<span class="pill ok" style="align-self:center">${t('approved')}</span>`:''}
+    <button class="btn" data-act="rp-copy">${t('copyCsv')}</button>
+    ${IN_ARTIFACT?'':`<button class="btn" data-act="rp-word">${t('exportWord')}</button><button class="btn" data-act="rp-csv">${t('exportCsv')}</button><button class="btn" data-act="rp-print">${t('printPdf')}</button>`}
+   </div></div>`;
+}
+function saveReportEdit(approve){
+  const R=rpRange(),key=R.from+'|'+R.to;const cur=S.meta.reportEdits[key]||{};
+  const r=reportData(R.from,R.to);
+  S.meta.reportEdits[key]={summary:val('rp-sum')||autoSummary(r),notes:val('rp-notes'),approved:approve==null?!!cur.approved:approve};save('meta');
+}
+
+function vSettings(){
+  const perm=('Notification' in window)?Notification.permission:'unsupported';
+  return head(t('settings'),'')+`<div class="grid g2">
+  <section class="card"><h2>${t('lang')} / ${t('theme')}</h2><div class="tabs"><button data-act="set-lang" data-l="ar" aria-pressed="${L()==='ar'}">العربية</button><button data-act="set-lang" data-l="en" aria-pressed="${L()==='en'}">English</button></div>
+   <div class="tabs">${['auto','light','dark'].map(m=>`<button data-act="set-theme" data-m="${m}" aria-pressed="${S.meta.theme===m}">${t(m)}</button>`).join('')}</div></section>
+  <section class="card"><h2>${t('settingsNotif')}</h2><p class="sub">${t('notifState')}: <b>${esc(perm)}</b></p><div class="tabs"><button class="btn pri" data-act="notif-allow">${t('allow')}</button><button class="btn" data-act="notif-test">${t('test')}</button></div><p class="sub">${t('notifNote')}</p></section>
+  <section class="card"><h2>${t('backup')}</h2><div class="tabs"><button class="btn" data-act="export-json">${IN_ARTIFACT?t('copyCsv').replace('CSV','JSON'):t('exportJson')}</button><label class="btn" style="flex-direction:row;color:var(--fg)">${t('importJson')}<input type="file" id="imp" accept="application/json" hidden></label></div><p class="sub">${t('syncNote')}</p></section>
+  ${window.accountSection?window.accountSection():''}${window.adminToolsSection?window.adminToolsSection():''}<section class="card"><h2>${t('wipe')}</h2><button class="btn bad" data-act="wipe" data-confirm="1">${t('wipe')}</button></section></div>`;
+}
+
+/* ---------- render ---------- */
+function render(){
+  document.documentElement.lang=L();document.documentElement.dir=L()==='ar'?'rtl':'ltr';
+  const th=S.meta.theme;if(th==='auto')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',th);
+  const VIEWS=views();if(!VIEWS.includes(UI.view))UI.view=VIEWS[0];
+  const signedIn=!!(window.PLANNER_AUTH&&window.PLANNER_AUTH.user&&window.PLANNER_AUTH.user());
+  const navHtml=VIEWS.map(v=>`<button data-act="go" data-v="${v}" ${UI.view===v?'aria-current="page"':''}>${ic(v)}<span>${t(v)}</span></button>`).join('');
+  $('#side').innerHTML=`<div class="brand"><img src="logo.png" alt="" width="46" height="46" style="border-radius:50%;background:#fff;padding:2px;display:block;margin-bottom:8px">${esc(window.COMM_ONLY?t('comm'):t('app'))}<small>${esc(window.COMM_ONLY?'':t('appEn'))}</small></div><div class="nav">${navHtml}</div>`;
+  $('#bottom').innerHTML=VIEWS.filter(v=>v!=='logs'&&v!=='ledger').map(v=>`<button data-act="go" data-v="${v}" ${UI.view===v?'aria-current="page"':''}>${ic(v,22)}<span>${esc(t(v).split(' ')[0])}</span></button>`).join('');
+  $('#mtitle').textContent=t(UI.view);
+  $('#fab').innerHTML=ic('plus',18)+'<span>'+t('new')+'</span>';$('#fab').style.display=(window.COMM_ONLY||UI.view==='comm'||UI.view==='proj'||UI.view==='logs'||UI.view==='ledger')?'none':'';
+  const V={logs:window.logsView||(()=>''),comm:window.commView||(()=>''),proj:window.projView||(()=>''),ledger:window.ledgerView||(()=>''),dash:vDash,cal:vCal,appts:vAppts,follow:vFollow,reports:vReports,settings:vSettings};
+  const keepFocus=document.activeElement&&document.activeElement.id==='fq';
+  const uname=signedIn?((window.CTX&&window.CTX.name)||(window.PLANNER_AUTH.user().email)||''):'';
+  $('#mname').textContent=uname;$('#outBtn').style.display=signedIn?'':'none';
+  $('#view').innerHTML=(signedIn?`<div class="userbar"><button class="btn sm" data-act="sign-out" title="${esc(t('signout'))}">${ic('out',16)}<span>${esc(t('signout'))}</span></button><span class="ub-name">👤 ${esc(uname)}</span></div>`:'')+V[UI.view]();
+  document.title=window.COMM_ONLY?t('comm'):t('app');
+  if(UI.view==='comm'&&window.commMount)window.commMount();
+  if(UI.view==='proj'&&window.projMount)window.projMount();
+  if(UI.view==='logs'&&window.logsMount)window.logsMount();
+  if(UI.view==='ledger'&&window.ledgerMount)window.ledgerMount();
+  if(keepFocus){const e=$('#fq');e.focus();e.setSelectionRange(e.value.length,e.value.length)}
+}
+
+/* ---------- actions ---------- */
+function newChooser(){
+  openModal(`<div class="dlg"><header><h2>${t('new')}</h2><button class="btn sm" data-act="close">${t('close')}</button></header><div class="list">
+  <button class="row click" data-act="new-appt" style="text-align:start">${ic('appts')}<div class="main"><div class="t">${t('newAppt')}</div></div></button>
+  <button class="row click" data-act="new-follow" style="text-align:start">${ic('follow')}<div class="main"><div class="t">${t('newFollow')}</div></div></button></div></div>`);
+}
+function download(name,text,mime){
+  const b=new Blob([text],{type:mime});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);
+}
+async function copyText(s){try{await navigator.clipboard.writeText(s);toast(t('copied'))}catch(e){const ta=document.createElement('textarea');ta.value=s;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');toast(t('copied'))}catch(_){}ta.remove()}}
+const ACT={
+ close(){closeModal()},
+ go(el){UI.view=el.dataset.v;ACT['menu-close']();render();window.scrollTo(0,0)},
+ 'menu'(){const o=!$('#side').classList.contains('open');$('#side').classList.toggle('open',o);$('#scrim').classList.toggle('open',o)},
+ 'menu-close'(){$('#side').classList.remove('open');$('#scrim').classList.remove('open')},
+ new(){newChooser()},
+ 'new-appt'(){apptForm({date:UI.view==='cal'?UI.cal.sel:today()})},
+ 'new-appt-on'(el){apptForm({date:el.dataset.d})},
+ 'new-task'(){UI.after=null;taskForm({})},
+ 'new-follow'(){followForm({})},
+ 'open-appt'(el){apptDetail(el.dataset.id)},
+ 'edit-appt'(el){apptForm(apptById(el.dataset.id))},
+ 'save-appt'(el){saveAppt(el.dataset.id)},
+ 'del-appt'(el){S.appts=S.appts.filter(a=>a.id!==el.dataset.id);S.tasks.forEach(x=>{if(x.apptId===el.dataset.id)x.apptId=''});save('appts');save('tasks');closeModal();toast(t('deleted'));render()},
+ 'done-appt'(el){const a=apptById(el.dataset.id);a.status='done';a.updatedAt=nowISO();(a.history=a.history||[]).push({at:nowISO(),text:t('s_done')});save('appts');apptDetail(a.id);render()},
+ postpone(el){reschedForm(apptById(el.dataset.id),true)},
+ reschedule(el){reschedForm(apptById(el.dataset.id),false)},
+ 'save-resched'(el){const a=apptById(el.dataset.id);const d=val('r-date');if(!d)return;
+   a.date=d;a.start=val('r-start');a.end=val('r-end');if(el.dataset.p==='1')a.status='postponed';else if(a.status==='postponed')a.status='upcoming';
+   a.updatedAt=nowISO();(a.history=a.history||[]).push({at:nowISO(),text:(el.dataset.p==='1'?t('postpone'):t('reschedule'))+' → '+d});
+   Object.keys(S.meta.fired).forEach(k=>{if(k.startsWith(a.id+'|'))delete S.meta.fired[k]});save('meta');save('appts');render();apptDetail(a.id)},
+ 'item2task'(el){const a=apptById(el.dataset.id);const it=(a[el.dataset.list]||[]).find(z=>z.id===el.dataset.item);
+   UI.after=a.id;UI.pre={itemRef:{appt:a.id,list:el.dataset.list,item:it.id},apptId:a.id};taskForm({title:it.text,due:a.date,apptId:a.id,prio:a.prio})},
+ 'edit-task'(el){UI.after=null;taskForm(taskById(el.dataset.id))},
+ 'save-task'(el){saveTask(el.dataset.id)},
+ 'del-task'(el){S.tasks=S.tasks.filter(x=>x.id!==el.dataset.id);S.appts.forEach(a=>(a.actions||[]).concat(a.topics||[]).forEach(i=>{if(i.taskId===el.dataset.id)i.taskId=''}));save('tasks');save('appts');toast(t('deleted'));render()},
+ 'toggle-task'(el){const x=taskById(el.dataset.id);setTaskDone(x,el.checked);save('tasks');render()},
+ 'toggle-sub'(el){const x=taskById(el.dataset.id);x.subtasks[+el.dataset.i].done=el.checked;if(x.status==='notstarted')x.status='inprogress';if(x.subtasks.length&&x.subtasks.every(s=>s.done))setTaskDone(x,true);save('tasks');render()},
+ 'task-plus1'(el){const x=taskById(el.dataset.id);x.due=addDays(x.due>today()?x.due:today(),1);save('tasks');render()},
+ 'tk-tab'(el){UI.tk.tab=el.dataset.tab;render()},
+ 'edit-follow'(el){followForm(S.follows.find(f=>f.id===el.dataset.id))},
+ 'save-follow'(el){saveFollow(el.dataset.id)},
+ 'pdf-mark'(el){const p=el.dataset.p;(UI.pdfRm=UI.pdfRm||[]).push(p);const r=el.closest('.pdfrow');if(r)r.style.display='none'},
+ 'pdf-open'(el,ev){if(ev&&ev.preventDefault)ev.preventDefault();const c=pdfSb();if(!c)return;const w=window.open('','_blank');c.storage.from('follow-files').createSignedUrl(el.dataset.p,300).then(r=>{if(r.error||!r.data){if(w)w.close();toast(t('pdfOpenErr'));return}if(w)w.location.href=r.data.signedUrl;else location.href=r.data.signedUrl})},
+ 'del-follow'(el){const fo=S.follows.find(f=>f.id===el.dataset.id);if(fo&&(fo.files||[]).length&&pdfSb())pdfSb().storage.from('follow-files').remove(fo.files.map(x=>x.path)).catch(()=>{});S.follows=S.follows.filter(f=>f.id!==el.dataset.id);save('follows');toast(t('deleted'));render()},
+ 'follow-pin'(el){const f=S.follows.find(x=>x.id===el.dataset.id);f.pinned=!f.pinned;save('follows');render()},
+ 'follow-plus1'(el){const f=S.follows.find(x=>x.id===el.dataset.id);f.next=addDays(today(),1);f.lastUpdate=nowISO();(f.log=f.log||[]).push({at:nowISO(),text:t('plus1'),progress:f.progress});save('follows');render()},
+ 'follow-update'(el){followUpdateForm(S.follows.find(f=>f.id===el.dataset.id))},
+ 'save-update'(el){const f=S.follows.find(x=>x.id===el.dataset.id);const st=val('u-status');const p=st==='done'?100:parseInt(val('u-prog'))||0;
+   f.progress=p;f.status=st;f.next=val('u-next');f.lastUpdate=nowISO();f.doneOn=st==='done'?(f.doneOn||today()):'';
+   (f.log=f.log||[]).push({at:nowISO(),text:val('u-text')||t('addUpdate'),progress:p});
+   if(st==='done'&&f.repeat&&f.repeat!=='none'){f.status='notstarted';f.progress=0;f.next=addDays(today(),f.repeat==='daily'?1:f.repeat==='weekly'?7:(f.repeatN||3));f.doneOn=today()}
+   save('follows');closeModal();toast(t('saved'));render()},
+ 'rem-snooze'(el){const k=el.dataset.key;S.meta.snooze[k]=Date.now()+10*60000;delete S.meta.notified[k];save('meta');lastDueCount=-1;render()},
+ 'rem-done'(el){S.meta.fired[el.dataset.key]=1;save('meta');lastDueCount=-1;render()},
+ 'cal-prev'(){const c=UI.cal;c.date=c.mode==='month'?addMonths(c.date,-1):addDays(c.date,c.mode==='week'?-7:-1);if(c.mode==='day')c.sel=c.date;render()},
+ 'cal-next'(){const c=UI.cal;c.date=c.mode==='month'?addMonths(c.date,1):addDays(c.date,c.mode==='week'?7:1);if(c.mode==='day')c.sel=c.date;render()},
+ 'cal-today'(){UI.cal.date=today();UI.cal.sel=today();render()},
+ 'cal-mode'(el){UI.cal.mode=el.dataset.m;render()},
+ 'cal-sel'(el){UI.cal.sel=el.dataset.d;render()},
+ 'rp-quick'(el){const q=el.dataset.q,d=today();const R=rpRange();
+   if(q==='rQuick'){R.from=d;R.to=d}else if(q==='rWeek'){R.from=weekStart(d);R.to=addDays(R.from,6)}
+   else if(q==='rMonth'){const x=pd(d);R.from=dstr(new Date(x.getFullYear(),x.getMonth(),1));R.to=dstr(new Date(x.getFullYear(),x.getMonth()+1,0))}
+   else{const y=pd(d).getFullYear();R.from=y+'-01-01';R.to=y+'-12-31'}render()},
+ 'rp-approve'(){const R=rpRange(),k=R.from+'|'+R.to;const cur=S.meta.reportEdits[k]||{};saveReportEdit(!cur.approved);render()},
+ 'rp-copy'(){const R=rpRange();copyText(csvFor(R.from,R.to).replace('﻿',''))},
+ 'rp-csv'(){const R=rpRange();download('report-'+R.from+'_'+R.to+'.csv',csvFor(R.from,R.to),'text/csv;charset=utf-8')},
+ 'rp-print'(){saveReportEdit();try{window.print()}catch(e){}},
+ 'rp-word'(){saveReportEdit();const R=rpRange();const c=$('#view .rep').cloneNode(true);
+   c.querySelectorAll('.noprint,button').forEach(n=>n.remove());
+   c.querySelectorAll('textarea').forEach(n=>{const d=document.createElement('p');d.textContent=n.value;n.replaceWith(d)});
+   c.querySelectorAll('label').forEach(n=>{n.style.display='block'});
+   const dir=L()==='ar'?'rtl':'ltr';
+   const css='body{font-family:Arial,Tahoma,sans-serif;direction:'+dir+'}table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:4px 6px;text-align:start}h1{color:#12304d}h3{color:#0b6f7a}.stat{display:inline-block;margin:4px 16px 4px 0}.stat b{font-size:18pt}.stat span{display:block;font-size:9pt;color:#555}.grid{display:block}';
+   const html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>'+esc(t('reports'))+'</title><style>'+css+'</style></head><body dir="'+dir+'"><h1>'+esc(t('reports'))+'</h1><p>'+esc(fmtD(R.from))+' – '+esc(fmtD(R.to))+'</p>'+c.innerHTML+'</body></html>';
+   download('report-'+R.from+'_'+R.to+'.doc','\ufeff'+html,'application/msword')},
+ 'set-lang'(el){S.meta.lang=el.dataset.l;try{localStorage.setItem('planner_lang',S.meta.lang)}catch(e){}save('meta');render()},
+ 'set-theme'(el){S.meta.theme=el.dataset.m;save('meta');render()},
+ 'notif-allow'(){if(!('Notification' in window)){toast('Notifications not supported');return}Notification.requestPermission().then(()=>render()).catch(()=>{})},
+ 'notif-test'(){notify(t('app'),t('test'))},
+ 'export-json'(){const j=JSON.stringify({appts:S.appts,tasks:S.tasks,follows:S.follows,meta:S.meta},null,1);if(IN_ARTIFACT)copyText(j);else download('my-daily-planner-backup.json',j,'application/json')},
+ 'wipe'(){S.appts=[];S.tasks=[];S.follows=[];S.meta.fired={};S.meta.notified={};S.meta.snooze={};S.meta.reportEdits={};saveAll();toast(t('deleted'));render()}
+};
+document.addEventListener('click',e=>{
+  const el=e.target.closest('[data-act]');
+  if(!el){if(e.target.id==='modal')closeModal();return}
+  if(el.tagName==='INPUT'&&el.type==='checkbox')return; /* handled on change */
+  if(el.dataset.confirm&&!el.dataset.armed){el.dataset.armed='1';el.dataset.orig=el.textContent;el.textContent=t('delOk');e.stopPropagation();return}
+  const fn=ACT[el.dataset.act]||(window.EXTRA_ACT||{})[el.dataset.act];if(fn){e.preventDefault();fn(el,e)}
+});
+document.addEventListener('change',e=>{
+  const el=e.target;
+  if(el.matches('input[type=checkbox][data-act]')){const fn=ACT[el.dataset.act];if(fn)fn(el,e);return}
+  if(el.dataset.f!=null){UI.af[el.dataset.f]=el.value;render();return}
+  if(el.dataset.tk){UI.tk[el.dataset.tk]=el.value;render();return}
+  if(el.dataset.rp){const R=rpRange();if(el.dataset.rp==='cmp')R.cmp=el.checked;else if(el.value){R[el.dataset.rp]=el.value;if(R.to<R.from)R.to=R.from}render();return}
+  if(el.id==='imp'&&el.files[0]){const fr=new FileReader();fr.onload=()=>{try{const j=JSON.parse(fr.result);['appts','tasks','follows'].forEach(k=>{if(Array.isArray(j[k]))S[k]=j[k]});if(j.meta)Object.assign(S.meta,j.meta);saveAll();toast(t('imported'));render()}catch(err){toast('JSON error')}};fr.readAsText(el.files[0])}
+});
+document.addEventListener('input',e=>{if(e.target.dataset&&e.target.dataset.f==='q'){UI.af.q=e.target.value;render()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();ACT['menu-close']()}});
+
+/* ---------- boot ---------- */
+(async function(){
+  if(window.authInit)await window.authInit();
+  await load();
+  render();
+  if(window.syncStart)window.syncStart();
+  checkReminders();
+  setInterval(checkReminders,20000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkReminders()});
+})();
+</script>

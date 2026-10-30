@@ -17,6 +17,7 @@
   function ctx() { return window.CTX || {}; }
   function role() { return ctx().role; }
   function isAdmin() { return role() === 'admin'; }
+  function CAN(k) { return typeof window.CAN === 'function' ? window.CAN(k) : isAdmin(); }
   function isStaff() { return role() === 'admin' || role() === 'professor' || role() === 'staff'; }
   function toast_(m) { if (typeof toast === 'function') toast(m); }
   function $c(s) { return document.querySelector(s); }
@@ -53,7 +54,7 @@
       if (isStaff()) ST.cohorts = await rpc('comm_list_cohorts');
       if (role() === 'student' && ctx().cohort_id) ST.cohort = ctx().cohort_id;
       else if (ST.cohorts[0]) ST.cohort = ST.cohorts[0].id;
-      if (isAdmin()) { ST.admin.pending = await rpc('comm_pending_passwords'); ST.admin.reqs = await rpc('comm_list_requests').catch(function () { return []; }); }
+      if (isAdmin()) { ST.admin.pending = CAN('reset') ? await rpc('comm_pending_passwords').catch(function () { return []; }) : []; ST.admin.reqs = CAN('requests') ? await rpc('comm_list_requests').catch(function () { return []; }) : []; }
       await loadDm(); await loadUnread(); await loadTab();
       if (role() === 'student') { try { await loadPolls(); } catch (e) {} }
     } catch (e) { ST.err = e.message; }
@@ -100,6 +101,7 @@
       if (ST.admin.sub === 'staff') ST.admin.staff = await rpc('comm_list_staff');
       if (ST.admin.sub === 'assign') { ST.admin.staff = await rpc('comm_list_staff'); ST.admin.cp = await rpc('comm_cohort_professors'); }
       if (ST.admin.sub === 'cohorts') ST.cohorts = await rpc('comm_list_cohorts');
+      if (ST.admin.sub === 'admins') { ST.admin.admins = await rpc('comm_list_admins'); ST.admin.staff = await rpc('comm_list_staff'); }
     }
   }
 
@@ -130,7 +132,7 @@
     t.push(['sched', T('الجدول', 'Schedule'), 0]);
     t.push(['poll', T('استبيانات', 'Polls'), role() === 'student' ? unvoted() : 0]);
     if (isStaff()) t.push(['week', T('جدول الدوام', 'Weekly roster'), 0]);
-    if (isAdmin()) t.push(['admin', T('إدارة', 'Admin'), 0]);
+    if (isAdmin() && admSubs().length) t.push(['admin', T('إدارة', 'Admin'), 0]);
     t.push(['me', T('حسابي', 'My account'), 0]);
     return '<div class="cm-tabs">' + t.map(function (x) { return '<button class="btn' + (ST.tab === x[0] ? ' pri' : '') + '" data-act="cm-tab" data-t="' + x[0] + '">' + h(x[1]) + badge(x[2]) + '</button>'; }).join('') + '</div>';
   }
@@ -144,6 +146,10 @@
       (ST.err ? '<p class="pill bad">' + h(ST.err) + '</p>' : '') + body;
     var box = root.querySelector('.cm-msgs'); if (box) box.scrollTop = ST.tab === 'ann' ? 0 : box.scrollHeight;
     var ta = root.querySelector('#cm-text'); if (ta) ta.value = ST.draft;
+    if (isAdmin()) {
+      if (!CAN('delete')) root.querySelectorAll('[data-act^="cm-del"]').forEach(function (b) { b.remove(); });
+      if (!CAN('reset')) root.querySelectorAll('[data-act^="cm-reset"]').forEach(function (b) { b.remove(); });
+    }
   }
   function softDraw() { var a = document.activeElement; if (a && (a.id === 'cm-text' || a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT')) return; draw(); }
 
@@ -196,7 +202,7 @@
     if (isStaff()) sel = '<label>' + h(T('الشعبة', 'Cohort')) + ' <select id="cm-coh" data-cm="coh">' + ST.cohorts.filter(function (c) { return c.is_active; }).map(function (c) { return '<option value="' + c.id + '"' + (c.id === ST.cohort ? ' selected' : '') + '>' + h(c.name) + '</option>'; }).join('') + '</select></label>';
     else if (!ST.cohort) return '<div class="card"><div class="empty">' + h(T('لم تُسنَد إلى شعبة بعد. تواصل مع الإدارة.', 'You are not assigned to a cohort yet. Contact the administration.')) + '</div></div>';
     else sel = '<b>' + h(ctx().cohort_name || '') + '</b>';
-    var post = isAdmin() ? '<div style="margin-top:10px"><label class="ck" style="margin-bottom:6px"><input type="checkbox" data-cm="annall"' + (ST.annAll ? ' checked' : '') + '> ' + h(T('إرسال إلى جميع الشعب دفعة واحدة', 'Send to all cohorts at once')) + '</label><input id="cm-title" placeholder="' + h(T('عنوان الإعلان (اختياري)', 'Title (optional)')) + '" data-cm="title" style="width:100%;margin-bottom:6px">' + composer(T('نص الإعلان…', 'Announcement…')) + '</div>' : '';
+    var post = CAN('ann') ? '<div style="margin-top:10px"><label class="ck" style="margin-bottom:6px"><input type="checkbox" data-cm="annall"' + (ST.annAll ? ' checked' : '') + '> ' + h(T('إرسال إلى جميع الشعب دفعة واحدة', 'Send to all cohorts at once')) + '</label><input id="cm-title" placeholder="' + h(T('عنوان الإعلان (اختياري)', 'Title (optional)')) + '" data-cm="title" style="width:100%;margin-bottom:6px">' + composer(T('نص الإعلان…', 'Announcement…')) + '</div>' : '';
     return '<div class="card">' + sel + '<p class="sub">' + h(T('الإعلانات من الإدارة فقط، ولا يمكن الرد عليها.', 'Announcements come from the administration only; replies are not possible.')) + '</p>' +
       '<div class="cm-msgs">' + (ST.items.map(annMsg).join('') || '<div class="empty">' + h(T('لا إعلانات', 'No announcements')) + '</div>') + '</div>' + post + '</div>';
   }
@@ -208,8 +214,26 @@
       '<div class="tabs"><button class="btn pri" data-act="cm-pw">' + h(T('تغيير كلمة المرور', 'Change password')) + '</button><button class="btn" data-act="push-enable">' + h(T('تفعيل إشعارات الرسائل على هذا الجهاز', 'Enable message notifications on this device')) + '</button><button class="btn" data-act="sign-out">' + h(T('تسجيل الخروج', 'Sign out')) + '</button></div></div>';
   }
 
+  var SUBPERM = { create: 'create', requests: 'requests', pending: 'reset', students: 'students', dups: 'students', staff: 'staff', assign: 'staff', cohorts: 'cohorts', admins: 'main' };
+  function admSubs() { return Object.keys(SUBPERM).filter(function (k) { return CAN(SUBPERM[k]); }).map(function (k) { return [k]; }); }
+  var PERM_LIST = [['create', 'إنشاء حسابات', 'Create accounts'], ['requests', 'طلبات التسجيل', 'Sign-up requests'], ['students', 'الطلبة والشعب والتكرار', 'Students, cohorts, duplicates'], ['staff', 'الموظفون والأكاديميون', 'Staff & academics'], ['cohorts', 'إدارة الشعب', 'Manage cohorts'], ['reset', 'إعادة كلمات المرور', 'Reset passwords'], ['delete', 'حذف الحسابات', 'Delete accounts'], ['ann', 'الإعلانات والقنوات', 'Announcements & channels'], ['sched', 'جدول المحاضرات', 'Schedule'], ['poll', 'الاستبيانات', 'Polls'], ['weekly', 'جدول الدوام', 'Weekly roster'], ['logs', 'السجلات', 'Logs'], ['wipe', 'مسح الرسائل', 'Wipe messages'], ['proj', 'المشاريع الخارجية', 'External projects']];
+  function adminsPane() {
+    var A = ST.admin, list = A.admins || [], cand = (A.staff || []).filter(function (x) { return x.role !== 'admin'; });
+    var rows = list.map(function (a) {
+      if (!a.is_sub) return '<div class="row"><div class="main"><div class="t">' + h(a.full_name) + '</div><div class="sub">' + h(T('مسؤول رئيسي — كل الصلاحيات', 'Main admin — full access')) + '</div></div></div>';
+      var dr = A.permDraft && A.permDraft[a.id] || a.perms || {};
+      return '<div class="card" style="margin:8px 0"><h3>' + h(a.full_name) + ' <span class="pill">' + h(T('مسؤول فرعي', 'Sub-admin')) + '</span></h3><div class="form">' +
+        PERM_LIST.map(function (x) { return '<label class="ck"><input type="checkbox" data-cm="admperm" data-id="' + h(a.id) + '" data-k="' + x[0] + '"' + (dr[x[0]] ? ' checked' : '') + '> ' + h(T(x[1], x[2])) + '</label>'; }).join('') +
+        '</div><div class="tabs" style="margin-top:8px"><button class="btn sm pri" data-act="cm-adm-save" data-id="' + h(a.id) + '">' + h(T('حفظ الصلاحيات', 'Save permissions')) + '</button> <button class="btn sm bad" data-act="cm-adm-rm" data-id="' + h(a.id) + '" data-confirm="1">' + h(T('إلغاء المسؤولية', 'Remove admin')) + '</button></div></div>';
+    }).join('') || '<div class="empty">—</div>';
+    return '<div class="card"><h2>' + h(T('المسؤولون', 'Admins')) + '</h2><p class="sub">' + h(T('رقّ موظفاً أو عضو هيئة تدريس إلى مسؤول فرعي، ثم حدّد ما يُسمح له به. الدفتر المالي وهذه الشاشة للمسؤول الرئيسي وحده.', 'Promote a staff or faculty member to sub-admin and choose what they may do. The ledger and this screen stay main-admin only.')) + '</p>' +
+      '<div class="tabs"><select id="adm-new" data-cm="admnew"><option value="">' + h(T('اختر موظفاً…', 'Choose a staff member…')) + '</option>' + cand.map(function (x) { return '<option value="' + h(x.id) + '"' + (A.admNew === x.id ? ' selected' : '') + '>' + h(x.full_name) + '</option>'; }).join('') + '</select> <button class="btn sm pri" data-act="cm-adm-add">' + h(T('ترقية إلى مسؤول فرعي', 'Promote to sub-admin')) + '</button></div>' +
+      '<div class="list">' + rows + '</div></div>';
+  }
   function adminHtml() {
-    var A = ST.admin, subs = [['create', T('إنشاء حسابات', 'Create accounts')], ['requests', T('طلبات التسجيل', 'Sign-up requests') + ' (' + A.reqs.length + ')'], ['pending', T('لم يغيّروا كلمتهم', 'Not changed yet') + ' (' + A.pending.length + ')'], ['students', T('الطلبة والشعب', 'Students & cohorts')], ['dups', T('التكرار', 'Duplicates')], ['staff', T('تصنيف الموظفين', 'Staff categories')], ['assign', T('ربط الأكاديميين', 'Assign academics')], ['cohorts', T('الشعب', 'Cohorts')]];
+    var A = ST.admin, subs = [['create', T('إنشاء حسابات', 'Create accounts')], ['requests', T('طلبات التسجيل', 'Sign-up requests') + ' (' + A.reqs.length + ')'], ['pending', T('لم يغيّروا كلمتهم', 'Not changed yet') + ' (' + A.pending.length + ')'], ['students', T('الطلبة والشعب', 'Students & cohorts')], ['dups', T('التكرار', 'Duplicates')], ['staff', T('تصنيف الموظفين', 'Staff categories')], ['assign', T('ربط الأكاديميين', 'Assign academics')], ['cohorts', T('الشعب', 'Cohorts')], ['admins', T('المسؤولون', 'Admins')]];
+    var okSub = admSubs().map(function (x) { return x[0]; }); subs = subs.filter(function (x) { return okSub.indexOf(x[0]) >= 0; });
+    if (okSub.indexOf(A.sub) < 0) A.sub = okSub[0];
     var nav = '<div class="cm-tabs">' + subs.map(function (s) { return '<button class="btn sm' + (A.sub === s[0] ? ' pri' : '') + '" data-act="cm-sub" data-s="' + s[0] + '">' + h(s[1]) + '</button>'; }).join('') + '</div>';
     var cohOpt = function (selId) { return ST.cohorts.map(function (c) { return '<option value="' + c.id + '"' + (c.id === selId ? ' selected' : '') + '>' + h(c.name) + '</option>'; }).join(''); };
     var body = '';
@@ -250,6 +274,8 @@
             '<div style="display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px">' + profs.map(function (p) { return '<label class="ck"><input type="checkbox" class="ap-c-' + c.cohort_id + '" value="' + h(p.id) + '"' + (cur[p.id] ? ' checked' : '') + '> ' + h(p.full_name) + '</label>'; }).join('') + '</div></div>' +
             '<div class="act"><button class="btn sm pri" data-act="cm-assign-prof" data-id="' + c.cohort_id + '">' + h(T('حفظ', 'Save')) + '</button></div></div>';
         }).join('') || '<div class="empty">—</div>') + '</div>';
+    } else if (A.sub === 'admins') {
+      body = adminsPane();
     } else if (A.sub === 'dups') {
       body = dupsHtml();
     } else if (A.sub === 'staff') {
@@ -281,6 +307,9 @@
     'cm-send': function () { send(); },
     'cm-sub': function (el) { ST.admin.sub = el.dataset.s; draw(); guard(loadTab); },
     'cm-create': function () { createAccounts(); },
+    'cm-adm-add': function () { var id = ST.admin.admNew; if (!id) return; guard(async function () { await rpc('comm_set_admin', { p_user: id, p_on: true, p_perms: {} }); ST.admin.admNew = ''; ST.admin.admins = await rpc('comm_list_admins'); ST.admin.staff = await rpc('comm_list_staff'); toast_(T('تمت الترقية. حدّد الصلاحيات ثم احفظ.', 'Promoted. Pick permissions and save.')); }); },
+    'cm-adm-save': function (el) { var id = el.dataset.id, a = (ST.admin.admins || []).filter(function (x) { return x.id === id; })[0] || {}, pr = (ST.admin.permDraft || {})[id] || a.perms || {}; guard(async function () { await rpc('comm_set_admin', { p_user: id, p_on: true, p_perms: pr }); ST.admin.admins = await rpc('comm_list_admins'); if (ST.admin.permDraft) delete ST.admin.permDraft[id]; toast_(T('تم حفظ الصلاحيات', 'Saved')); }); },
+    'cm-adm-rm': function (el) { var id = el.dataset.id; guard(async function () { await rpc('comm_set_admin', { p_user: id, p_on: false }); ST.admin.admins = await rpc('comm_list_admins'); ST.admin.staff = await rpc('comm_list_staff'); toast_(T('أُلغيت المسؤولية', 'Removed')); }); },
     'cm-clearrows': function () { ST.admin.rows = null; ST.admin.rowsInfo = ''; ST.admin.sheet = null; draw(); },
     'cm-map-ok': function () { applyMap(); draw(); },
     'cm-del-sel': function () { var ids = Object.keys(ST.admin.sel).filter(function (k) { return ST.admin.sel[k]; }); deleteIds(ids, loadTab); },
@@ -375,6 +404,8 @@
     else if (k === 'selall') { (ST.admin.students || []).forEach(function (x) { ST.admin.sel[x.id] = e.target.checked; }); draw(); }
     else if (k === 'stsel') { ST.admin.sel[e.target.dataset.id] = e.target.checked; draw(); }
     else if (k === 'stselall') { (ST.admin.staff || []).forEach(function (x) { ST.admin.sel[x.id] = e.target.checked; }); draw(); }
+    else if (k === 'admperm') { var did = e.target.dataset.id, cur = ((ST.admin.permDraft = ST.admin.permDraft || {})[did] = ST.admin.permDraft[did] || Object.assign({}, ((ST.admin.admins || []).filter(function (x) { return x.id === did; })[0] || {}).perms)); cur[e.target.dataset.k] = e.target.checked; }
+    else if (k === 'admnew') { ST.admin.admNew = e.target.value; }
     else if (k === 'cf') { var cv = e.target.type === 'checkbox' ? e.target.checked : e.target.value; ST.admin['c' + e.target.dataset.k] = cv; }
     else if (k === 'srole') guard(async function () { await rpc('comm_set_staff_role', { p_user: e.target.dataset.id, p_role: e.target.value }); ST.admin.staff = await rpc('comm_list_staff'); toast_('OK'); });
     else if (k === 'wk') {
@@ -405,7 +436,7 @@
         var r = await sb().from('comm_channel_messages').insert(Object.assign({ channel: ST.chan, body: body || (u2 ? u2.file_name : '') }, u2 || {}));
         if (r.error) throw r.error;
         ST.draft = ''; ST.file = null; await loadTab();
-      } else if (ST.tab === 'ann' && isAdmin() && ST.cohort) {
+      } else if (ST.tab === 'ann' && CAN('ann') && ST.cohort) {
         var tgt = ST.annAll ? ST.cohorts.filter(function (c) { return c.is_active; }).map(function (c) { return c.id; }) : [ST.cohort];
         if (ST.annAll && !window.confirm(T('سيُرسل الإعلان إلى جميع الشعب (' + tgt.length + ' شعبة). متابعة؟', 'This will be sent to all cohorts (' + tgt.length + '). Continue?'))) { ST.busy = false; return draw(); }
         var rows3 = [];
@@ -500,7 +531,7 @@
   function schedRow(s) {
     var k = KINDS[s.kind] || KINDS.other, tm = hhmm(s.start_time) + (s.end_time ? ' – ' + hhmm(s.end_time) : '');
     return '<div class="row"><div class="main"><div class="t"><span class="pill ' + k[2] + '">' + h(k[ar() ? 0 : 1]) + '</span> ' + h(s.title) + '</div><div class="sub">' + h(dayLabel(s.event_date)) + (tm.trim() ? ' · ' + h(tm) : '') + (s.place ? ' · ' + h(s.place) : '') + (isStaff() ? ' · ' + h(s.cohort_name || T('كل الشعب', 'All cohorts')) : '') + (s.notes ? ' · ' + h(s.notes) : '') + '</div></div>' +
-      (isAdmin() ? '<div class="act"><button class="btn sm" data-act="sc-edit" data-id="' + s.id + '">' + h(T('تعديل', 'Edit')) + '</button> <button class="btn sm bad" data-act="sc-del" data-id="' + s.id + '" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button></div>' : '') + '</div>';
+      (CAN('sched') ? '<div class="act"><button class="btn sm" data-act="sc-edit" data-id="' + s.id + '">' + h(T('تعديل', 'Edit')) + '</button> <button class="btn sm bad" data-act="sc-del" data-id="' + s.id + '" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button></div>' : '') + '</div>';
   }
   function schedForm() {
     var f = ST.sched.form; if (!f) return '';
@@ -521,14 +552,14 @@
     var rows = ST.sched.rows || [], byDay = {}, days = [];
     rows.forEach(function (s) { if (!byDay[s.event_date]) { byDay[s.event_date] = []; days.push(s.event_date); } byDay[s.event_date].push(s); });
     return '<div class="card"><h2>' + h(T('الجدول والمواعيد', 'Schedule')) + '</h2>' +
-      '<p class="sub">' + h(isAdmin() ? T('أضف المحاضرات والتدريب العملي والامتحانات لشعبة أو لكل الشعب، فتظهر للطلبة في جدولهم.', 'Add lectures, clinical sessions and exams for a cohort or all cohorts.') : T('المواعيد القادمة لشعبتك.', 'Upcoming entries for your cohort.')) + '</p>' +
-      (isAdmin() && !ST.sched.form ? '<button class="btn pri" data-act="sc-new">+ ' + h(T('إضافة موعد', 'Add entry')) + '</button>' : '') + schedForm() +
+      '<p class="sub">' + h(CAN('sched') ? T('أضف المحاضرات والتدريب العملي والامتحانات لشعبة أو لكل الشعب، فتظهر للطلبة في جدولهم.', 'Add lectures, clinical sessions and exams for a cohort or all cohorts.') : T('المواعيد القادمة لشعبتك.', 'Upcoming entries for your cohort.')) + '</p>' +
+      (CAN('sched') && !ST.sched.form ? '<button class="btn pri" data-act="sc-new">+ ' + h(T('إضافة موعد', 'Add entry')) + '</button>' : '') + schedForm() +
       (days.map(function (d) { return '<h3 style="margin:12px 0 4px">' + h(dayLabel(d)) + '</h3><div class="list">' + byDay[d].map(schedRow).join('') + '</div>'; }).join('') || '<div class="empty">' + h(T('لا مواعيد قادمة', 'Nothing scheduled')) + '</div>') + '</div>';
   }
 
   function pollHtml() {
     var rows = ST.polls.rows || [], form = '';
-    if (isAdmin()) {
+    if (CAN('poll')) {
       form = ST.polls.form ? '<div class="card" style="margin:8px 0"><b>' + h(T('استبيان جديد', 'New poll')) + '</b><div class="form"><label>' + h(T('لمن؟', 'For')) + '<select id="pf-cohort"><option value="">' + h(T('كل الطلبة', 'All students')) + '</option>' + ST.cohorts.filter(function (c) { return c.is_active; }).map(function (c) { return '<option value="' + c.id + '">' + h(c.name) + '</option>'; }).join('') + '</select></label>' +
         '<label style="grid-column:1/-1">' + h(T('السؤال *', 'Question *')) + '<input id="pf-q"></label></div><label>' + h(T('الخيارات: خيار في كل سطر (2 إلى 8)', 'Options: one per line (2 to 8)')) + '<textarea id="pf-opts" class="cm-ta" style="direction:rtl;font-family:inherit"></textarea></label>' +
         '<div class="tabs"><button class="btn pri" data-act="pl-create"' + (ST.busy ? ' disabled' : '') + '>' + h(T('نشر', 'Publish')) + '</button><button class="btn" data-act="pl-cancel">' + h(T('إلغاء', 'Cancel')) + '</button></div></div>'
@@ -545,14 +576,14 @@
         }).join('');
         return '<div class="card" style="margin:10px 0"><b>' + h(p.question) + '</b> ' + (p.closed ? '<span class="pill">' + h(T('مغلق', 'Closed')) + '</span>' : '') +
           '<div class="sub">' + h(p.cohort_name || T('كل الطلبة', 'All students')) + (isStaff() ? ' · ' + h(T('أجاب ', 'Answered ') + total + T(' من ', ' of ') + p.eligible) : '') + '</div>' + opts +
-          (isAdmin() ? '<div class="tabs"><button class="btn sm" data-act="pl-close" data-id="' + p.id + '" data-c="' + (p.closed ? 0 : 1) + '">' + h(p.closed ? T('إعادة فتح', 'Reopen') : T('إغلاق', 'Close')) + '</button> <button class="btn sm bad" data-act="pl-del" data-id="' + p.id + '" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button></div>' : '') + '</div>';
+          (CAN('poll') ? '<div class="tabs"><button class="btn sm" data-act="pl-close" data-id="' + p.id + '" data-c="' + (p.closed ? 0 : 1) + '">' + h(p.closed ? T('إعادة فتح', 'Reopen') : T('إغلاق', 'Close')) + '</button> <button class="btn sm bad" data-act="pl-del" data-id="' + p.id + '" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button></div>' : '') + '</div>';
       }).join('') || '<div class="empty">' + h(T('لا استبيانات', 'No polls')) + '</div>') + '</div>';
   }
 
   function annMsg(m) {
     var base = msgHtml(m, false, true), extra = '';
     if (m.pinned) extra += '<div><span class="pill warn">📌 ' + h(T('مثبّت', 'Pinned')) + '</span></div>';
-    if (isAdmin() && m.id) {
+    if (CAN('ann') && m.id) {
       var coh = ST.cohorts.filter(function (c) { return c.id === ST.cohort; })[0], mem = coh ? Number(coh.members) : 0;
       extra += '<div class="sub">👁 ' + h(T('اطّلع ' + (m.readers || 0) + ' من ' + mem, 'Seen by ' + (m.readers || 0) + ' of ' + mem)) + ' · <button class="btn sm" data-act="cm-pin" data-id="' + m.id + '" data-p="' + (m.pinned ? 0 : 1) + '">' + h(m.pinned ? T('إلغاء التثبيت', 'Unpin') : T('📌 تثبيت', '📌 Pin')) + '</button></div>';
     }
@@ -563,7 +594,7 @@
   var DAYS = [['sun', 'الأحد', 'Sun'], ['mon', 'الاثنين', 'Mon'], ['tue', 'الثلاثاء', 'Tue'], ['wed', 'الأربعاء', 'Wed'], ['thu', 'الخميس', 'Thu']];
   async function loadWeek() { ST.week.rows = (await rpc('comm_weekly_list')) || []; }
   function weekHtml() {
-    var adm = isAdmin(), rows = ST.week.rows || [];
+    var adm = CAN('weekly'), rows = ST.week.rows || [];
     var head = '<tr><th>#</th><th>' + h(T('الاسم', 'Name')) + '</th>' + DAYS.map(function (d) { return '<th>' + h(d[ar() ? 1 : 2]) + '</th>'; }).join('') + '<th>' + h(T('ملاحظات', 'Notes')) + '</th>' + (adm ? '<th></th>' : '') + '</tr>';
     var body = rows.map(function (r, i) {
       var c = r.cells || {};

@@ -29,7 +29,7 @@
   function $x(s) { return document.querySelector(s); }
   function toast_(m) { if (typeof toast === 'function') toast(m); }
   function today() { return new Date().toISOString().slice(0, 10); }
-  function isAdmin() { return (window.CTX || {}).role === 'admin'; }
+  function isAdmin() { return !!(window.CAN && window.CAN('proj')); }
 
   var css = document.createElement('style');
   css.textContent = '.ex-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:12px}.ex-stats .card{padding:10px 12px}.ex-stats b{font-size:22px;display:block}' +

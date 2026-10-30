@@ -78,14 +78,33 @@
     return id.toLowerCase() + '@planner.local';
   }
   /* ---------- role context: what this account may see ---------- */
-  window.CTX = null; window.COMM_ONLY = false; window.HAS_COMM = false;
+  window.CTX = null; window.COMM_ONLY = false; window.HAS_COMM = false; window.PERMS = null;
+  /* صلاحيات المسؤول: PERMS=null تعني مسؤولاً رئيسياً (كل شيء)؛ وإلا كائن مفاتيحه الصلاحيات الممنوحة. 'main' للرئيسي فقط. */
+  window.CAN = function (k) {
+    if (!window.CTX || window.CTX.role !== 'admin') return false;
+    if (!window.PERMS) return true;
+    return k !== 'main' && !!window.PERMS[k];
+  };
   function applyCtx(c) {
     window.CTX = c || null;
     var role = c && c.role;
     window.HAS_COMM = !!role;
     window.COMM_ONLY = !!role && role !== 'admin' && !c.planner;
   }
+  async function loadPerms() {
+    var pk = 'planner_perms_' + (user && user.id); window.PERMS = null;
+    if (!window.CTX || window.CTX.role !== 'admin') return;
+    try {
+      var r = await sb.rpc('comm_my_perms');
+      if (!r.error) { window.PERMS = r.data && r.data.main === false ? (r.data.perms || {}) : null; try { localStorage.setItem(pk, JSON.stringify(window.PERMS)); } catch (e) {} return; }
+      if (/comm_my_perms|function/i.test(r.error.message || '')) return;   // subadmin.sql غير مثبّت: الجميع كاملو الصلاحية
+    } catch (e) {}
+    try { window.PERMS = JSON.parse(localStorage.getItem(pk) || 'null'); } catch (e) { window.PERMS = null; }
+  }
   async function loadCtx() {
+    await loadCtx0(); await loadPerms();
+  }
+  async function loadCtx0() {
     var key = 'planner_ctx_' + (user && user.id);
     try {
       var r = await sb.rpc('comm_my_context');

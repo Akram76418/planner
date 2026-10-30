@@ -22,6 +22,11 @@ Deno.serve(async (req) => {
     if (!me || me.role !== 'admin') return json({ error: 'admin only' }, 403);
 
     const body = await req.json();
+    // صلاحيات المسؤول الفرعي: لا سجل في admin_perms = مسؤول رئيسي (كل شيء)
+    const { data: ap } = await admin.from('admin_perms').select('perms').eq('user_id', u.user.id).maybeSingle();
+    const can = (k: string) => !ap || !!(ap.perms && ap.perms[k] === true);
+    const need: Record<string, string> = { reset: 'reset', delete: 'delete', wipe: 'wipe', create: 'create' };
+    if (need[body.action] && !can(need[body.action])) return json({ error: 'permission denied: ' + need[body.action] }, 403);
 
     if (body.action === 'reset') {
       // إعادة كلمة المرور إلى الافتراضية: لحساب واحد (user_id) أو لقائمة (ids) أو لمجموعة كاملة (scope + after، على دفعات).

@@ -170,7 +170,7 @@ const clamp=(n,a,b)=>Math.min(b,Math.max(a,n));
 
 /* ---------- i18n ---------- */
 const TX={
-ar:{app:'منظّم أعمالي اليومية',appEn:'My Daily Planner',dash:'لوحة التحكم',cal:'التقويم',appts:'المواعيد',follow:'متابعاتي اليومية',tasks:'المهام',reports:'التقارير والإنجازات',settings:'الإعدادات',comm:'التواصل',proj:'المشاريع الخارجية',logs:'السجلات',signout:'خروج / تبديل الحساب',
+ar:{app:'منظّم أعمالي اليومية',appEn:'My Daily Planner',dash:'لوحة التحكم',cal:'التقويم',appts:'المواعيد',follow:'متابعاتي اليومية',tasks:'المهام',reports:'التقارير والإنجازات',settings:'الإعدادات',comm:'التواصل',proj:'المشاريع الخارجية',logs:'السجلات',pdfFiles:'ملفات PDF مرفقة',pdfHint:'اختياري — حتى 10 ميغابايت للملف، ويلزم اتصال بالإنترنت للرفع.',pdfNeedLogin:'سجّل الدخول لإرفاق الملفات.',pdfOffline:'رفع الملفات يحتاج اتصالاً بالإنترنت.',pdfOnly:'يُسمح بملفات PDF فقط.',pdfBig:'الملف أكبر من 10 ميغابايت.',pdfOpenErr:'تعذّر فتح الملف.',ledger:'دفتر الدفعات',signout:'خروج / تبديل الحساب',
 new:'إضافة جديدة',newAppt:'موعد / اجتماع',newTask:'مهمة',newFollow:'متابعة يومية',save:'حفظ',cancel:'إلغاء',close:'إغلاق',edit:'تعديل',del:'حذف',delOk:'تأكيد الحذف',details:'التفاصيل',
 title:'العنوان',date:'التاريخ',start:'البداية',end:'النهاية',place:'المكان',people:'المشاركون',type:'النوع',prio:'الأولوية',status:'الحالة',optional:'اختياري',
 t_meeting:'اجتماع',t_admin:'عمل إداري',t_teaching:'تدريس',t_research:'بحث علمي',t_personal:'موعد شخصي',t_project:'متابعة مشروع',t_custom:'نوع مخصص',customType:'اسم النوع المخصص',
@@ -211,7 +211,7 @@ sumNoData:'لا توجد بيانات مسجلة في هذه الفترة.',
 nextOpen:'إجراءات اجتماعات غير منفذة',
 timeErr:'وقت النهاية يجب أن يكون بعد البداية',titleErr:'العنوان مطلوب',dateErr:'التاريخ مطلوب',
 wd:['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت']},
-en:{app:'My Daily Planner',appEn:'منظّم أعمالي اليومية',dash:'Dashboard',cal:'Calendar',appts:'Appointments',follow:'Daily Focus',tasks:'Tasks',reports:'Reports & Achievements',settings:'Settings',comm:'Messages',proj:'External projects',logs:'Logs',signout:'Sign out / switch account',
+en:{app:'My Daily Planner',appEn:'منظّم أعمالي اليومية',dash:'Dashboard',cal:'Calendar',appts:'Appointments',follow:'Daily Focus',tasks:'Tasks',reports:'Reports & Achievements',settings:'Settings',comm:'Messages',proj:'External projects',logs:'Logs',pdfFiles:'Attached PDF files',pdfHint:'Optional — up to 10 MB each; an internet connection is needed to upload.',pdfNeedLogin:'Sign in to attach files.',pdfOffline:'Uploading files needs an internet connection.',pdfOnly:'PDF files only.',pdfBig:'File is larger than 10 MB.',pdfOpenErr:'Could not open the file.',ledger:'Payments ledger',signout:'Sign out / switch account',
 new:'Add new',newAppt:'Appointment / meeting',newTask:'Task',newFollow:'Follow-up',save:'Save',cancel:'Cancel',close:'Close',edit:'Edit',del:'Delete',delOk:'Confirm delete',details:'Details',
 title:'Title',date:'Date',start:'Start',end:'End',place:'Location',people:'Participants',type:'Type',prio:'Priority',status:'Status',optional:'optional',
 t_meeting:'Meeting',t_admin:'Admin work',t_teaching:'Teaching',t_research:'Research',t_personal:'Personal',t_project:'Project follow-up',t_custom:'Custom type',customType:'Custom type name',
@@ -283,10 +283,7 @@ async function seed(){
     mk({title:'اجتماع مجلس القسم (مثال)',date:d,start:'11:00',end:'12:00',place:'قاعة الاجتماعات',people:'أعضاء القسم',goal:'مراجعة خطة الفصل الدراسي',topics:[{id:uid(),text:'جدول المحاضرات',owner:'',taskId:''},{id:uid(),text:'توزيع المقررات',owner:'',taskId:''}],prio:'high',rem:{offs:[15,60],custom:''}}),
     mk({title:'مراجعة مسودة البحث (مثال)',date:addDays(d,1),start:'09:30',end:'10:30',type:'research'}),
   ];
-  S.tasks=[
-    {id:uid(),title:'إعداد جدول الاجتماع (مثال)',prio:'high',due:d,minutes:45,status:'inprogress',subtasks:[{t:'جمع الملاحظات',done:true},{t:'إرسال الجدول',done:false}],repeat:'none',apptId:'',notes:'',delayReason:'',doneOn:'',createdAt:nowISO()},
-    {id:uid(),title:'الرد على مراسلات اللجنة (مثال)',prio:'med',due:addDays(d,-1),minutes:20,status:'notstarted',subtasks:[],repeat:'none',apptId:'',notes:'',delayReason:'',doneOn:'',createdAt:nowISO()},
-  ];
+  S.tasks=[];
   S.follows=[
     {id:uid(),title:'متابعة اعتماد الخطة الدراسية (مثال)',desc:'',goal:'الحصول على الاعتماد النهائي',prio:'high',startDate:addDays(d,-3),due:addDays(d,4),next:d,nextStep:'مراسلة رئيس القسم',status:'waiting',progress:40,linkType:'person',linkName:'رئيس القسم',linkAppt:'',repeat:'none',repeatN:3,pinned:true,log:[{at:nowISO(),text:'أُرسلت المسودة وبانتظار الرد',progress:40}],lastUpdate:nowISO(),doneOn:''},
   ];
@@ -303,13 +300,14 @@ const IC={
  reports:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
  settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
  comm:'<path d="M4 5h16v11H9l-5 4z"/>',
+ ledger:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/><path d="M6 6l9-3 2 3"/>',
  logs:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 12h7M9 16h7"/>',
  out:'<path d="M9 4H5v16h4M16 8l4 4-4 4M20 12H9"/>',
  proj:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5h6v2M3 13h18"/>',
  plus:'<path d="M12 5v14M5 12h14"/>'};
 const ic=(n,s=20)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
-const BASE_VIEWS=['dash','cal','appts','follow','tasks','reports','settings'];
-const views=()=>window.COMM_ONLY?['comm']:window.HAS_COMM?['dash','cal','appts','follow','tasks','reports','comm',...(window.CTX&&window.CTX.role==='admin'?['proj','logs']:[]),'settings']:BASE_VIEWS;
+const BASE_VIEWS=['dash','cal','appts','follow','reports','settings'];
+const views=()=>window.COMM_ONLY?['comm']:window.HAS_COMM?['dash','cal','appts','follow','reports','comm',...(window.CAN&&window.CAN('proj')?['proj']:[]),...(window.CAN&&window.CAN('logs')?['logs']:[]),...(window.CAN&&window.CAN('main')?['ledger']:[]),'settings']:BASE_VIEWS;
 
 /* ---------- domain helpers ---------- */
 const PR={high:0,med:1,low:2};
@@ -323,7 +321,7 @@ const sortAppts=a=>a.sort((x,y)=>(x.date+x.start).localeCompare(y.date+y.start))
 const timeRange=a=>a.start?(a.start+(a.end?' – '+a.end:'')):'';
 const actionDone=x=>x.taskId&&taskById(x.taskId)&&taskById(x.taskId).status==='done';
 function pct(n,d){return d?Math.round(100*n/d):null}
-function taskRate(from,to){const due=S.tasks.filter(x=>x.due&&x.due>=from&&x.due<=to);const dn=due.filter(x=>x.status==='done').length;return{n:dn,d:due.length,p:pct(dn,due.length)}}
+function taskRate(from,to){return{n:0,d:0,p:null}}   /* المهام أُزيلت من الواجهة */
 
 /* ---------- reminders ---------- */
 function remTimes(a){
@@ -449,7 +447,7 @@ function saveAppt(id){
 /* ---------- appointment detail ---------- */
 function apptDetail(id){
   const a=apptById(id);if(!a)return;
-  const itemRow=(x,list)=>{const tk=x.taskId&&taskById(x.taskId);return `<div class="row"><div class="main"><div class="t">${esc(x.text)}</div><div class="m">${x.owner?`<span>${t('owner')}: ${esc(x.owner)}</span>`:''}${tk?`<span class="pill ${tk.status==='done'?'ok':''}">${t('linkedTask')}: ${t('k_'+tk.status)}</span>`:''}</div></div><div class="act">${tk?'':`<button class="btn sm" data-act="item2task" data-id="${a.id}" data-list="${list}" data-item="${x.id}">${t('toTask')}</button>`}</div></div>`};
+  const itemRow=(x,list)=>`<div class="row"><div class="main"><div class="t">${esc(x.text)}</div><div class="m">${x.owner?`<span>${t('owner')}: ${esc(x.owner)}</span>`:''}</div></div></div>`;
   const dd=(k,v)=>v?`<dt>${t(k)}</dt><dd>${esc(v)}</dd>`:'';
   openModal(`<div class="dlg"><header><h2>${esc(a.title)}</h2><button class="btn sm" data-act="close">${t('close')}</button></header>
   <div class="m" style="display:flex;gap:8px;flex-wrap:wrap">${apptStatusPill(a.status)}${prioPill(a.prio)}<span class="pill">${esc(typeName(a))}</span></div>
@@ -513,7 +511,7 @@ function saveTask(id){
 /* ---------- follow-ups ---------- */
 const FST=['notstarted','inprogress','waiting','action','done'];
 function followForm(f){
-  const isNew=!f.id;
+  const isNew=!f.id;UI.pdfRm=[];
   openModal(`<div class="dlg"><header><h2>${esc(isNew?t('newFollow'):t('edit'))}</h2><button class="btn sm" data-act="close">${t('close')}</button></header>
   <form class="form" onsubmit="return false">
    <label class="full">${t('title')}<input id="f-title" value="${esc(f.title||'')}"></label>
@@ -525,23 +523,46 @@ function followForm(f){
    <label>${t('due')}<input id="f-due" type="date" value="${esc(f.due||'')}"></label>
    <label>${t('nextFollow')}<input id="f-next" type="date" value="${esc(f.next||today())}"></label>
    <label>${t('progress')} <b id="f-pv">${esc(f.progress||0)}%</b><input id="f-prog" type="range" min="0" max="100" step="5" value="${esc(f.progress||0)}" oninput="document.getElementById('f-pv').textContent=this.value+'%'"></label>
-   <label class="full">${t('nextStep')}<input id="f-step" value="${esc(f.nextStep||'')}"></label>
-   <label>${t('linkType')}<select id="f-lt">${opts(['none','person','org','project','meeting'],f.linkType||'none',v=>t('l_'+v))}</select></label>
-   <label>${t('linkName')}<input id="f-ln" value="${esc(f.linkName||'')}"></label>
-   <label class="full">${t('linkMeeting')}<select id="f-la"><option value="">—</option>${sortAppts(S.appts.slice()).map(a=>`<option value="${a.id}"${a.id===f.linkAppt?' selected':''}>${esc(a.date+' · '+a.title)}</option>`).join('')}</select></label>
-   <label>${t('repeat')}<select id="f-rep">${opts(['none','daily','weekly','custom'],f.repeat||'none',v=>v==='custom'?(L()==='ar'?'كل عدد أيام':'Every N days'):t('rep_'+v))}</select></label>
-   <label>${L()==='ar'?'عدد الأيام (للتكرار المخصص)':'Days (custom repeat)'}<input id="f-repn" type="number" min="1" value="${esc(f.repeatN||3)}"></label>
+   <div class="full"><b>${t('pdfFiles')}</b>
+    ${(f.files||[]).map(x=>`<div class="ck pdfrow" style="justify-content:space-between"><a href="#" data-act="pdf-open" data-p="${esc(x.path)}">📄 ${esc(x.name)}</a><button type="button" class="btn sm bad" data-act="pdf-mark" data-p="${esc(x.path)}">${t('del')}</button></div>`).join('')}
+    <input id="f-pdf" type="file" accept="application/pdf,.pdf" multiple style="margin-top:6px"><div class="sub" style="font-size:12px">${t('pdfHint')}</div></div>
    <label class="ck full"><input id="f-pin" type="checkbox"${f.pinned?' checked':''}>${t('pin')}</label>
   </form><div id="a-err" class="pill bad" hidden></div>
   <footer><button class="btn" data-act="close">${t('cancel')}</button><button class="btn pri" data-act="save-follow" data-id="${esc(f.id||'')}">${t('save')}</button></footer></div>`);
 }
-function saveFollow(id){
-  const title=val('f-title');if(!title){const e=$('#a-err');e.textContent=t('titleErr');e.hidden=false;return}
+const PDF_MAX=10*1024*1024;
+function pdfSb(){return window.PLANNER_AUTH&&window.PLANNER_AUTH.sb&&window.PLANNER_AUTH.sb()}
+async function saveFollow(id){
+  const title=val('f-title');const err=m=>{const e=$('#a-err');e.textContent=m;e.hidden=false};
+  if(!title){err(t('titleErr'));return}
   const st=val('f-status');let prog=parseInt(val('f-prog'))||0;if(st==='done')prog=100;
-  const d={title,desc:val('f-desc'),goal:val('f-goal'),prio:val('f-prio'),status:st,startDate:val('f-start'),due:val('f-due'),next:val('f-next'),nextStep:val('f-step'),progress:prog,linkType:val('f-lt'),linkName:val('f-ln'),linkAppt:val('f-la'),repeat:val('f-rep'),repeatN:parseInt(val('f-repn'))||3,pinned:chk('f-pin')};
+  const d={title,desc:val('f-desc'),goal:val('f-goal'),prio:val('f-prio'),status:st,startDate:val('f-start'),due:val('f-due'),next:val('f-next'),progress:prog,pinned:chk('f-pin')};
   const old=id?S.follows.find(x=>x.id===id):null;
+  const fid=old?old.id:uid();
+  const picked=Array.from(($('#f-pdf')||{}).files||[]);
+  const added=[];
+  if(picked.length){
+    const c=pdfSb(),me=window.PLANNER_AUTH&&window.PLANNER_AUTH.user&&window.PLANNER_AUTH.user();
+    if(!c||!me){err(t('pdfNeedLogin'));return}
+    if(!navigator.onLine){err(t('pdfOffline'));return}
+    for(const f of picked){
+      if(!(f.type==='application/pdf'||/\.pdf$/i.test(f.name))){err(f.name+' — '+t('pdfOnly'));return}
+      if(f.size>PDF_MAX){err(f.name+' — '+t('pdfBig'));return}
+    }
+    const btn=document.querySelector('[data-act="save-follow"]');if(btn){btn.disabled=true;btn.textContent='…'}
+    for(const f of picked){
+      const path=me.id+'/'+fid+'/'+uid()+'.pdf';
+      const r=await c.storage.from('follow-files').upload(path,f,{contentType:'application/pdf'});
+      if(r.error){if(btn){btn.disabled=false;btn.textContent=t('save')}err(f.name+' — '+r.error.message);for(const a of added)c.storage.from('follow-files').remove([a.path]);return}
+      added.push({path,name:f.name.slice(0,120),size:f.size});
+    }
+  }
+  const rm=UI.pdfRm||[];
+  if(rm.length&&pdfSb())pdfSb().storage.from('follow-files').remove(rm).catch(()=>{});
+  const keep=((old&&old.files)||[]).filter(x=>!rm.includes(x.path)).concat(added);
+  d.files=keep;
   if(old){Object.assign(old,d);old.lastUpdate=nowISO();old.doneOn=st==='done'?(old.doneOn||today()):''}
-  else S.follows.push(Object.assign({id:uid(),log:[{at:nowISO(),text:L()==='ar'?'تم الإنشاء':'Created',progress:prog}],lastUpdate:nowISO(),doneOn:st==='done'?today():''},d));
+  else S.follows.push(Object.assign({id:fid,log:[{at:nowISO(),text:L()==='ar'?'تم الإنشاء':'Created',progress:prog}],lastUpdate:nowISO(),doneOn:st==='done'?today():''},d));
   save('follows');closeModal();toast(t('saved'));render();
 }
 function followUpdateForm(f){
@@ -550,7 +571,7 @@ function followUpdateForm(f){
   <label>${t('progress')} <b id="u-pv">${f.progress}%</b><input id="u-prog" type="range" min="0" max="100" step="5" value="${f.progress}" oninput="document.getElementById('u-pv').textContent=this.value+'%'"></label>
   <label>${t('status')}<select id="u-status">${opts(FST,f.status,v=>t('f_'+v))}</select></label>
   <label>${t('nextFollow')}<input id="u-next" type="date" value="${esc(f.next||today())}"></label>
-  <label>${t('nextStep')}<input id="u-step" value="${esc(f.nextStep||'')}"></label></div>
+  </div>
   ${(f.log||[]).length?`<h3>${t('history')}</h3><div style="color:var(--muted);font-size:13px">${f.log.slice(-8).reverse().map(h=>`<div>${esc(new Date(h.at).toLocaleDateString(loc()))} — ${esc(h.text)} (${h.progress}%)</div>`).join('')}</div>`:''}
   <footer><button class="btn" data-act="close">${t('cancel')}</button><button class="btn pri" data-act="save-update" data-id="${f.id}">${t('save')}</button></footer></div>`);
 }
@@ -573,11 +594,10 @@ function followRank(f){const d=today();const od=(f.next&&f.next<d)||(f.due&&f.du
 function followCmp(a,b){const x=followRank(a),y=followRank(b);for(let i=0;i<x.length;i++){if(x[i]<y[i])return-1;if(x[i]>y[i])return 1}return 0}
 function followRow(f,compact){
   const d=today(),late=f.status!=='done'&&((f.next&&f.next<d)||(f.due&&f.due<d));
-  const lt=f.linkType&&f.linkType!=='none'?(f.linkName||t('l_'+f.linkType)):'';
-  const ap=f.linkAppt&&apptById(f.linkAppt);
+  const pdfs=(f.files||[]).map(x=>`<a class="pill" href="#" data-act="pdf-open" data-p="${esc(x.path)}">📄 ${esc(x.name)}</a>`).join(' ');
   return `<div class="row"><div class="main"><div class="t">${f.pinned?'📌 ':''}${esc(f.title)}</div>
-  <div class="m"><span class="pill ${f.status==='done'?'ok':late?'bad':''}">${late&&f.status!=='done'?t('late'):t('f_'+f.status)}</span>${prioPill(f.prio)}${f.next?`<span>${t('nextFollow')}: ${esc(fmtD(f.next,{day:'numeric',month:'short'}))}</span>`:''}${lt?`<span>↔ ${esc(lt)}</span>`:''}${ap?`<span>↔ ${esc(ap.title)}</span>`:''}</div>
-  ${f.nextStep?`<div class="m"><span>${t('nextStep')}: ${esc(f.nextStep)}</span></div>`:''}
+  <div class="m"><span class="pill ${f.status==='done'?'ok':late?'bad':''}">${late&&f.status!=='done'?t('late'):t('f_'+f.status)}</span>${prioPill(f.prio)}${f.next?`<span>${t('nextFollow')}: ${esc(fmtD(f.next,{day:'numeric',month:'short'}))}</span>`:''}</div>
+  ${pdfs?`<div class="m">${pdfs}</div>`:''}
   <div class="bar" style="margin-top:8px"><i style="width:${f.progress}%"></i></div><div class="m"><span>${f.progress}%</span><span>${t('updated')}: ${esc(new Date(f.lastUpdate).toLocaleDateString(loc()))}</span></div></div>
   ${compact?'':`<div class="act" style="max-width:210px"><button class="btn sm pri" data-act="follow-update" data-id="${f.id}">${t('addUpdate')}</button><button class="btn sm" data-act="follow-pin" data-id="${f.id}">${f.pinned?t('unpin'):t('pin')}</button>${late?`<button class="btn sm" data-act="follow-plus1" data-id="${f.id}">${t('plus1')}</button>`:''}<button class="btn sm" data-act="edit-follow" data-id="${f.id}">${t('edit')}</button><button class="btn sm bad" data-act="del-follow" data-id="${f.id}" data-confirm="1">${t('del')}</button></div>`}</div>`;
 }
@@ -587,36 +607,31 @@ function vDash(){
   const todays=sortAppts(S.appts.filter(a=>a.date===d&&a.status!=='cancelled'));
   const upc=sortAppts(S.appts.filter(a=>a.status!=='cancelled'&&a.status!=='done'&&ts(a.date,a.end||a.start||'23:59')>=now));
   const next=upc[0];
-  const open=S.tasks.filter(x=>x.status!=='done');
-  const late=open.filter(isLate),dueToday=open.filter(x=>x.due===d);
+  const openF=S.follows.filter(f=>f.status!=='done').length;
   const rems=dueReminders();
   const fl=S.follows.filter(f=>f.status!=='done').sort(followCmp).slice(0,5);
   const ws=weekStart(d),we=addDays(ws,6);
-  const rd=taskRate(d,d),rw=taskRate(ws,we);
   const meetDone=S.appts.filter(a=>a.status==='done'&&a.date>=ws&&a.date<=we).length;
-  const tDone=S.tasks.filter(x=>x.status==='done'&&x.doneOn>=ws&&x.doneOn<=we).length;
-  const rate=r=>r.p==null?`<span class="sub">${t('none')}</span>`:`<div class="stat"><b>${r.p}%</b><span>${r.n}/${r.d}</span></div><div class="bar" style="margin-top:6px"><i style="width:${r.p}%"></i></div>`;
+  const fDoneW=S.follows.filter(f=>f.status==='done'&&f.doneOn>=ws&&f.doneOn<=we).length;
   const list=(arr,fn,max)=>arr.length?`<div class="list">${arr.slice(0,max||99).map(fn).join('')}</div>`:`<div class="empty">${t('noItems')}</div>`;
   return head(fmtD(d,{weekday:'long',day:'numeric',month:'long',year:'numeric'}),t('app'))+
   (()=>{const m=window.syncBanner?window.syncBanner():(UI.persisted?t('unsynced'):(L()==='ar'?'تعذّر حفظ البيانات في هذا المتصفح. الحفظ المحلي غير متاح الآن.':'Local storage is unavailable in this browser, so nothing is being saved.'));return m?`<div class="banner noprint"><span>${esc(m)}</span></div>`:''})()+
   `<div class="grid g4" style="margin-bottom:14px">
     <div class="card stat"><b>${todays.length}</b><span>${t('dToday')}</span></div>
     <div class="card stat"><b>${next?esc(next.start||'—'):'—'}</b><span>${t('dNext')}${next?': '+esc(next.title):''}</span></div>
-    <div class="card stat"><b>${late.length}</b><span>${t('overdue')} · ${t('tasks')}</span></div>
+    <div class="card stat"><b>${openF}</b><span>${t('follow')}</span></div>
     <div class="card stat"><b>${rems.length}</b><span>${t('dRem')}</span></div></div>`+
   `<div class="grid g2">
    <section class="card"><h2>${t('dToday')}<button class="btn sm" data-act="go" data-v="appts">${t('appts')}</button></h2>${list(todays,apptRow)}</section>
    <section class="card"><h2>${t('dRem')}</h2>${rems.length?`<div class="list">${rems.map(r=>`<div class="row"><div class="main"><div class="t">${esc(r.a.title)}</div><div class="m"><span class="pill ${Date.now()-r.at>5*60000?'warn':''}">${Date.now()-r.at>5*60000?t('missed'):t('today')}</span><span>${esc(r.a.date)} ${esc(r.a.start)}</span></div></div><div class="act"><button class="btn sm" data-act="rem-snooze" data-key="${esc(r.key)}">${t('snooze')}</button><button class="btn sm pri" data-act="rem-done" data-key="${esc(r.key)}">${t('dismiss')}</button></div></div>`).join('')}</div>`:`<div class="empty">${t('noItems')}</div>`}</section>
    <section class="card"><h2>${t('dUpcoming')}</h2>${list(upc,apptRow,5)}</section>
-   <section class="card"><h2>${t('dTasks')}<button class="btn sm" data-act="go" data-v="tasks">${t('tasks')}</button></h2>${list(late.concat(dueToday.filter(x=>!isLate(x))),taskRow,6)}</section>
    <section class="card"><h2>${t('dFollow')}<button class="btn sm" data-act="go" data-v="follow">${t('follow')}</button></h2>${list(fl,f=>followRow(f,true))}</section>
-   <section class="card"><h2>${t('dSummary')}</h2><div class="grid" style="gap:16px"><div><div class="sub">${t('dRateDay')}</div>${rate(rd)}</div><div><div class="sub">${t('dRateWeek')}</div>${rate(rw)}</div>
-    <div style="display:flex;gap:24px"><div class="stat"><b>${meetDone}</b><span>${t('meetingsDone')}</span></div><div class="stat"><b>${tDone}</b><span>${t('tasksDone')}</span></div></div></div></section>
+   <section class="card"><h2>${t('dSummary')}</h2><div style="display:flex;gap:24px"><div class="stat"><b>${meetDone}</b><span>${t('meetingsDone')}</span></div><div class="stat"><b>${fDoneW}</b><span>${t('doneFollows')}</span></div></div></section>
   </div>`;
 }
 
 function itemsOn(date){
-  return{a:sortAppts(S.appts.filter(x=>x.date===date)),k:S.tasks.filter(x=>x.due===date)};
+  return{a:sortAppts(S.appts.filter(x=>x.date===date)),k:[]};
 }
 function vCal(){
   const c=UI.cal;const sel=c.sel||c.date;
@@ -652,16 +667,6 @@ function vFollow(){
   const arr=S.follows.slice().sort((a,b)=>(a.status==='done')-(b.status==='done')||followCmp(a,b));
   return head(t('follow'),'',`<button class="btn pri" data-act="new-follow">+ ${t('newFollow')}</button>`)+(arr.length?`<div class="list">${arr.map(f=>followRow(f)).join('')}</div>`:`<div class="empty">${t('noItems')}</div>`);
 }
-function vTasks(){
-  const k=UI.tk;const d=today();
-  const tabs=['all','notstarted','inprogress','done','overdue'];
-  let arr=S.tasks.filter(x=>k.tab==='all'||(k.tab==='overdue'?isLate(x):x.status===k.tab));
-  arr.sort(k.sort==='prio'?(a,b)=>(a.status==='done')-(b.status==='done')||PR[a.prio]-PR[b.prio]||(a.due||'9').localeCompare(b.due||'9'):(a,b)=>(a.status==='done')-(b.status==='done')||(a.due||'9').localeCompare(b.due||'9')||PR[a.prio]-PR[b.prio]);
-  const ws=weekStart(d),rd=taskRate(d,d),rw=taskRate(ws,addDays(ws,6));
-  return head(t('tasks'),`${t('dRateDay')}: ${rd.p==null?'—':rd.p+'%'} · ${t('dRateWeek')}: ${rw.p==null?'—':rw.p+'%'}`,`<button class="btn pri" data-act="new-task">+ ${t('newTask')}</button>`)+
-  `<div class="tabs">${tabs.map(x=>`<button data-act="tk-tab" data-tab="${x}" aria-pressed="${k.tab===x}">${t('k_'+x)} (${S.tasks.filter(y=>x==='all'||(x==='overdue'?isLate(y):y.status===x)).length})</button>`).join('')}<select data-tk="sort" style="width:auto"><option value="prio"${k.sort==='prio'?' selected':''}>${t('sortPrio')}</option><option value="date"${k.sort==='date'?' selected':''}>${t('sortDate')}</option></select></div>`+
-  (arr.length?`<div class="list">${arr.map(taskRow).join('')}</div>`:`<div class="empty">${t('noItems')}</div>`);
-}
 
 /* ---------- reports ---------- */
 function reportData(from,to){
@@ -687,7 +692,6 @@ function autoSummary(r){
 }
 function suggestions(r){
   const out=[];
-  r.lateT.sort((a,b)=>PR[a.prio]-PR[b.prio]).slice(0,3).forEach(x=>out.push((L()==='ar'?'إنجاز المهمة المتأخرة: ':'Finish overdue task: ')+x.title));
   S.follows.filter(f=>f.status==='action'||f.status==='waiting').slice(0,2).forEach(f=>out.push((L()==='ar'?'متابعة: ':'Follow up: ')+f.title));
   r.openActs.slice(0,3).forEach(o=>out.push((L()==='ar'?'تنفيذ إجراء من اجتماع: ':'Action from meeting: ')+o.x.text));
   return out;
@@ -725,12 +729,12 @@ function vReports(){
    ${r.openActs.length?`<h3>${t('nextOpen')}</h3>`+tbl([t('actions').split('(')[0],t('owner'),t('appts')],r.openActs.map(o=>[esc(o.x.text),esc(o.x.owner||'—'),esc(o.a.title)])):''}
    ${r.needFollow.length?`<h3>${t('needFollow')}</h3><div>${r.needFollow.map(a=>esc(a.title)).join(' · ')}</div>`:''}
    <h3>${t('rAch')}</h3>
-   <div class="grid g4"><div class="stat"><b>${r.doneT.length}</b><span>${t('doneTasks')}</span></div><div class="stat"><b>${r.rate.p==null?'—':r.rate.p+'%'}</b><span>${t('rate')} (${r.rate.n}/${r.rate.d})</span></div><div class="stat"><b>${r.fdone.length}</b><span>${t('doneFollows')}</span></div><div class="stat"><b>${r.lateT.length}</b><span>${t('lateWork')}</span></div></div>
+   <div class="grid g4"><div class="stat"><b>${r.fdone.length}</b><span>${t('doneFollows')}</span></div><div class="stat"><b>${r.lateT.length}</b><span>${t('lateWork')}</span></div></div>
    ${r.doneT.length?`<h3>${t('doneTasks')}</h3>`+tbl([t('title'),t('date')],r.doneT.map(x=>[esc(x.title),esc(x.doneOn)])):''}
    ${r.fprog.length?`<h3>${t('progressFollows')}</h3>`+tbl([t('title'),t('progress'),t('status')],r.fprog.map(f=>[esc(f.title),f.progress+'%',esc(t('f_'+f.status))])):''}
    ${r.lateT.length?`<h3>${t('lateWork')}</h3>`+tbl([t('title'),t('due'),t('delayReason')],r.lateT.map(x=>[esc(x.title),esc(x.due),esc(x.delayReason||'—')])):''}
    ${r.decisions.length?`<h3>${t('decisionsDone')}</h3>`+tbl([t('appts'),t('decisions')],r.decisions.map(a=>[esc(a.title),esc(a.decisions)])):''}
-   ${rp?`<h3>${t('compare')}</h3>`+tbl([' ',t('period'),t('prevPeriod')],[[t('appts'),r.n,rp.n],[t('meetingsDone'),r.done,rp.done],[t('doneTasks'),r.doneT.length,rp.doneT.length],[t('rate'),r.rate.p==null?'—':r.rate.p+'%',rp.rate.p==null?'—':rp.rate.p+'%'],[t('doneFollows'),r.fdone.length,rp.fdone.length]].map(x=>x.map(esc))):''}
+   ${rp?`<h3>${t('compare')}</h3>`+tbl([' ',t('period'),t('prevPeriod')],[[t('appts'),r.n,rp.n],[t('meetingsDone'),r.done,rp.done],[t('doneFollows'),r.fdone.length,rp.fdone.length]].map(x=>x.map(esc))):''}
    <h3>${t('rExec')}</h3>
    <label>${t('summary')}<textarea id="rp-sum" style="min-height:90px" ${ed.approved?'readonly':''}>${esc(ed.summary||autoSummary(r))}</textarea></label>
    ${sugg.length?`<div style="margin-top:8px"><b>${t('suggest')}</b><ul style="margin:4px 0 0;padding-inline-start:20px">${sugg.map(s=>`<li>${esc(s)}</li>`).join('')}</ul></div>`:''}
@@ -765,10 +769,10 @@ function render(){
   const signedIn=!!(window.PLANNER_AUTH&&window.PLANNER_AUTH.user&&window.PLANNER_AUTH.user());
   const navHtml=VIEWS.map(v=>`<button data-act="go" data-v="${v}" ${UI.view===v?'aria-current="page"':''}>${ic(v)}<span>${t(v)}</span></button>`).join('');
   $('#side').innerHTML=`<div class="brand"><img src="logo.png" alt="" width="46" height="46" style="border-radius:50%;background:#fff;padding:2px;display:block;margin-bottom:8px">${esc(window.COMM_ONLY?t('comm'):t('app'))}<small>${esc(window.COMM_ONLY?'':t('appEn'))}</small></div><div class="nav">${navHtml}</div>`;
-  $('#bottom').innerHTML=VIEWS.filter(v=>v!=='logs').map(v=>`<button data-act="go" data-v="${v}" ${UI.view===v?'aria-current="page"':''}>${ic(v,22)}<span>${esc(t(v).split(' ')[0])}</span></button>`).join('');
+  $('#bottom').innerHTML=VIEWS.filter(v=>v!=='logs'&&v!=='ledger').map(v=>`<button data-act="go" data-v="${v}" ${UI.view===v?'aria-current="page"':''}>${ic(v,22)}<span>${esc(t(v).split(' ')[0])}</span></button>`).join('');
   $('#mtitle').textContent=t(UI.view);
-  $('#fab').innerHTML=ic('plus',18)+'<span>'+t('new')+'</span>';$('#fab').style.display=(window.COMM_ONLY||UI.view==='comm'||UI.view==='proj'||UI.view==='logs')?'none':'';
-  const V={logs:window.logsView||(()=>''),comm:window.commView||(()=>''),proj:window.projView||(()=>''),dash:vDash,cal:vCal,appts:vAppts,follow:vFollow,tasks:vTasks,reports:vReports,settings:vSettings};
+  $('#fab').innerHTML=ic('plus',18)+'<span>'+t('new')+'</span>';$('#fab').style.display=(window.COMM_ONLY||UI.view==='comm'||UI.view==='proj'||UI.view==='logs'||UI.view==='ledger')?'none':'';
+  const V={logs:window.logsView||(()=>''),comm:window.commView||(()=>''),proj:window.projView||(()=>''),ledger:window.ledgerView||(()=>''),dash:vDash,cal:vCal,appts:vAppts,follow:vFollow,reports:vReports,settings:vSettings};
   const keepFocus=document.activeElement&&document.activeElement.id==='fq';
   const uname=signedIn?((window.CTX&&window.CTX.name)||(window.PLANNER_AUTH.user().email)||''):'';
   $('#mname').textContent=uname;$('#outBtn').style.display=signedIn?'':'none';
@@ -777,6 +781,7 @@ function render(){
   if(UI.view==='comm'&&window.commMount)window.commMount();
   if(UI.view==='proj'&&window.projMount)window.projMount();
   if(UI.view==='logs'&&window.logsMount)window.logsMount();
+  if(UI.view==='ledger'&&window.ledgerMount)window.ledgerMount();
   if(keepFocus){const e=$('#fq');e.focus();e.setSelectionRange(e.value.length,e.value.length)}
 }
 
@@ -784,7 +789,6 @@ function render(){
 function newChooser(){
   openModal(`<div class="dlg"><header><h2>${t('new')}</h2><button class="btn sm" data-act="close">${t('close')}</button></header><div class="list">
   <button class="row click" data-act="new-appt" style="text-align:start">${ic('appts')}<div class="main"><div class="t">${t('newAppt')}</div></div></button>
-  <button class="row click" data-act="new-task" style="text-align:start">${ic('tasks')}<div class="main"><div class="t">${t('newTask')}</div></div></button>
   <button class="row click" data-act="new-follow" style="text-align:start">${ic('follow')}<div class="main"><div class="t">${t('newFollow')}</div></div></button></div></div>`);
 }
 function download(name,text,mime){
@@ -823,12 +827,14 @@ const ACT={
  'tk-tab'(el){UI.tk.tab=el.dataset.tab;render()},
  'edit-follow'(el){followForm(S.follows.find(f=>f.id===el.dataset.id))},
  'save-follow'(el){saveFollow(el.dataset.id)},
- 'del-follow'(el){S.follows=S.follows.filter(f=>f.id!==el.dataset.id);save('follows');toast(t('deleted'));render()},
+ 'pdf-mark'(el){const p=el.dataset.p;(UI.pdfRm=UI.pdfRm||[]).push(p);const r=el.closest('.pdfrow');if(r)r.style.display='none'},
+ 'pdf-open'(el,ev){if(ev&&ev.preventDefault)ev.preventDefault();const c=pdfSb();if(!c)return;const w=window.open('','_blank');c.storage.from('follow-files').createSignedUrl(el.dataset.p,300).then(r=>{if(r.error||!r.data){if(w)w.close();toast(t('pdfOpenErr'));return}if(w)w.location.href=r.data.signedUrl;else location.href=r.data.signedUrl})},
+ 'del-follow'(el){const fo=S.follows.find(f=>f.id===el.dataset.id);if(fo&&(fo.files||[]).length&&pdfSb())pdfSb().storage.from('follow-files').remove(fo.files.map(x=>x.path)).catch(()=>{});S.follows=S.follows.filter(f=>f.id!==el.dataset.id);save('follows');toast(t('deleted'));render()},
  'follow-pin'(el){const f=S.follows.find(x=>x.id===el.dataset.id);f.pinned=!f.pinned;save('follows');render()},
  'follow-plus1'(el){const f=S.follows.find(x=>x.id===el.dataset.id);f.next=addDays(today(),1);f.lastUpdate=nowISO();(f.log=f.log||[]).push({at:nowISO(),text:t('plus1'),progress:f.progress});save('follows');render()},
  'follow-update'(el){followUpdateForm(S.follows.find(f=>f.id===el.dataset.id))},
  'save-update'(el){const f=S.follows.find(x=>x.id===el.dataset.id);const st=val('u-status');const p=st==='done'?100:parseInt(val('u-prog'))||0;
-   f.progress=p;f.status=st;f.next=val('u-next');f.nextStep=val('u-step');f.lastUpdate=nowISO();f.doneOn=st==='done'?(f.doneOn||today()):'';
+   f.progress=p;f.status=st;f.next=val('u-next');f.lastUpdate=nowISO();f.doneOn=st==='done'?(f.doneOn||today()):'';
    (f.log=f.log||[]).push({at:nowISO(),text:val('u-text')||t('addUpdate'),progress:p});
    if(st==='done'&&f.repeat&&f.repeat!=='none'){f.status='notstarted';f.progress=0;f.next=addDays(today(),f.repeat==='daily'?1:f.repeat==='weekly'?7:(f.repeatN||3));f.doneOn=today()}
    save('follows');closeModal();toast(t('saved'));render()},

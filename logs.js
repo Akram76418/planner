@@ -6,7 +6,7 @@
   function ar() { return PA() ? PA().lang() === 'ar' : true; }
   function T(a, e) { return ar() ? a : e; }
   function h(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-  function isAdmin() { return window.CTX && window.CTX.role === 'admin'; }
+  function isAdmin() { return !!(window.CAN && window.CAN('logs')); }
   function toast_(m) { if (typeof toast === 'function') toast(m); }
 
   /* ---------- تسجيل أخطاء التطبيق (للمستخدم المسجَّل فقط، بحد أقصى) ---------- */
@@ -60,7 +60,7 @@
 
   /* ---------- الإعدادات: مسح كل المراسلات (للمدير) ---------- */
   window.adminToolsSection = function () {
-    if (!isAdmin()) return '';
+    if (!(window.CAN && window.CAN('wipe'))) return '';
     return '<section class="card" style="grid-column:1/-1;border:1px solid var(--bad,#c0392b)"><h2>' + h(T('إرجاع التواصل إلى البداية', 'Reset messaging to a clean start')) + '</h2>' +
       '<p class="sub">' + h(T('يمسح نهائياً كل المحادثات والرسائل وقنوات الموظفين وإعلانات الشعب والملفات المرفقة عند الجميع. الحسابات والشعب وبيانات المخطط الشخصية تبقى كما هي. لا يمكن التراجع، فخذ نسخة احتياطية أولاً إن لزم.', 'Permanently deletes all chats, messages, staff channels, cohort announcements and attachments for everyone. Accounts, cohorts and personal planner data stay. This cannot be undone.')) + '</p>' +
       '<button class="btn bad" data-act="lg-wipe">' + h(T('مسح كل المراسلات عند الجميع', 'Delete all messages for everyone')) + '</button></section>';
