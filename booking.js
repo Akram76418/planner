@@ -15,7 +15,7 @@
   function norm(s) { return String(s || '').replace(/[ً-ٟـ]/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, ' ').trim().toLowerCase(); }
   function okUrl(u) { return /^https?:\/\/\S+$/i.test(u || ''); }
 
-  var B = { offs: [], off: 0, topics: [], groups: [], loaded: false, busy: false, err: '', msg: '', tab: 'groups', q: '', filt: 'all', edit: null, tEdit: null, offPanel: false, pw: null, closeMsg: '' };
+  var B = { offs: [], off: 0, topics: [], groups: [], loaded: false, busy: false, err: '', msg: '', tab: 'groups', q: '', filt: 'all', edit: null, tEdit: null, offPanel: false, pw: null, closeMsg: '', itop: '', igrp: '' };
   try { B.off = Number(localStorage.getItem('bk_off')) || 0; } catch (e) {}
 
   window.bookView = function () { return '<div id="bk-root"></div>'; };
@@ -79,7 +79,7 @@
         '<div class="tabs"><button class="btn sm" data-act="bk-offren">' + h(T('حفظ الاسم', 'Save name')) + '</button> <button class="btn sm" data-act="bk-offarc" data-confirm="1">' + h(o.archived ? T('استرجاع من الأرشيف', 'Restore') : T('أرشفة', 'Archive')) + '</button></div>' : '') + '</div>';
   }
   function tabsBar() {
-    var t = [['groups', T('المجموعات', 'Groups')], ['topics', T('المواضيع', 'Topics')], ['sched', T('الجدول', 'Schedule')], ['pw', T('كلمات المرور', 'Passwords')]];
+    var t = [['groups', T('المجموعات', 'Groups')], ['topics', T('المواضيع', 'Topics')], ['sched', T('الجدول', 'Schedule')], ['pw', T('كلمات المرور', 'Passwords')], ['imp', T('استيراد', 'Import')]];
     return '<div class="cm-tabs" style="margin:10px 0">' + t.map(function (x) { return '<button class="btn sm' + (B.tab === x[0] ? ' pri' : '') + '" data-act="bk-tab" data-t="' + x[0] + '">' + h(x[1]) + '</button>'; }).join('') + '</div>';
   }
   function groupCard(g) {
@@ -130,7 +130,7 @@
     var el = document.getElementById('bk-root'); if (!el) return;
     if (!can()) { el.innerHTML = '<div class="card"><div class="empty">' + h(T('هذه الصفحة للإدارة فقط', 'Admin only')) + '</div></div>'; return; }
     el.innerHTML = offBar() + (B.err ? '<p class="pill bad">' + h(B.err) + '</p>' : '') + (B.msg ? '<p class="pill ' + (B.msgBad ? 'bad' : 'ok') + '">' + h(B.msg) + '</p>' : '') + (B.busy ? '<p class="sub">…</p>' : '') +
-      (cur() ? tabsBar() + (B.tab === 'groups' ? groupsPane() : B.tab === 'topics' ? topicsPane() : B.tab === 'pw' ? pwPane() : schedPane()) : '');
+      (cur() ? tabsBar() + (B.tab === 'groups' ? groupsPane() : B.tab === 'topics' ? topicsPane() : B.tab === 'pw' ? pwPane() : B.tab === 'imp' ? impPane() : schedPane()) : '');
   }
 
 
@@ -156,6 +156,59 @@
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th>' + h(T('المجموعة', 'Group')) + '</th><th>' + h(T('كلمة المرور المؤقتة', 'Temp password')) + '</th><th></th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
   }
   function copyText(t) { try { navigator.clipboard.writeText(t); toast_(T('تم النسخ', 'Copied')); } catch (e) { window.prompt(T('انسخ:', 'Copy:'), t); } }
+
+
+  /* ---------- استيراد المواضيع وأسماء المجموعات ---------- */
+  function parseTopics(txt) {
+    var out = [], seen = {};
+    String(txt || '').split(/\r?\n/).forEach(function (ln) {
+      ln = ln.trim(); if (!ln) return;
+      var p = ln.indexOf('\t') >= 0 ? ln.split('\t') : ln.split('|');
+      var t = p[0].replace(/^\s*\d+\s*[-.)–:]\s*/, '').trim().slice(0, 200), d = (p.slice(1).join(' ').trim() || '').slice(0, 1500);
+      if (!t || seen[norm(t)]) return; seen[norm(t)] = 1; out.push({ title: t, descr: d || null });
+    });
+    return out;
+  }
+  function parseGroups(txt) {
+    var map = {}, last = 0, warn = [];
+    String(txt || '').split(/\r?\n/).forEach(function (ln) {
+      if (!ln.trim()) return;
+      var cells = ln.indexOf('\t') >= 0 ? ln.split('\t') : ln.split(/\s*[;|:,]\s*/);
+      if (cells.length === 1) { var sm = /^(\d{1,3})\s+(\S.*)$/.exec(ln.trim()); if (sm) cells = [sm[1], sm[2]]; }
+      var first = (cells[0] || '').replace(/[٠-٩]/g, function (d) { return d.charCodeAt(0) - 1632; }).trim();
+      var m = /^(?:مجموعة|المجموعة|group)?\s*(\d{1,3})$/i.exec(first), rest;
+      if (m) { last = Number(m[1]); rest = cells.slice(1); } else if (!first && last) { rest = cells.slice(1); } else if (last && cells.length === 1) { rest = cells; } else { warn.push(ln.trim().slice(0, 40)); return; }
+      var names = rest.join('،').split(/[،؛\n]/).map(function (s) { return s.replace(/^\s*\d+\s*[-.)]\s*/, '').trim().slice(0, 80); }).filter(Boolean);
+      if (!last) return; map[last] = map[last] || []; names.forEach(function (n) { if (!map[last].some(function (x) { return norm(x) === norm(n); })) map[last].push(n); });
+    });
+    return { map: map, warn: warn };
+  }
+  function impSummary() {
+    var t = parseTopics(B.itop), g = parseGroups(B.igrp), ks = Object.keys(g.map), names = 0; ks.forEach(function (k) { names += g.map[k].length; });
+    return { t: t, g: g, ks: ks, names: names };
+  }
+  function impPane() {
+    if (ro()) return '<p class="pill warn">' + h(T('المساق مؤرشف — لا استيراد.', 'Archived — no import.')) + '</p>';
+    var s = impSummary();
+    return '<div class="card"><b>1) ' + h(T('استيراد المواضيع', 'Import topics')) + '</b><p class="sub">' + h(T('موضوع في كل سطر (أو الصقها من Excel: العنوان ثم الوصف في عمود آخر، أو افصل بـ |). تُضاف بعد الموجود وتُنشأ مجموعة لكل موضوع جديد، والمكرّر يُتجاهل.', 'One topic per line (or paste from Excel: title, description column, or use |). Appended; one group is created per new topic; duplicates skipped.')) + '</p>' +
+      '<textarea id="im-top" data-bk="itop" rows="6" placeholder="الكفاءة المهنية&#10;الموافقة المستنيرة | وصف اختياري">' + h(B.itop) + '</textarea>' +
+      '<div class="tabs" style="margin-top:6px"><label class="btn sm">📂 ' + h(T('ملف Excel/CSV', 'Excel/CSV file')) + '<input type="file" accept=".xlsx,.xls,.csv,.txt" data-bk="ftop" hidden></label> <button class="btn sm pri" data-act="bk-imp-topics" data-confirm="1">' + h(T('استيراد المواضيع', 'Import topics')) + '</button> <span class="sub" id="im-tsum">' + h(T('جاهز: ', 'Ready: ') + s.t.length) + '</span></div></div>' +
+      '<div class="card"><b>2) ' + h(T('استيراد أسماء المجموعات', 'Import group members')) + '</b><p class="sub">' + h(T('كل سطر: رقم المجموعة ثم الاسم (مفصولان بـ Tab أو فاصلة). الصقه من Excel مباشرة (عمودان: رقم المجموعة | الاسم)؛ تكفي كتابة رقم المجموعة في أول سطر لها. أو: «1: علي، سارة». يستبدل أسماء المجموعات المذكورة فقط. المجموعات تُنشأ بإضافة المواضيع أولاً.', 'Each line: group number then name (Tab/comma separated), or paste two Excel columns. "1: Ali, Sara" also works. Replaces members of the listed groups only. Add topics first so groups exist.')) + '</p>' +
+      '<textarea id="im-grp" data-bk="igrp" rows="8" placeholder="1&#9;أحمد علي&#10;&#9;سارة محمد&#10;2&#9;ليلى خالد">' + h(B.igrp) + '</textarea>' +
+      '<div class="tabs" style="margin-top:6px"><label class="btn sm">📂 ' + h(T('ملف Excel/CSV', 'Excel/CSV file')) + '<input type="file" accept=".xlsx,.xls,.csv,.txt" data-bk="fgrp" hidden></label> <button class="btn sm pri" data-act="bk-imp-groups" data-confirm="1">' + h(T('استيراد الأسماء', 'Import members')) + '</button> <span class="sub" id="im-gsum">' + h(T('جاهز: ', 'Ready: ') + s.ks.length + T(' مجموعة / ', ' groups / ') + s.names + T(' اسم', ' names')) + '</span></div></div>';
+  }
+  function parseCsvText(txt) {
+    var rows = [], row = [], cur = '', q = false;
+    for (var i = 0; i < txt.length; i++) { var c = txt[i];
+      if (q) { if (c === '"' && txt[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; }
+      else if (c === '"') q = true; else if (c === ',' || c === ';') { row.push(cur); cur = ''; } else if (c === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; } else if (c !== '\r') cur += c; }
+    row.push(cur); rows.push(row);
+    return rows.filter(function (r) { return r.some(function (c) { return String(c).trim(); }); }).map(function (r) { return r.join('\t'); }).join('\n');
+  }
+  async function fileToText(f) {
+    if (/\.(xlsx|xls)$/i.test(f.name)) { await loadXlsx(); var wb = XLSX.read(await f.arrayBuffer(), { type: 'array' }); var ws = wb.Sheets[wb.SheetNames[0]]; return XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', blankrows: false }).map(function (r) { return r.join('\t'); }).join('\n'); }
+    var t = await f.text(); return /\.csv$/i.test(f.name) ? parseCsvText(t) : t;
+  }
 
   /* ---------- تصدير ---------- */
   function exportRows() {
@@ -190,6 +243,21 @@
     'bk-tab': function (el) { B.tab = el.dataset.t; B.edit = null; B.tEdit = null; draw(); if (B.tab === 'pw') guard(loadPw); },
     'bk-close': function (el) { var on = el.dataset.v === '1'; var msg = val('bk-cmsg').trim(); B.closeMsg = '';
       guard(async function () { var r = await sb().rpc('book_admin_set_closed', { p_off: B.off, p_closed: on, p_msg: on ? (msg || null) : null }); if (r.error) throw r.error; say(on ? T('أُوقف الحجز وأُغلق التعديل للطلبة', 'Booking stopped, edits locked') : T('أُعيد فتح الحجز', 'Booking reopened')); await reloadQuiet(); }); },
+    'bk-imp-topics': function () {
+      var s = impSummary(), have = {}; B.topics.forEach(function (t) { have[norm(t.title)] = 1; });
+      var add = s.t.filter(function (t) { return !have[norm(t.title)]; }); if (!add.length) { toast_(T('لا مواضيع جديدة للاستيراد', 'No new topics')); return; }
+      guard(async function () { for (var i = 0; i < add.length; i++) { var r = await sb().rpc('book_add_topic', { p_off: B.off, p_title: add[i].title, p_desc: add[i].descr }); if (r.error) throw new Error(T('توقف عند «', 'Stopped at "') + add[i].title + '»: ' + r.error.message); }
+        B.itop = ''; say(T('أُضيف ' + add.length + ' موضوعاً ومجموعاتها', add.length + ' topics added')); await reloadQuiet(); });
+    },
+    'bk-imp-groups': function () {
+      var s = impSummary(); if (!s.ks.length) { toast_(T('لا أسماء للاستيراد', 'Nothing to import')); return; }
+      var miss = s.ks.filter(function (k) { return !findG(k); }); var ok = s.ks.filter(function (k) { return !!findG(k); });
+      var seen = {}, dup = []; ok.forEach(function (k) { s.g.map[k].forEach(function (n) { var x = norm(n); if (seen[x] && seen[x] !== k) dup.push(n); seen[x] = k; }); });
+      if (dup.length) { B.err = T('اسم مكرر في أكثر من مجموعة: ', 'Name in several groups: ') + dup.slice(0, 5).join('، '); draw(); return; }
+      guard(async function () { var n = 0;
+        for (var i = 0; i < ok.length; i++) { var names = s.g.map[ok[i]].slice(0, 15), g = findG(ok[i]); var r = await sb().from('book_groups').update({ students: names }).eq('id', g.id); if (r.error) throw r.error; n++; }
+        B.igrp = ''; say(T('حُدّثت أسماء ' + n + ' مجموعة', n + ' groups updated') + (miss.length ? T(' — غير موجودة (أضف مواضيع أولاً): ', ' — missing: ') + miss.join('، ') : '') + (s.g.warn.length ? T(' — أسطر تُجوهلت: ', ' — skipped lines: ') + s.g.warn.length : '')); await reloadQuiet(); });
+    },
     'bk-copy': function (el) { copyText(el.dataset.v); },
     'bk-pwload': function () { guard(loadPw); },
     'bk-pwreset': function (el) { var g = Number(el.dataset.g); guard(async function () { var r = await sb().rpc('book_admin_reset_pw', { p_group: g, p_off: null }); if (r.error) throw r.error; await loadPw(); say(T('أُعيّنت كلمة مرور مؤقتة جديدة', 'New temporary password set')); }); },
@@ -259,6 +327,17 @@
     else if (k === 'crs') { B.off = Number(e.target.value); B.edit = null; B.tEdit = null; load(); }
   });
   document.addEventListener('input', function (e) { if (e.target && e.target.dataset && e.target.dataset.bk === 'q') { B.q = e.target.value; var pos = e.target.selectionStart; draw(); var q = document.getElementById('bk-q'); if (q) { q.focus(); try { q.setSelectionRange(pos, pos); } catch (x) {} } } });
+
+  document.addEventListener('input', function (e) {
+    var k = e.target && e.target.dataset && e.target.dataset.bk; if (k !== 'itop' && k !== 'igrp') return;
+    B[k] = e.target.value; var s = impSummary(), a = document.getElementById('im-tsum'), c = document.getElementById('im-gsum');
+    if (a) a.textContent = T('جاهز: ', 'Ready: ') + s.t.length; if (c) c.textContent = T('جاهز: ', 'Ready: ') + s.ks.length + T(' مجموعة / ', ' groups / ') + s.names + T(' اسم', ' names');
+  });
+  document.addEventListener('change', function (e) {
+    var k = e.target && e.target.dataset && e.target.dataset.bk; if (k !== 'ftop' && k !== 'fgrp') return;
+    var f = e.target.files && e.target.files[0]; if (!f) return;
+    fileToText(f).then(function (t) { if (k === 'ftop') B.itop = t; else B.igrp = t; e.target.value = ''; draw(); }).catch(function () { B.err = T('تعذّر قراءة الملف', 'Could not read file'); draw(); });
+  });
   window.EXTRA_ACT = window.EXTRA_ACT || {};
   Object.keys(ACTS).forEach(function (k) { window.EXTRA_ACT[k] = ACTS[k]; });
 })();
