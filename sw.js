@@ -1,6 +1,6 @@
 /* Service worker: app shell offline + Web Push display. Bump VERSION when files change. */
-const VERSION = 'planner-v36';
-const SHELL = ['./', './index.html', './config.js', './sync.js', './comm.js', './ext.js', './logs.js', './ledger.js', './logo.png', './manifest.json', './icon-192.png', './icon-512.png'];
+const VERSION = 'planner-v38';
+const SHELL = ['./', './index.html', './config.js', './sync.js', './comm.js', './ext.js', './logs.js', './ledger.js', './booking.js', './logo.png', './manifest.json', './icon-192.png', './icon-512.png'];
 const CDN = ['https://cdn.jsdelivr.net/', 'https://fonts.googleapis.com/', 'https://fonts.gstatic.com/'];
 
 self.addEventListener('install', e => {
@@ -15,6 +15,7 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   const sameOrigin = url.origin === location.origin;
   const cdn = CDN.some(p => req.url.startsWith(p));
+  if (sameOrigin && url.pathname.endsWith('/book.html')) return;   // student portal: always live
   if (!sameOrigin && !cdn) return;                 // Supabase API calls always go to the network
   if (cdn) {                                       // cache-first for pinned CDN files and fonts
     e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(r => { const cp = r.clone(); caches.open(VERSION).then(c => c.put(req, cp)); return r; })));

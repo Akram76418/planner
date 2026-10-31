@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#12304d"><meta name="robots" content="noindex">
+<title>حجز المحاضرات</title>
+<link rel="icon" href="icon-192.png">
+<style>
+:root{--bg:#f4f7fa;--card:#fff;--tx:#14263a;--sub:#5d6f82;--ac:#0b6f8a;--ok:#12805c;--bad:#b3261e;--warn:#9a6700;--bd:#dbe3ea}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1822;--card:#16232f;--tx:#e8eef4;--sub:#9db0c1;--ac:#4cc3dc;--ok:#4cd6a4;--bad:#ff8a80;--warn:#f0c14b;--bd:#27394a}}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.6 system-ui,"Segoe UI",Tahoma,sans-serif}
+header{background:#12304d;color:#fff;padding:14px 16px;text-align:center}header h1{margin:0;font-size:20px}
+main{max-width:760px;margin:0 auto;padding:14px 16px 40px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin:12px 0}
+label{display:block;font-size:14px;color:var(--sub);margin:8px 0 2px}
+select,input,textarea{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit}
+button{font:inherit;padding:10px 16px;border-radius:10px;border:1px solid var(--bd);background:var(--card);color:var(--tx);cursor:pointer;margin:4px 0}
+button.pri{background:var(--ac);color:#fff;border-color:var(--ac)}button.bad{color:var(--bad)}button:disabled{opacity:.5}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:480px){.row2{grid-template-columns:1fr}}
+.pill{display:inline-block;padding:2px 10px;border-radius:99px;font-size:13px;border:1px solid var(--bd)}.ok{color:var(--ok)}.warn{color:var(--warn)}
+.msg{padding:10px 12px;border-radius:10px;margin:10px 0}.msg.err{background:rgba(179,38,30,.12);color:var(--bad)}.msg.good{background:rgba(18,128,92,.12);color:var(--ok)}
+.closed{background:rgba(154,103,0,.14);color:var(--warn);border:1px solid var(--warn);padding:12px;border-radius:12px;margin:12px 0;font-weight:600}
+.topic{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;border-top:1px solid var(--bd);padding:10px 0}.topic:first-child{border-top:0}
+.sub{color:var(--sub);font-size:14px}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:6px;border-bottom:1px solid var(--bd);text-align:start}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}.tabs button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+</style></head><body>
+<header><h1>📚 حجز المحاضرات</h1></header>
+<main id="app"><div class="card">جارٍ التحميل…</div></main>
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+'use strict';
+var C = window.PLANNER_CONFIG, sb = null;
+var S = { offs: [], off: 0, st: null, group: 0, tok: '', me: null, msg: '', bad: false, busy: false, tab: 'topics', q: '', filt: 'all', pwMode: false };
+var DAYS = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+var ERR = { auth: 'انتهت الجلسة، سجّل الدخول من جديد.', mustchange: 'يجب تغيير كلمة المرور أولاً.', closed: 'الحجز مغلق حالياً ولا يمكن التعديل.', has: 'مجموعتك حجزت موضوعاً بالفعل. ألغِ الحجز أولاً لاختيار غيره.', notopic: 'اختر/احجز موضوعاً أولاً.', taken: 'سبقتكم مجموعة أخرى إلى هذا الموضوع. اختر موضوعاً آخر.', names: 'الأسماء غير صالحة (حتى 15 اسماً).', link: 'الرابط غير صالح (يجب أن يبدأ بـ https://).', weak: 'كلمة المرور قصيرة (6 أحرف على الأقل) أو غير مسموحة.', same: 'اختر كلمة مرور مختلفة عن الحالية.', nooff: 'المساق غير متاح.' };
+function h(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function norm(s){return String(s||'').replace(/[ً-ٟـ]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي').toLowerCase().trim()}
+function fmtDate(d){var m=/^(\d{4})-(\d{2})-(\d{2})/.exec(d||'');return m?DAYS[new Date(+m[1],+m[2]-1,+m[3]).getDay()]+' '+m[1]+'-'+m[2]+'-'+m[3]:'—'}
+function say(m,bad){S.msg=m||'';S.bad=!!bad}
+function tkey(){return 'bk_tok_'+S.off+'_'+S.group}
+function saveTok(t){S.tok=t;try{localStorage.setItem(tkey(),t)}catch(e){}}
+function clearTok(){S.tok='';S.me=null;try{localStorage.removeItem(tkey())}catch(e){}}
+async function rpc(fn,args){var r=await sb.rpc(fn,args||{});if(r.error)throw new Error(r.error.message);return r.data}
+async function guard(fn){S.busy=true;draw();try{await fn()}catch(e){say('تعذّر الاتصال: '+(e.message||e),true)}S.busy=false;draw()}
+function fail(r){if(r.err==='auth'){clearTok()}if(r.err==='dup'){say('الاسم «'+r.name+'» مسجّل في مجموعة أخرى.',true)}else say(ERR[r.err]||'حدث خطأ',true)}
+
+async function init(){
+  if(!window.supabase||!C){document.getElementById('app').innerHTML='<div class="card">تعذّر تحميل الصفحة. تحقق من الاتصال.</div>';return}
+  sb=window.supabase.createClient(C.SUPABASE_URL,C.SUPABASE_ANON_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
+  await guard(async function(){S.offs=await rpc('book_pub_offerings');var p=null;try{p=JSON.parse(localStorage.getItem('bk_sel')||'null')}catch(e){}
+    if(p&&S.offs.some(function(o){return o.id===p.off}))S.off=p.off,S.group=p.group||0;else if(S.offs[0])S.off=S.offs[0].id;
+    await loadState();await tryResume()});
+}
+async function loadState(){S.st=S.off?await rpc('book_pub_state',{p_off:S.off}):null;if(S.st&&S.st.ok===false)S.st=null;
+  try{localStorage.setItem('bk_sel',JSON.stringify({off:S.off,group:S.group}))}catch(e){}}
+async function tryResume(){S.tok='';S.me=null;if(!S.group)return;try{S.tok=localStorage.getItem(tkey())||''}catch(e){}if(S.tok)await loadMe()}
+async function loadMe(){var r=await rpc('book_pub_me',{p_tok:S.tok});if(!r.ok){clearTok();return}S.me=r;S.pwMode=!!r.must_change}
+
+function draw(){
+  var el=document.getElementById('app');
+  var sems=[];S.offs.forEach(function(o){if(sems.indexOf(o.semester)<0)sems.push(o.semester)});
+  var cur=S.offs.filter(function(o){return o.id===S.off})[0];
+  var html='';
+  if(!S.offs.length){el.innerHTML='<div class="card">لا توجد مساقات متاحة للحجز حالياً.</div>';return}
+  html+='<div class="card"><div class="row2"><div><label>الفصل الدراسي</label><select id="sem">'+sems.map(function(s){return'<option'+(cur&&cur.semester===s?' selected':'')+' value="'+h(s)+'">'+h(s)+'</option>'}).join('')+'</select></div>'+
+    '<div><label>المساق</label><select id="crs">'+S.offs.filter(function(o){return cur&&o.semester===cur.semester}).map(function(o){return'<option value="'+o.id+'"'+(o.id===S.off?' selected':'')+'>'+h(o.course)+'</option>'}).join('')+'</select></div></div></div>';
+  if(S.msg)html+='<div class="msg '+(S.bad?'err':'good')+'">'+h(S.msg)+'</div>';
+  if(S.st&&S.st.closed)html+='<div class="closed">⛔ '+h(S.st.closed_msg||'تم إيقاف الحجز وإغلاق التعديل. يمكنكم الاطلاع على الجدول فقط.')+'</div>';
+  if(S.busy)html+='<div class="sub">…</div>';
+  if(!S.st){el.innerHTML=html+'<div class="card">المساق غير متاح.</div>';bind();return}
+  if(!S.me)html+=loginBox();
+  else if(S.pwMode)html+=pwBox();
+  else html+=mineBox();
+  html+='<div class="card"><div class="tabs"><button class="'+(S.tab==='topics'?'on':'')+'" data-t="topics">المواضيع</button><button class="'+(S.tab==='sched'?'on':'')+'" data-t="sched">الجدول</button></div>'+(S.tab==='topics'?topicsBox():schedBox())+'</div>';
+  el.innerHTML=html;bind();
+}
+function loginBox(){
+  return '<div class="card"><b>تسجيل دخول المجموعة</b><label>رقم المجموعة</label><select id="grp"><option value="">— اختر —</option>'+S.st.groups.map(function(g){return'<option value="'+g.group_no+'"'+(g.group_no===S.group?' selected':'')+'>مجموعة '+g.group_no+'</option>'}).join('')+'</select>'+
+    '<label>كلمة المرور</label><input id="pw" type="password" autocomplete="current-password" maxlength="64"><button class="pri" id="login"'+(S.busy?' disabled':'')+'>دخول</button><div class="sub">كلمة المرور المؤقتة تستلمونها من المشرف، وستُطلب منكم تغييرها عند أول دخول.</div></div>';
+}
+function pwBox(){
+  return '<div class="card"><b>🔐 غيّروا كلمة المرور قبل المتابعة</b><label>كلمة المرور الجديدة (6 أحرف على الأقل)</label><input id="np1" type="password" autocomplete="new-password" maxlength="64"><label>تأكيد كلمة المرور</label><input id="np2" type="password" autocomplete="new-password" maxlength="64"><button class="pri" id="chpw">حفظ</button> <button id="logout">خروج</button></div>';
+}
+function mineBox(){
+  var m=S.me,cl=m.closed;
+  return '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><b>مجموعة '+m.group_no+'</b><button id="logout">تسجيل خروج</button></div>'+
+    (m.topic_id?'<div style="margin:6px 0"><span class="pill ok">محجوز</span> <b>#'+m.topic_no+'</b> '+h(m.topic_title)+' '+(cl?'':'<button class="bad" id="cancel" data-confirm="1">إلغاء الحجز</button>')+'</div>':'<div class="sub" style="margin:6px 0">لم تحجزوا موضوعاً بعد — اختاروا من قائمة المواضيع أدناه.</div>')+
+    '<div class="sub">📅 '+h(fmtDate(m.date))+'</div>'+
+    '<label>أسماء أعضاء المجموعة (اسم في كل سطر، حتى 15)</label><textarea id="names" rows="5" '+(cl?'disabled':'')+'>'+h((m.students||[]).join('\n'))+'</textarea>'+
+    '<label>رابط المحاضرة (يُضاف بعد حجز الموضوع)</label><input id="link" dir="ltr" maxlength="500" placeholder="https://…" value="'+h(m.link||'')+'" '+(cl?'disabled':'')+'>'+
+    (cl?'':'<button class="pri" id="savemine">حفظ الأسماء والرابط</button> ')+'<button id="chpw2">تغيير كلمة المرور</button></div>';
+}
+function topicsBox(){
+  var q=norm(S.q),mine=S.me&&S.me.topic_id,cl=S.st.closed;
+  var list=S.st.topics.filter(function(t){if(S.filt==='free'&&t.group_no)return false;if(S.filt==='taken'&&!t.group_no)return false;return !q||norm(t.title+' '+(t.descr||'')).indexOf(q)>=0||String(t.no)===q});
+  return '<div style="margin:10px 0"><input id="q" placeholder="بحث في المواضيع…" value="'+h(S.q)+'"></div><div class="tabs">'+[['all','الكل'],['free','المتاحة'],['taken','المحجوزة']].map(function(c){return'<button class="f '+(S.filt===c[0]?'on':'')+'" data-f="'+c[0]+'">'+c[1]+'</button>'}).join('')+'</div>'+
+    (list.map(function(t){var taken=!!t.group_no,own=S.me&&t.id===S.me.topic_id;
+      return'<div class="topic"><div><b>#'+t.no+'</b> '+h(t.title)+(t.descr?'<div class="sub">'+h(t.descr)+'</div>':'')+'<div>'+(taken?'<span class="pill warn">'+(own?'مجموعتكم':'محجوز — مجموعة '+t.group_no)+'</span>':'<span class="pill ok">متاح</span>')+'</div></div>'+
+        (!taken&&S.me&&!S.me.must_change&&!cl&&!mine?'<button class="pri bk" data-id="'+t.id+'">احجز</button>':'')+'</div>'}).join('')||'<div class="sub" style="margin-top:10px">لا نتائج</div>');
+}
+function schedBox(){
+  return '<div style="overflow-x:auto;margin-top:10px"><table><thead><tr><th>المجموعة</th><th>الموضوع</th><th>التاريخ</th></tr></thead><tbody>'+S.st.groups.map(function(g){var t=S.st.topics.filter(function(x){return x.no===g.topic_no})[0];return'<tr><td>'+g.group_no+'</td><td>'+(t?'#'+t.no+' '+h(t.title):'—')+'</td><td>'+h(fmtDate(g.date))+'</td></tr>'}).join('')+'</tbody></table></div>';
+}
+function $(i){return document.getElementById(i)}
+var armed=null;
+function confirmTwice(btn,fn){if(armed===btn.id){armed=null;fn();return}armed=btn.id;btn.textContent='اضغط مرة أخرى للتأكيد';setTimeout(function(){if(armed===btn.id){armed=null;draw()}},4000)}
+function bind(){
+  var e;
+  if(e=$('sem'))e.onchange=function(){var l=S.offs.filter(function(o){return o.semester===e.value});if(l[0])pick(l[0].id)};
+  if(e=$('crs'))e.onchange=function(){pick(Number(e.value))};
+  if(e=$('grp'))e.onchange=function(){S.group=Number(e.value)||0;try{localStorage.setItem('bk_sel',JSON.stringify({off:S.off,group:S.group}))}catch(x){}};
+  if(e=$('pw'))e.onkeydown=function(ev){if(ev.key==='Enter')$('login').click()};
+  if(e=$('login'))e.onclick=function(){var g=Number($('grp').value),pw=$('pw').value;if(!g||!pw){say('اختر المجموعة واكتب كلمة المرور',true);draw();return}S.group=g;
+    guard(async function(){var r=await rpc('book_pub_login',{p_off:S.off,p_group:g,p_pw:pw});say('');
+      if(!r.ok){say(r.err==='locked'?'تم قفل الدخول مؤقتاً بسبب محاولات خاطئة. حاول بعد '+r.wait+' دقيقة.':'رقم المجموعة أو كلمة المرور غير صحيحة'+(r.left!=null?' (متبقي '+r.left+' محاولات)':''),true);return}
+      saveTok(r.token);await loadMe();try{localStorage.setItem('bk_sel',JSON.stringify({off:S.off,group:S.group}))}catch(x){}})};
+  if(e=$('logout'))e.onclick=function(){clearTok();S.pwMode=false;say('');draw()};
+  if(e=$('chpw2'))e.onclick=function(){S.pwMode=true;draw()};
+  if(e=$('chpw'))e.onclick=function(){var a=$('np1').value,b=$('np2').value;if(a!==b){say('كلمتا المرور غير متطابقتين',true);draw();return}
+    guard(async function(){var r=await rpc('book_pub_change_pw',{p_tok:S.tok,p_new:a});if(!r.ok){fail(r);return}saveTok(r.token);S.pwMode=false;say('تم تغيير كلمة المرور ✔');await loadMe();S.pwMode=false})};
+  if(e=$('savemine'))e.onclick=function(){var names=$('names').value.split(/\r?\n/).map(function(s){return s.trim()}).filter(Boolean),lk=$('link').value.trim()||null;
+    guard(async function(){var r=await rpc('book_pub_save',{p_tok:S.tok,p_names:names,p_link:lk});if(!r.ok){fail(r);return}say('تم الحفظ ✔');await loadMe();await loadState()})};
+  if(e=$('cancel'))e.onclick=function(){var b=e;confirmTwice(b,function(){guard(async function(){var r=await rpc('book_pub_cancel',{p_tok:S.tok});if(!r.ok){fail(r);return}say('أُلغي الحجز');await loadMe();await loadState()})})};
+  Array.prototype.forEach.call(document.querySelectorAll('button.bk'),function(b){b.onclick=function(){guard(async function(){var r=await rpc('book_pub_book',{p_tok:S.tok,p_topic:Number(b.dataset.id)});
+    if(!r.ok){fail(r);await loadState();return}say('تم حجز الموضوع ✔ — أضيفوا أسماء الأعضاء والرابط');await loadMe();await loadState()})}});
+  Array.prototype.forEach.call(document.querySelectorAll('.tabs button[data-t]'),function(b){b.onclick=function(){S.tab=b.dataset.t;draw()}});
+  Array.prototype.forEach.call(document.querySelectorAll('button.f'),function(b){b.onclick=function(){S.filt=b.dataset.f;draw()}});
+  if(e=$('q'))e.oninput=function(){S.q=e.value;var p=e.selectionStart;draw();var q=$('q');if(q){q.focus();try{q.setSelectionRange(p,p)}catch(x){}}};
+}
+async function pick(id){S.off=id;S.group=0;S.msg='';await guard(async function(){await loadState();await tryResume()})}
+init();
+</script></body></html>
