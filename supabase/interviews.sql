@@ -14,6 +14,11 @@ create table if not exists public.iv_evaluators (
   user_id uuid not null references auth.users(id) on delete cascade,
   primary key (session_id, user_id)
 );
+create table if not exists public.iv_entrants (
+  session_id bigint not null references public.iv_sessions(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  primary key (session_id, user_id)
+);
 create table if not exists public.iv_candidates (
   id bigint generated always as identity primary key,
   session_id bigint not null references public.iv_sessions(id) on delete cascade,
@@ -38,9 +43,10 @@ alter table public.iv_sessions add column if not exists iv_date date;
 alter table public.iv_sessions add column if not exists iv_time time;
 alter table public.iv_sessions enable row level security;
 alter table public.iv_evaluators enable row level security;
+alter table public.iv_entrants enable row level security;
 alter table public.iv_candidates enable row level security;
 alter table public.iv_scores enable row level security;
-revoke all on public.iv_sessions, public.iv_evaluators, public.iv_candidates, public.iv_scores from anon, authenticated;
+revoke all on public.iv_sessions, public.iv_entrants, public.iv_evaluators, public.iv_candidates, public.iv_scores from anon, authenticated;
 
 -- المعايير الافتراضية (من نموذج المعايير والأوزان)
 create or replace function public.iv_default_criteria() returns jsonb language sql immutable as $$
@@ -103,6 +109,7 @@ create or replace function public.iv_visible(p_cand bigint) returns boolean lang
 create or replace function public.iv_roles() returns jsonb language sql stable security definer set search_path = public as $$
   select jsonb_build_object('manage', public.admin_can('iv'),
     'evaluator', exists (select 1 from iv_evaluators where user_id = auth.uid()),
+    'entrant', exists (select 1 from iv_entrants where user_id = auth.uid()),
     'candidate', exists (select 1 from iv_candidates where user_id = auth.uid())) $$;
 
 -- ===== الإدارة =====
@@ -145,6 +152,7 @@ create or replace function public.iv_set_evaluators(p_session bigint, p_users uu
 begin
   if not public.admin_can('iv') then raise exception 'admin only'; end if;
   if exists (select 1 from iv_candidates where session_id = p_session and user_id = any (coalesce(p_users, '{}'))) then raise exception 'candidate cannot be an evaluator'; end if;
+  if exists (select 1 from iv_entrants where session_id = p_session and user_id = any (coalesce(p_users, '{}'))) then raise exception 'entrant cannot be an evaluator'; end if;
   delete from iv_evaluators where session_id = p_session and not (user_id = any (coalesce(p_users, '{}')));
   insert into iv_evaluators (session_id, user_id) select p_session, u from unnest(coalesce(p_users, '{}')) u
     where exists (select 1 from profiles where id = u and role::text in ('admin', 'professor', 'staff')) on conflict do nothing;
@@ -156,6 +164,7 @@ begin
   if not public.admin_can('iv') then raise exception 'admin only'; end if;
   if p_user is not null then
     if exists (select 1 from iv_evaluators where session_id = p_session and user_id = p_user) then raise exception 'evaluator cannot be a candidate'; end if;
+    if exists (select 1 from iv_entrants where session_id = p_session and user_id = p_user) then raise exception 'entrant cannot be a candidate'; end if;
     select full_name into nm from profiles where id = p_user;
   end if;
   nm := coalesce(nullif(trim(coalesce(p_name, '')), ''), nm);
@@ -170,16 +179,50 @@ begin
   delete from iv_candidates where id = p_cand;
 end $$;
 
-create or replace function public.iv_cand_obj(p_cand bigint, p_obj jsonb) returns void language plpgsql security definer set search_path = public as $$
-declare ids text[]; k text; clean jsonb := '{}'::jsonb; v numeric;
+create or replace function public.iv_obj_apply(p_cand bigint, p_obj jsonb) returns void language plpgsql security definer set search_path = public as $$
+declare k text; clean jsonb := '{}'::jsonb; v numeric;
 begin
-  if not public.admin_can('iv') then raise exception 'admin only'; end if;
   for k in select jsonb_object_keys(coalesce(p_obj, '{}')) loop
     if not exists (select 1 from iv_candidates c join iv_sessions s on s.id = c.session_id, jsonb_array_elements(s.criteria) e where c.id = p_cand and e ->> 'id' = k and e ->> 'type' = 'obj') then continue; end if;
     begin v := (p_obj ->> k)::numeric; exception when others then continue; end;
     if v is not null and v >= 0 and v <= 1000 then clean := clean || jsonb_build_object(k, v); end if;
   end loop;
   update iv_candidates set obj = clean where id = p_cand;
+end $$;
+
+create or replace function public.iv_cand_obj(p_cand bigint, p_obj jsonb) returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.admin_can('iv') then raise exception 'admin only'; end if;
+  perform public.iv_obj_apply(p_cand, p_obj);
+end $$;
+
+-- مُدخلو البيانات الموضوعية: يُدخلون المعايير الموضوعية فقط، ولا يقيّمون ولا يدخلون في المتوسط
+create or replace function public.iv_set_entrants(p_session bigint, p_users uuid[]) returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.admin_can('iv') then raise exception 'admin only'; end if;
+  if exists (select 1 from iv_candidates where session_id = p_session and user_id = any (coalesce(p_users, '{}'))) then raise exception 'candidate cannot be an entrant'; end if;
+  if exists (select 1 from iv_evaluators where session_id = p_session and user_id = any (coalesce(p_users, '{}'))) then raise exception 'evaluator cannot be an entrant'; end if;
+  delete from iv_entrants where session_id = p_session and not (user_id = any (coalesce(p_users, '{}')));
+  insert into iv_entrants (session_id, user_id) select p_session, u from unnest(coalesce(p_users, '{}')) u
+    where exists (select 1 from profiles where id = u and role::text in ('admin', 'professor', 'staff')) on conflict do nothing;
+end $$;
+
+create or replace function public.iv_my_entry() returns jsonb language plpgsql stable security definer set search_path = public as $$
+begin
+  return coalesce((select jsonb_agg(jsonb_build_object('id', s.id, 'title', s.title, 'status', s.status, 'iv_date', s.iv_date, 'iv_time', s.iv_time,
+      'criteria', (select coalesce(jsonb_agg(c), '[]'::jsonb) from jsonb_array_elements(s.criteria) c where c ->> 'type' = 'obj'),
+      'candidates', coalesce((select jsonb_agg(jsonb_build_object('id', k.id, 'name', k.name, 'obj', k.obj) order by k.id) from iv_candidates k where k.session_id = s.id), '[]'::jsonb)) order by s.id desc)
+    from iv_sessions s join iv_entrants e on e.session_id = s.id and e.user_id = auth.uid()), '[]'::jsonb);
+end $$;
+
+create or replace function public.iv_entry_save(p_cand bigint, p_obj jsonb) returns jsonb language plpgsql security definer set search_path = public as $$
+declare s iv_sessions;
+begin
+  select s2.* into s from iv_sessions s2 join iv_candidates k on k.session_id = s2.id where k.id = p_cand;
+  if s.id is null or not exists (select 1 from iv_entrants where session_id = s.id and user_id = auth.uid()) then return jsonb_build_object('ok', false, 'err', 'notmember'); end if;
+  if s.status <> 'open' then return jsonb_build_object('ok', false, 'err', 'closed'); end if;
+  perform public.iv_obj_apply(p_cand, p_obj);
+  return jsonb_build_object('ok', true);
 end $$;
 
 create or replace function public.iv_release(p_cand bigint, p_on boolean) returns void language plpgsql security definer set search_path = public as $$
@@ -200,6 +243,7 @@ begin
   if not public.admin_can('iv') then raise exception 'admin only'; end if;
   select * into s from iv_sessions where id = p_session; if not found then return null; end if;
   return jsonb_build_object('session', to_jsonb(s),
+    'entrants', coalesce((select jsonb_agg(jsonb_build_object('user_id', n.user_id, 'name', coalesce(p.full_name, '—'))) from iv_entrants n left join profiles p on p.id = n.user_id where n.session_id = p_session), '[]'::jsonb),
     'evaluators', coalesce((select jsonb_agg(jsonb_build_object('user_id', e.user_id, 'name', coalesce(p.full_name, '—')) order by p.full_name) from iv_evaluators e left join profiles p on p.id = e.user_id where e.session_id = p_session), '[]'::jsonb),
     'candidates', coalesce((select jsonb_agg(jsonb_build_object('id', k.id, 'user_id', k.user_id, 'name', k.name, 'obj', k.obj, 'released', k.released, 'visible', public.iv_visible(k.id), 'calc', public.iv_calc(k.id),
         'evals', coalesce((select jsonb_agg(jsonb_build_object('evaluator_id', e.user_id, 'name', coalesce(p.full_name, '—'), 'scores', coalesce(sc.scores, '{}'::jsonb), 'comment', sc.comment, 'submitted', coalesce(sc.submitted, false)) order by p.full_name)
@@ -254,11 +298,13 @@ begin
 end $$;
 
 -- الصلاحيات
-revoke execute on function public.iv_default_criteria(), public.iv_check_criteria(jsonb), public.iv_calc(bigint), public.iv_visible(bigint) from public, anon, authenticated;
+revoke execute on function public.iv_obj_apply(bigint, jsonb), public.iv_default_criteria(), public.iv_check_criteria(jsonb), public.iv_calc(bigint), public.iv_visible(bigint) from public, anon, authenticated;
 revoke execute on function public.iv_roles(), public.iv_staff_list(), public.iv_admin_list(), public.iv_session_save(bigint, text, text, jsonb, text, text, date, time), public.iv_session_delete(bigint),
   public.iv_set_evaluators(bigint, uuid[]), public.iv_cand_add(bigint, uuid, text), public.iv_cand_delete(bigint), public.iv_cand_obj(bigint, jsonb), public.iv_release(bigint, boolean),
-  public.iv_reopen(bigint, uuid), public.iv_admin_detail(bigint), public.iv_my_eval(), public.iv_eval_save(bigint, jsonb, text, boolean), public.iv_my_results() from public, anon;
+  public.iv_reopen(bigint, uuid), public.iv_admin_detail(bigint), public.iv_my_eval(), public.iv_eval_save(bigint, jsonb, text, boolean), public.iv_my_results(),
+  public.iv_set_entrants(bigint, uuid[]), public.iv_my_entry(), public.iv_entry_save(bigint, jsonb) from public, anon;
 grant execute on function public.iv_roles(), public.iv_staff_list(), public.iv_admin_list(), public.iv_session_save(bigint, text, text, jsonb, text, text, date, time), public.iv_session_delete(bigint),
   public.iv_set_evaluators(bigint, uuid[]), public.iv_cand_add(bigint, uuid, text), public.iv_cand_delete(bigint), public.iv_cand_obj(bigint, jsonb), public.iv_release(bigint, boolean),
-  public.iv_reopen(bigint, uuid), public.iv_admin_detail(bigint), public.iv_my_eval(), public.iv_eval_save(bigint, jsonb, text, boolean), public.iv_my_results() to authenticated;
+  public.iv_reopen(bigint, uuid), public.iv_admin_detail(bigint), public.iv_my_eval(), public.iv_eval_save(bigint, jsonb, text, boolean), public.iv_my_results(),
+  public.iv_set_entrants(bigint, uuid[]), public.iv_my_entry(), public.iv_entry_save(bigint, jsonb) to authenticated;
 select 'ready' as status;

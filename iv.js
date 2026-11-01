@@ -23,11 +23,11 @@
     { id: 'c7', name: 'حل المشكلات (دراسة حالة موحدة)', type: 'com', weight: 10, method: 'حالة واحدة لجميع المتقدمين: جودة التحليل والقرار المقترح' },
     { id: 'c8', name: 'المرجعيات والنزاهة والالتزام المؤسسي', type: 'com', weight: 10, method: 'التحقق من المرجعيات والسجل المهني والالتزام بالأنظمة' },
     { id: 'c9', name: 'الملاءمة للتخصص واحتياجات القسم', type: 'com', weight: 10, method: 'مدى انسجام تخصص المتقدم وخبرته مع أولويات القسم' }];
-  var V = { loaded: false, busy: false, err: '', msg: '', bad: false, tab: '', list: [], sid: 0, det: null, staff: [], form: null, crit: null, my: [], mine: [], open: {}, dr: {} };
+  var V = { loaded: false, busy: false, err: '', msg: '', bad: false, tab: '', list: [], sid: 0, det: null, staff: [], form: null, crit: null, my: [], mine: [], ent: [], open: {}, dr: {} };
 
   function role() { return window.IV || {}; }
   window.ivView = function () { return '<div id="iv-root"></div>'; };
-  window.ivMount = function () { if (!V.tab) V.tab = role().manage ? 'manage' : role().evaluator ? 'eval' : 'mine'; draw(); if (!V.loaded) load(); };
+  window.ivMount = function () { if (!V.tab) V.tab = role().manage ? 'manage' : role().evaluator ? 'eval' : role().entrant ? 'entry' : 'mine'; draw(); if (!V.loaded) load(); };
   function say(m, bad) { V.msg = m || ''; V.bad = !!bad; }
   function run(fn) { V.busy = true; V.err = ''; return Promise.resolve().then(fn).catch(function (e) { V.err = (e && e.message) || String(e); }).then(function () { V.busy = false; draw(); }); }
   async function rpc(n, a) { var r = await sb().rpc(n, a || {}); if (r.error) throw new Error(r.error.message); return r.data; }
@@ -38,6 +38,7 @@
       var r = role();
       if (r.manage) { V.list = (await rpc('iv_admin_list')) || []; if (!V.sid && V.list[0]) V.sid = V.list[0].id; if (V.sid) V.det = await rpc('iv_admin_detail', { p_session: V.sid }); }
       if (r.evaluator) V.my = (await rpc('iv_my_eval')) || [];
+      if (r.entrant) V.ent = (await rpc('iv_my_entry')) || [];
       if (r.candidate) V.mine = (await rpc('iv_my_results')) || [];
       V.loaded = true;
     } catch (e) { V.err = (e && e.message) || String(e); if (/iv_|schema cache|does not exist/i.test(V.err)) V.err += ' — ' + T('شغّل interviews.sql في Supabase أولاً.', 'Run interviews.sql first.'); }
@@ -50,6 +51,7 @@
     var r = role(), t = [];
     if (r.manage) t.push(['manage', T('إدارة المقابلات', 'Manage')]);
     if (r.evaluator) t.push(['eval', T('تقييماتي (لجنة)', 'My evaluations')]);
+    if (r.entrant) t.push(['entry', T('إدخال البيانات الموضوعية', 'Objective data entry')]);
     if (r.candidate) t.push(['mine', T('نتيجتي', 'My result')]);
     if (t.length < 2) return '';
     return '<div class="cm-tabs" style="margin:0 0 10px">' + t.map(function (x) { return '<button class="btn sm' + (V.tab === x[0] ? ' pri' : '') + '" data-act="iv-tab" data-t="' + x[0] + '">' + h(x[1]) + '</button>'; }).join('') + '</div>';
@@ -57,7 +59,7 @@
   function draw() {
     var el = document.getElementById('iv-root'); if (!el) return;
     el.innerHTML = tabs() + (V.err ? '<p class="pill bad">' + h(V.err) + '</p>' : '') + (V.msg ? '<p class="pill ' + (V.bad ? 'bad' : 'ok') + '">' + h(V.msg) + '</p>' : '') + (V.busy ? '<p class="sub">…</p>' : '') +
-      (V.tab === 'manage' ? managePane() : V.tab === 'eval' ? evalPane() : minePane());
+      (V.tab === 'manage' ? managePane() : V.tab === 'eval' ? evalPane() : V.tab === 'entry' ? entryPane() : minePane());
   }
   function sessBar() {
     return '<div class="card"><div class="form"><label style="grid-column:1/-1">' + h(T('المقابلة', 'Interview')) + '<select data-iv="sid">' +
@@ -86,13 +88,16 @@
     var out = sessBar();
     if (V.form) out += critEditor();
     if (!V.det) return out + (V.list.length ? '' : '<div class="empty">' + h(T('لا مقابلات بعد. أنشئ أول مقابلة.', 'No interviews yet.')) + '</div>');
-    var d = V.det, s = d.session, evIds = d.evaluators.map(function (e) { return e.user_id; }), candIds = d.candidates.map(function (c) { return c.user_id; });
+    var d = V.det, s = d.session, enIds = (d.entrants || []).map(function (e) { return e.user_id; }), evIds = d.evaluators.map(function (e) { return e.user_id; }), candIds = d.candidates.map(function (c) { return c.user_id; });
     var tot = s.criteria.reduce(function (a, c) { return a + Number(c.weight); }, 0);
     out += '<div class="card"><b>👥 ' + h(T('لجنة التقييم', 'Committee')) + '</b> <span class="pill">' + evIds.length + '</span> <span class="sub">' + h(T('(الموصى به 4، ويمكن الزيادة أو النقصان)', '(4 recommended; add or remove freely)')) + '</span>' +
       '<input data-iv="staffq" placeholder="' + h(T('بحث عن موظف…', 'Search…')) + '" style="margin:6px 0"><div id="iv-evlist" style="max-height:220px;overflow:auto">' +
-      V.staff.filter(function (p) { return candIds.indexOf(p.id) < 0; }).map(function (p) { return '<label class="ivrow" data-n="' + h(p.full_name) + '" style="display:flex;flex-direction:row;align-items:center;gap:8px;padding:4px 0"><input type="checkbox" class="iv-evc" style="width:auto" value="' + p.id + '"' + (evIds.indexOf(p.id) >= 0 ? ' checked' : '') + '> ' + h(p.full_name) + '</label>'; }).join('') +
+      V.staff.filter(function (p) { return candIds.indexOf(p.id) < 0 && enIds.indexOf(p.id) < 0; }).map(function (p) { return '<label class="ivrow" data-n="' + h(p.full_name) + '" style="display:flex;flex-direction:row;align-items:center;gap:8px;padding:4px 0"><input type="checkbox" class="iv-evc" style="width:auto" value="' + p.id + '"' + (evIds.indexOf(p.id) >= 0 ? ' checked' : '') + '> ' + h(p.full_name) + '</label>'; }).join('') +
       '</div><button class="btn sm pri" data-act="iv-evsave" style="margin-top:6px">' + h(T('حفظ اللجنة', 'Save committee')) + '</button></div>';
-    var avail = V.staff.filter(function (p) { return candIds.indexOf(p.id) < 0 && evIds.indexOf(p.id) < 0; });
+    out += '<div class="card"><b>📝 ' + h(T('مُدخلو البيانات الموضوعية', 'Objective data entrants')) + '</b> <span class="pill">' + enIds.length + '</span> <span class="sub">' + h(T('(يُدخلون المؤهلات والخبرات فقط؛ لا يقيّمون ولا يدخلون في المتوسط)', '(enter objective data only; do not score or count in the average)')) + '</span><div style="max-height:180px;overflow:auto;margin-top:6px">' +
+      V.staff.filter(function (p) { return candIds.indexOf(p.id) < 0 && evIds.indexOf(p.id) < 0; }).map(function (p) { return '<label style="display:flex;flex-direction:row;align-items:center;gap:8px;padding:4px 0"><input type="checkbox" class="iv-enc" style="width:auto" value="' + p.id + '"' + (enIds.indexOf(p.id) >= 0 ? ' checked' : '') + '> ' + h(p.full_name) + '</label>'; }).join('') +
+      '</div><button class="btn sm pri" data-act="iv-ensave" style="margin-top:6px">' + h(T('حفظ المُدخلين', 'Save entrants')) + '</button></div>';
+    var avail = V.staff.filter(function (p) { return candIds.indexOf(p.id) < 0 && evIds.indexOf(p.id) < 0 && enIds.indexOf(p.id) < 0; });
     out += '<div class="card"><b>🧑‍💼 ' + h(T('المرشحون', 'Candidates')) + '</b> <span class="pill">' + d.candidates.length + '</span><div class="form"><label>' + h(T('إضافة مرشح من الموظفين', 'Add from staff')) + '<select id="iv-cadd"><option value="">—</option>' + avail.map(function (p) { return '<option value="' + p.id + '">' + h(p.full_name) + '</option>'; }).join('') + '</select></label>' +
       '<label>' + h(T('أو اسم يدوي (بلا حساب)', 'Or a manual name')) + '<input id="iv-cname" maxlength="120"></label></div><button class="btn sm pri" data-act="iv-cand">+ ' + h(T('إضافة', 'Add')) + '</button>' +
       (Math.round(tot * 100) !== 10000 ? '<p class="pill warn">' + h(T('مجموع الأوزان ' + fmt(tot) + ' (تُحوَّل النتيجة إلى نسبة من 100)', 'Weights total ' + fmt(tot))) + '</p>' : '') + '</div>';
@@ -132,6 +137,18 @@
             s.criteria.map(function (c) { return '<label>' + h(c.name) + ' <span class="sub">/ ' + fmt(c.weight) + '</span>' + (c.method ? '<span class="sub" style="display:block;font-size:12px">' + h(c.method) + '</span>' : '') + '<input class="iv-ev" data-k="' + k.id + '" data-c="' + c.id + '" type="number" min="0" max="' + c.weight + '" step="0.5" value="' + (V.dr[k.id + ':' + c.id] != null ? h(V.dr[k.id + ':' + c.id]) : k.scores[c.id] == null ? '' : h(k.scores[c.id])) + '"' + (ro ? ' disabled' : '') + '></label>'; }).join('') +
             '<label style="grid-column:1/-1">' + h(T('ملاحظات (اختياري)', 'Comments (optional)')) + '<textarea id="ivc-' + k.id + '" rows="2" maxlength="1000"' + (ro ? ' disabled' : '') + '>' + h(k.comment || '') + '</textarea></label></div>' +
             (ro ? '' : '<div class="tabs"><button class="btn sm" data-act="iv-esave" data-id="' + k.id + '" data-s="0">' + h(T('حفظ مسودة', 'Save draft')) + '</button> <button class="btn sm pri" data-act="iv-esave" data-id="' + k.id + '" data-s="1" data-confirm="1">' + h(T('الاعتماد النهائي', 'Final submit')) + '</button></div>') + '</div>';
+        }).join('') + '</div>';
+    }).join('');
+  }
+  function entryPane() {
+    if (!V.ent.length) return '<div class="card"><div class="empty">' + h(T('لا توجد مقابلات مسندة إليك', 'Nothing assigned')) + '</div></div>';
+    return V.ent.map(function (s) {
+      return '<div class="card"><h3 style="margin:0">' + h(s.title) + '</h3>' + (fmtDT(s.iv_date, s.iv_time) ? '<div class="sub">' + h(fmtDT(s.iv_date, s.iv_time)) + '</div>' : '') + (s.status === 'closed' ? '<p class="pill warn">' + h(T('المقابلة مغلقة', 'Closed')) + '</p>' : '') +
+        '<p class="sub">' + h(T('أدخل الدرجات الموضوعية لكل مرشح (من 0 حتى الوزن). يمكنك استخدام الحاسبة بجانب الخانة.', 'Enter objective points per candidate (0 to weight). The side box auto-calculates.')) + '</p>' +
+        s.candidates.map(function (k) {
+          return '<div class="card" style="margin:8px 0"><b>' + h(k.name) + '</b><div class="form">' + s.criteria.map(function (c) { var v = k.obj && k.obj[c.id]; return '<label>' + h(c.name) + ' <span class="sub">/ ' + fmt(c.weight) + '</span>' + (c.method ? '<span class="sub" style="display:block;font-size:12px">' + h(c.method) + '</span>' : '') + '<div style="display:flex;gap:6px"><input class="iv-obj" data-k="' + k.id + '" data-c="' + c.id + '" type="number" min="0" max="' + c.weight + '" step="0.5" value="' + (v == null ? '' : h(v)) + '" style="flex:1"' + (s.status !== 'open' ? ' disabled' : '') + '>' +
+            (c.calc && s.status === 'open' ? '<input data-ivcalc="' + k.id + ':' + c.id + ':' + c.calc + ':' + c.weight + '" type="number" step="0.5" placeholder="' + h(calcHint(c)) + '" style="width:110px">' : '') + '</div></label>'; }).join('') + '</div>' +
+            (s.status === 'open' ? '<button class="btn sm pri" data-act="iv-entsave1" data-id="' + k.id + '">' + h(T('حفظ', 'Save')) + '</button>' : '') + '</div>';
         }).join('') + '</div>';
     }).join('');
   }
@@ -204,6 +221,12 @@
     },
     'iv-toggle': function () { var s = curSess(); if (!s) return; run(async function () { await rpc('iv_session_save', { p_id: s.id, p_title: s.title, p_notes: s.notes, p_criteria: s.criteria, p_mode: s.release_mode, p_status: s.status === 'open' ? 'closed' : 'open' }); await reloadAll(); }); },
     'iv-del': function () { var s = curSess(); if (!s) return; run(async function () { await rpc('iv_session_delete', { p_id: s.id }); V.sid = 0; V.det = null; say(T('حُذفت المقابلة', 'Deleted')); await reloadAll(); }); },
+    'iv-ensave': function () { var ids = Array.prototype.map.call(document.querySelectorAll('.iv-enc:checked'), function (x) { return x.value; }); run(async function () { await rpc('iv_set_entrants', { p_session: V.sid, p_users: ids }); say(T('حُفظ المُدخلون (' + ids.length + ')', 'Saved (' + ids.length + ')')); await reloadAll(); }); },
+    'iv-entsave1': function (el) {
+      var id = Number(el.dataset.id), o = {};
+      Array.prototype.forEach.call(document.querySelectorAll('.iv-obj[data-k="' + id + '"]'), function (i) { if (i.value !== '') { var n = num(i.value); if (isFinite(n)) o[i.dataset.c] = n; } });
+      run(async function () { var r = await rpc('iv_entry_save', { p_cand: id, p_obj: o }); say(r.ok ? T('تم الحفظ', 'Saved') : (r.err === 'closed' ? T('المقابلة مغلقة', 'Closed') : T('تعذّر الحفظ', 'Could not save')), !r.ok); V.ent = (await rpc('iv_my_entry')) || []; });
+    },
     'iv-evsave': function () { var ids = Array.prototype.map.call(document.querySelectorAll('.iv-evc:checked'), function (x) { return x.value; }); run(async function () { await rpc('iv_set_evaluators', { p_session: V.sid, p_users: ids }); say(T('حُفظت اللجنة (' + ids.length + ')', 'Committee saved (' + ids.length + ')')); await reloadAll(); }); },
     'iv-cand': function () { var u = val('iv-cadd') || null, n = val('iv-cname').trim() || null; if (!u && !n) { toast_(T('اختر موظفاً أو اكتب اسماً', 'Pick or type a name')); return; } run(async function () { await rpc('iv_cand_add', { p_session: V.sid, p_user: u, p_name: n }); say(T('أُضيف المرشح', 'Added')); await reloadAll(); }); },
     'iv-cdel': function (el) { run(async function () { await rpc('iv_cand_delete', { p_cand: Number(el.dataset.id) }); await reloadAll(); }); },
