@@ -34,6 +34,8 @@ create table if not exists public.iv_scores (
   submitted_at timestamptz,
   primary key (cand_id, evaluator_id)
 );
+alter table public.iv_sessions add column if not exists iv_date date;
+alter table public.iv_sessions add column if not exists iv_time time;
 alter table public.iv_sessions enable row level security;
 alter table public.iv_evaluators enable row level security;
 alter table public.iv_candidates enable row level security;
@@ -113,20 +115,22 @@ end $$;
 create or replace function public.iv_admin_list() returns jsonb language plpgsql stable security definer set search_path = public as $$
 begin
   if not public.admin_can('iv') then raise exception 'admin only'; end if;
-  return coalesce((select jsonb_agg(jsonb_build_object('id', s.id, 'title', s.title, 'status', s.status, 'release_mode', s.release_mode,
+  return coalesce((select jsonb_agg(jsonb_build_object('id', s.id, 'title', s.title, 'status', s.status, 'release_mode', s.release_mode, 'iv_date', s.iv_date, 'iv_time', s.iv_time,
     'candidates', (select count(*) from iv_candidates k where k.session_id = s.id), 'evaluators', (select count(*) from iv_evaluators e where e.session_id = s.id)) order by s.id desc) from iv_sessions s), '[]'::jsonb);
 end $$;
 
-create or replace function public.iv_session_save(p_id bigint, p_title text, p_notes text, p_criteria jsonb, p_mode text, p_status text) returns bigint
+drop function if exists public.iv_session_save(bigint, text, text, jsonb, text, text);
+create or replace function public.iv_session_save(p_id bigint, p_title text, p_notes text, p_criteria jsonb, p_mode text, p_status text, p_date date default null, p_time time default null) returns bigint
 language plpgsql security definer set search_path = public as $$
 declare nid bigint; cr jsonb;
 begin
   if not public.admin_can('iv') then raise exception 'admin only'; end if;
   cr := iv_check_criteria(coalesce(p_criteria, iv_default_criteria()));
   if p_id is null then
-    insert into iv_sessions (title, notes, criteria, release_mode, status) values (trim(p_title), nullif(trim(coalesce(p_notes, '')), ''), cr, coalesce(p_mode, 'admin'), 'open') returning id into nid;
+    insert into iv_sessions (title, notes, criteria, release_mode, status, iv_date, iv_time) values (trim(p_title), nullif(trim(coalesce(p_notes, '')), ''), cr, coalesce(p_mode, 'admin'), 'open', p_date, p_time) returning id into nid;
   else
-    update iv_sessions set title = trim(p_title), notes = nullif(trim(coalesce(p_notes, '')), ''), criteria = cr, release_mode = coalesce(p_mode, release_mode), status = coalesce(p_status, status) where id = p_id returning id into nid;
+    update iv_sessions set title = trim(p_title), notes = nullif(trim(coalesce(p_notes, '')), ''), criteria = cr, release_mode = coalesce(p_mode, release_mode), status = coalesce(p_status, status),
+      iv_date = coalesce(p_date, iv_date), iv_time = coalesce(p_time, iv_time) where id = p_id returning id into nid;
   end if;
   return nid;
 end $$;
@@ -206,7 +210,7 @@ end $$;
 -- ===== المقيّم =====
 create or replace function public.iv_my_eval() returns jsonb language plpgsql stable security definer set search_path = public as $$
 begin
-  return coalesce((select jsonb_agg(jsonb_build_object('id', s.id, 'title', s.title, 'notes', s.notes, 'status', s.status,
+  return coalesce((select jsonb_agg(jsonb_build_object('id', s.id, 'title', s.title, 'notes', s.notes, 'status', s.status, 'iv_date', s.iv_date, 'iv_time', s.iv_time,
       'criteria', (select coalesce(jsonb_agg(c), '[]'::jsonb) from jsonb_array_elements(s.criteria) c where c ->> 'type' = 'com'),
       'candidates', coalesce((select jsonb_agg(jsonb_build_object('id', k.id, 'name', k.name, 'scores', coalesce(sc.scores, '{}'::jsonb), 'comment', sc.comment, 'submitted', coalesce(sc.submitted, false)) order by k.id)
         from iv_candidates k left join iv_scores sc on sc.cand_id = k.id and sc.evaluator_id = auth.uid() where k.session_id = s.id), '[]'::jsonb)) order by s.id desc)
@@ -242,19 +246,19 @@ end $$;
 create or replace function public.iv_my_results() returns jsonb language plpgsql stable security definer set search_path = public as $$
 declare r jsonb := '[]'::jsonb; k record; cj jsonb;
 begin
-  for k in select c.id, s.title, public.iv_visible(c.id) as vis from iv_candidates c join iv_sessions s on s.id = c.session_id where c.user_id = auth.uid() order by c.id desc loop
-    if k.vis then cj := public.iv_calc(k.id); r := r || jsonb_build_object('title', k.title, 'visible', true, 'final', cj -> 'final', 'total', cj -> 'total', 'max', cj -> 'max', 'rows', cj -> 'rows');
-    else r := r || jsonb_build_object('title', k.title, 'visible', false); end if;
+  for k in select c.id, s.title, s.iv_date as d, s.iv_time as t, public.iv_visible(c.id) as vis from iv_candidates c join iv_sessions s on s.id = c.session_id where c.user_id = auth.uid() order by c.id desc loop
+    if k.vis then cj := public.iv_calc(k.id); r := r || jsonb_build_object('title', k.title, 'iv_date', k.d, 'iv_time', k.t, 'visible', true, 'final', cj -> 'final', 'total', cj -> 'total', 'max', cj -> 'max', 'rows', cj -> 'rows');
+    else r := r || jsonb_build_object('title', k.title, 'iv_date', k.d, 'iv_time', k.t, 'visible', false); end if;
   end loop;
   return r;
 end $$;
 
 -- الصلاحيات
 revoke execute on function public.iv_default_criteria(), public.iv_check_criteria(jsonb), public.iv_calc(bigint), public.iv_visible(bigint) from public, anon, authenticated;
-revoke execute on function public.iv_roles(), public.iv_staff_list(), public.iv_admin_list(), public.iv_session_save(bigint, text, text, jsonb, text, text), public.iv_session_delete(bigint),
+revoke execute on function public.iv_roles(), public.iv_staff_list(), public.iv_admin_list(), public.iv_session_save(bigint, text, text, jsonb, text, text, date, time), public.iv_session_delete(bigint),
   public.iv_set_evaluators(bigint, uuid[]), public.iv_cand_add(bigint, uuid, text), public.iv_cand_delete(bigint), public.iv_cand_obj(bigint, jsonb), public.iv_release(bigint, boolean),
   public.iv_reopen(bigint, uuid), public.iv_admin_detail(bigint), public.iv_my_eval(), public.iv_eval_save(bigint, jsonb, text, boolean), public.iv_my_results() from public, anon;
-grant execute on function public.iv_roles(), public.iv_staff_list(), public.iv_admin_list(), public.iv_session_save(bigint, text, text, jsonb, text, text), public.iv_session_delete(bigint),
+grant execute on function public.iv_roles(), public.iv_staff_list(), public.iv_admin_list(), public.iv_session_save(bigint, text, text, jsonb, text, text, date, time), public.iv_session_delete(bigint),
   public.iv_set_evaluators(bigint, uuid[]), public.iv_cand_add(bigint, uuid, text), public.iv_cand_delete(bigint), public.iv_cand_obj(bigint, jsonb), public.iv_release(bigint, boolean),
   public.iv_reopen(bigint, uuid), public.iv_admin_detail(bigint), public.iv_my_eval(), public.iv_eval_save(bigint, jsonb, text, boolean), public.iv_my_results() to authenticated;
 select 'ready' as status;
