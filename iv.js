@@ -66,7 +66,7 @@
       (V.list.map(function (s) { return '<option value="' + s.id + '"' + (s.id === V.sid ? ' selected' : '') + '>' + h(s.title + (s.status === 'closed' ? ' — ' + T('مغلقة', 'closed') : '')) + '</option>'; }).join('') || '<option value="">—</option>') + '</select></label></div>' +
       (V.det && fmtDT(V.det.session.iv_date, V.det.session.iv_time) ? '<div class="sub" style="margin:6px 0">' + h(fmtDT(V.det.session.iv_date, V.det.session.iv_time)) + '</div>' : '') +
       '<div class="tabs"><button class="btn sm pri" data-act="iv-new">+ ' + h(T('مقابلة جديدة', 'New interview')) + '</button>' +
-      (V.det ? ' <button class="btn sm" data-act="iv-editform">' + h(T('إعدادات المعايير والأوزان', 'Criteria & weights')) + '</button> <button class="btn sm" data-act="iv-toggle">' + h(V.det.session.status === 'open' ? T('إغلاق المقابلة', 'Close') : T('إعادة فتح', 'Reopen')) + '</button> <button class="btn sm bad" data-act="iv-del" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button>' : '') + '</div></div>';
+      (V.det ? ' <button class="btn sm" data-act="iv-editform">' + h(T('إعدادات المعايير والأوزان', 'Criteria & weights')) + '</button> <button class="btn sm" data-act="iv-paper">⬇ ' + h(T('نماذج ورقية Excel', 'Paper forms (Excel)')) + '</button> <button class="btn sm" data-act="iv-toggle">' + h(V.det.session.status === 'open' ? T('إغلاق المقابلة', 'Close') : T('إعادة فتح', 'Reopen')) + '</button> <button class="btn sm bad" data-act="iv-del" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button>' : '') + '</div></div>';
   }
   function critEditor() {
     var f = V.form, rows = V.crit, tot = rows.reduce(function (a, c) { return a + (num(c.weight) || 0); }, 0);
@@ -130,7 +130,7 @@
     if (!V.my.length) return '<div class="card"><div class="empty">' + h(T('لست عضواً في أي لجنة حالياً', 'Not on any committee')) + '</div></div>';
     return V.my.map(function (s) {
       return '<div class="card"><h3 style="margin:0">' + h(s.title) + '</h3>' + (fmtDT(s.iv_date, s.iv_time) ? '<div class="sub">' + h(fmtDT(s.iv_date, s.iv_time)) + '</div>' : '') + (s.notes ? '<div class="sub">' + h(s.notes) + '</div>' : '') + (s.status === 'closed' ? '<p class="pill warn">' + h(T('المقابلة مغلقة', 'Closed')) + '</p>' : '') +
-        '<p class="sub">' + h(T('أدخل درجة كل معيار (من 0 حتى الوزن). المعايير الموضوعية تدخلها الإدارة. بعد «الاعتماد النهائي» لا يمكن التعديل إلا بإعادة فتح من الإدارة.', 'Score each criterion (0 to its weight). Objective criteria are entered by admin. After final submit only admin can reopen.')) + '</p>' +
+        '<div class="tabs"><button class="btn sm" data-act="iv-paper-me" data-id="' + s.id + '">⬇ ' + h(T('تصدير نموذج ورقي (Excel) للتقييم دون إنترنت', 'Export paper form (Excel)')) + '</button></div><p class="sub">' + h(T('أدخل درجة كل معيار (من 0 حتى الوزن). المعايير الموضوعية تدخلها الإدارة. بعد «الاعتماد النهائي» لا يمكن التعديل إلا بإعادة فتح من الإدارة.', 'Score each criterion (0 to its weight). Objective criteria are entered by admin. After final submit only admin can reopen.')) + '</p>' +
         s.candidates.map(function (k) {
           var ro = k.submitted || s.status !== 'open';
           return '<div class="card" style="margin:8px 0"><b>' + h(k.name) + '</b> ' + (k.submitted ? '<span class="pill ok">' + h(T('تم الاعتماد', 'Submitted')) + '</span>' : '') + '<div class="form">' +
@@ -195,6 +195,43 @@
     }
   }
 
+
+  /* ---------- نموذج ورقي (Excel) للتقييم دون إنترنت ---------- */
+  function paperRows(title, dt, who, crit, cands, kind) {
+    var rows = [[title], [dt || ''], [kind === 'obj' ? T('نموذج إدخال المعايير الموضوعية', 'Objective data sheet') : T('نموذج تقييم المقابلة', 'Interview scoring sheet'), '', '', (kind === 'obj' ? '' : T('اسم المقيّم: ', 'Evaluator: ') + (who || '______________________'))], []];
+    rows.push(['#', T('المعيار', 'Criterion'), T('طريقة التقييم', 'Method'), T('الدرجة العظمى', 'Max')].concat(cands.map(function (n) { return n; })));
+    var tot = 0; crit.forEach(function (c, i) { tot += Number(c.weight); rows.push([i + 1, c.name, c.method || '', Number(c.weight)].concat(cands.map(function () { return ''; }))); });
+    rows.push(['', T('المجموع', 'Total'), '', tot].concat(cands.map(function () { return ''; })));
+    rows.push([]); rows.push(['', T('ملاحظات:', 'Notes:')]); rows.push([]); rows.push(['', kind === 'obj' ? T('اسم المُدخل وتوقيعه: ______________', 'Name & signature: ______________') : T('توقيع المقيّم: ______________', 'Signature: ______________'), '', '', T('التاريخ: ____ / ____ / ________', 'Date: ____ / ____ / ________')]);
+    return rows;
+  }
+  function sheetName(n, used) { var b = String(n || 'sheet').replace(/[\[\]:*?\/\\]/g, ' ').trim().slice(0, 28) || 'sheet', x = b, i = 2; while (used[x]) x = b + ' ' + (i++); used[x] = 1; return x; }
+  async function savePaper(name, sheets) {
+    try {
+      await loadXlsx();
+      var wb = window.XLSX.utils.book_new(); wb.Workbook = { Views: [{ RTL: true }] };
+      sheets.forEach(function (s) { var ws = window.XLSX.utils.aoa_to_sheet(s.rows); ws['!cols'] = [{ wch: 5 }, { wch: 38 }, { wch: 50 }, { wch: 10 }].concat(Array.apply(null, Array(Math.max(0, (s.rows[4] || []).length - 4))).map(function () { return { wch: 20 }; })); window.XLSX.utils.book_append_sheet(wb, ws, s.name); });
+      saveBlob(name + '.xlsx', new Blob([window.XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/octet-stream' }));
+    } catch (e) {
+      var all = []; sheets.forEach(function (s) { all = all.concat(s.rows, [[], []]); });
+      saveBlob(name + '.csv', new Blob(['﻿' + all.map(function (r) { return r.map(function (c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(','); }).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+    }
+  }
+  function paperAdmin() {
+    var d = V.det; if (!d) return; var s = d.session, used = {}, names = d.candidates.map(function (k) { return k.name; }), dt = fmtDT(s.iv_date, s.iv_time).replace(/[📅🕐]/g, '').trim();
+    var com = s.criteria.filter(function (c) { return c.type === 'com'; }), obj = s.criteria.filter(function (c) { return c.type === 'obj'; }), sheets = [];
+    if (!names.length) { toast_(T('أضف المرشحين أولاً', 'Add candidates first')); return; }
+    d.evaluators.forEach(function (e) { sheets.push({ name: sheetName(e.name, used), rows: paperRows(s.title, dt, e.name, com, names) }); });
+    if (!d.evaluators.length) sheets.push({ name: sheetName(T('نموذج التقييم', 'Scoring'), used), rows: paperRows(s.title, dt, '', com, names) });
+    if (obj.length) sheets.push({ name: sheetName(T('الموضوعية', 'Objective'), used), rows: paperRows(s.title, dt, '', obj, names, 'obj') });
+    savePaper('نماذج-ورقية-' + String(s.title).replace(/[\\/:*?"<>|\s]+/g, '-'), sheets);
+  }
+  function paperMe(id) {
+    var s = V.my.filter(function (x) { return x.id === id; })[0]; if (!s) return;
+    var nm = (window.CTX && window.CTX.name) || '', dt = fmtDT(s.iv_date, s.iv_time).replace(/[📅🕐]/g, '').trim();
+    savePaper('نموذج-تقييم-' + String(s.title).replace(/[\\/:*?"<>|\s]+/g, '-'), [{ name: sheetName(T('نموذج التقييم', 'Scoring'), {}), rows: paperRows(s.title, dt, nm, s.criteria, s.candidates.map(function (k) { return k.name; })) }]);
+  }
+
   /* ---------- أفعال ---------- */
   function newForm() { V.form = { id: null, title: '', notes: '', release_mode: 'admin', iv_date: '', iv_time: '' }; V.crit = DEF.map(function (c) { return Object.assign({}, c); }); draw(); }
   function curSess() { return V.det && V.det.session; }
@@ -208,6 +245,8 @@
   function degPts(p, w) { var v = p >= 95 ? 10 : p >= 90 ? 9 : p >= 85 ? 8 : p >= 80 ? 7 : p >= 75 ? 6 : p >= 70 ? 5 : p >= 65 ? 4 : p >= 60 ? 3 : 0; return Math.min(v, w); }
   var ACTS = {
     'iv-export': function () { doExport(); },
+    'iv-paper': function () { paperAdmin(); },
+    'iv-paper-me': function (el) { paperMe(Number(el.dataset.id)); },
     'iv-tab': function (el) { V.tab = el.dataset.t; draw(); },
     'iv-new': function () { newForm(); },
     'iv-editform': function () { var s = curSess(); if (!s) return; V.form = { id: s.id, title: s.title, notes: s.notes, release_mode: s.release_mode, iv_date: s.iv_date, iv_time: s.iv_time }; V.crit = s.criteria.map(function (c) { return Object.assign({}, c); }); draw(); },
