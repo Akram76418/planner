@@ -41,6 +41,7 @@ create table if not exists public.iv_scores (
 );
 alter table public.iv_sessions add column if not exists iv_date date;
 alter table public.iv_sessions add column if not exists iv_time time;
+alter table public.iv_sessions add column if not exists iv_min int not null default 0 check (iv_min between 0 and 50);
 alter table public.iv_sessions enable row level security;
 alter table public.iv_evaluators enable row level security;
 alter table public.iv_entrants enable row level security;
@@ -51,10 +52,10 @@ revoke all on public.iv_sessions, public.iv_entrants, public.iv_evaluators, publ
 -- المعايير الافتراضية (من نموذج المعايير والأوزان)
 create or replace function public.iv_default_criteria() returns jsonb language sql immutable as $$
   select '[
-   {"id":"c1","name":"المؤهل العلمي (البكالوريوس)","type":"obj","weight":10,"calc":"degree","method":"تُحسب من جدول المؤهلات (حد أقصى 10 درجات: 60-69=3-4، 70-79=5-6، 80-89=7-8، 90-99=9-10)"},
-   {"id":"c2","name":"المؤهل العلمي (الماجستير)","type":"obj","weight":10,"calc":"degree","method":"تُحسب من جدول المؤهلات (حد أقصى 10 درجات: 60-69=3-4، 70-79=5-6، 80-89=7-8، 90-99=9-10)"},
-   {"id":"c3","name":"الخبرة التدريسية الجامعية","type":"obj","weight":5,"calc":"years","method":"سنوات الخبرة (حد أقصى 5 درجات: 3 سنوات = 3 درجات وكل سنة بدرجة)"},
-   {"id":"c4","name":"الخبرة في كلية فلسطين","type":"obj","weight":5,"calc":"years","method":"سنوات الخبرة (حد أقصى 5 درجات: 3 سنوات = 3 درجات وكل سنة بدرجة)"},
+   {"id":"c1","name":"المؤهل العلمي (البكالوريوس)","type":"obj","weight":10,"calc":"degree","method":"تُدخل نسبة المؤهل من 100 وتُحوَّل إلى الدرجة حسب الوزن"},
+   {"id":"c2","name":"المؤهل العلمي (الماجستير)","type":"obj","weight":10,"calc":"degree","method":"تُدخل نسبة المؤهل من 100 وتُحوَّل إلى الدرجة حسب الوزن"},
+   {"id":"c3","name":"الخبرة التدريسية الجامعية","type":"obj","weight":5,"calc":"years","cap":5,"method":"تُدخل عدد السنوات وتُحوَّل إلى الدرجة حسب الوزن (5 سنوات فأكثر = الدرجة كاملة)"},
+   {"id":"c4","name":"الخبرة في كلية فلسطين","type":"obj","weight":5,"calc":"years","cap":5,"method":"تُدخل عدد السنوات وتُحوَّل إلى الدرجة حسب الوزن (5 سنوات فأكثر = الدرجة كاملة)"},
    {"id":"c5","name":"خطة الموظف","type":"com","weight":20,"method":"عرض خطة موحدة المدة: واقعيتها، قابليتها للقياس، ارتباطها باحتياجات القسم"},
    {"id":"c6","name":"القيادة والتواصل وإدارة الفريق","type":"com","weight":20,"method":"أسئلة سلوكية موحدة عن مواقف قيادية فعلية، مع طلب أمثلة وأدلة"},
    {"id":"c7","name":"حل المشكلات (دراسة حالة موحدة)","type":"com","weight":10,"method":"حالة واحدة لجميع المتقدمين: جودة التحليل والقرار المقترح"},
@@ -73,7 +74,7 @@ begin
     begin w := (c ->> 'weight')::numeric; exception when others then raise exception 'bad weight'; end;
     if w is null or w < 0 or w > 1000 then raise exception 'bad weight'; end if;
     if length(trim(coalesce(c ->> 'name', ''))) = 0 or length(c ->> 'name') > 160 or length(coalesce(c ->> 'method', '')) > 400 then raise exception 'bad criteria text'; end if;
-    out := out || jsonb_build_object('id', c ->> 'id', 'name', trim(c ->> 'name'), 'type', c ->> 'type', 'weight', w, 'calc', case when (c ->> 'calc') in ('degree', 'years') then c ->> 'calc' else null end, 'method', nullif(trim(coalesce(c ->> 'method', '')), ''));
+    out := out || jsonb_build_object('id', c ->> 'id', 'name', trim(c ->> 'name'), 'type', c ->> 'type', 'weight', w, 'calc', case when (c ->> 'calc') in ('degree', 'years') then c ->> 'calc' else null end, 'cap', case when (c ->> 'calc') = 'years' then least(greatest(coalesce(nullif(c ->> 'cap', '')::numeric, 5), 1), 100) else null end, 'method', nullif(trim(coalesce(c ->> 'method', '')), ''));
   end loop;
   return out;
 end $$;
@@ -89,7 +90,12 @@ begin
   for c in select * from jsonb_array_elements(s.criteria) loop
     w := (c ->> 'weight')::numeric; wsum := wsum + w; pts := null;
     if c ->> 'type' = 'obj' then
-      if k.obj ? (c ->> 'id') then pts := least(greatest((k.obj ->> (c ->> 'id'))::numeric, 0), w); end if;
+      if k.obj ? (c ->> 'id') then
+        pts := greatest((k.obj ->> (c ->> 'id'))::numeric, 0);
+        if c ->> 'calc' = 'degree' then pts := least(pts, 100) / 100 * w;
+        elsif c ->> 'calc' = 'years' then pts := least(pts / coalesce(nullif(c ->> 'cap', '')::numeric, 5), 1) * w;
+        else pts := least(pts, w); end if;
+      end if;
     elsif nsub > 0 then
       select avg(least(greatest((sc.scores ->> (c ->> 'id'))::numeric, 0), w)) into pts from iv_scores sc join iv_evaluators e on e.session_id = s.id and e.user_id = sc.evaluator_id
         where sc.cand_id = p_cand and sc.submitted and sc.scores ? (c ->> 'id');
@@ -98,7 +104,7 @@ begin
     rows := rows || jsonb_build_object('id', c ->> 'id', 'name', c ->> 'name', 'type', c ->> 'type', 'weight', w, 'points', case when pts is null then null else round(pts, 2) end);
   end loop;
   return jsonb_build_object('total', round(total, 2), 'max', wsum, 'final', case when wsum > 0 then round(total / wsum * 100, 2) else null end,
-    'rows', rows, 'neval', neval, 'nsub', nsub, 'complete', (neval > 0 and nsub >= neval));
+    'rows', rows, 'neval', neval, 'nsub', nsub, 'complete', (neval > 0 and nsub >= case when s.iv_min > 0 then least(s.iv_min, neval) else neval end));
 end $$;
 
 create or replace function public.iv_visible(p_cand bigint) returns boolean language sql stable security definer set search_path = public as $$
@@ -127,17 +133,18 @@ begin
 end $$;
 
 drop function if exists public.iv_session_save(bigint, text, text, jsonb, text, text);
-create or replace function public.iv_session_save(p_id bigint, p_title text, p_notes text, p_criteria jsonb, p_mode text, p_status text, p_date date default null, p_time time default null) returns bigint
+drop function if exists public.iv_session_save(bigint, text, text, jsonb, text, text, date, time);
+create or replace function public.iv_session_save(p_id bigint, p_title text, p_notes text, p_criteria jsonb, p_mode text, p_status text, p_date date default null, p_time time default null, p_min int default null) returns bigint
 language plpgsql security definer set search_path = public as $$
 declare nid bigint; cr jsonb;
 begin
   if not public.admin_can('iv') then raise exception 'admin only'; end if;
   cr := iv_check_criteria(coalesce(p_criteria, iv_default_criteria()));
   if p_id is null then
-    insert into iv_sessions (title, notes, criteria, release_mode, status, iv_date, iv_time) values (trim(p_title), nullif(trim(coalesce(p_notes, '')), ''), cr, coalesce(p_mode, 'admin'), 'open', p_date, p_time) returning id into nid;
+    insert into iv_sessions (title, notes, criteria, release_mode, status, iv_date, iv_time, iv_min) values (trim(p_title), nullif(trim(coalesce(p_notes, '')), ''), cr, coalesce(p_mode, 'admin'), 'open', p_date, p_time, coalesce(p_min, 0)) returning id into nid;
   else
     update iv_sessions set title = trim(p_title), notes = nullif(trim(coalesce(p_notes, '')), ''), criteria = cr, release_mode = coalesce(p_mode, release_mode), status = coalesce(p_status, status),
-      iv_date = coalesce(p_date, iv_date), iv_time = coalesce(p_time, iv_time) where id = p_id returning id into nid;
+      iv_date = coalesce(p_date, iv_date), iv_time = coalesce(p_time, iv_time), iv_min = coalesce(p_min, iv_min) where id = p_id returning id into nid;
   end if;
   return nid;
 end $$;
@@ -299,11 +306,11 @@ end $$;
 
 -- الصلاحيات
 revoke execute on function public.iv_obj_apply(bigint, jsonb), public.iv_default_criteria(), public.iv_check_criteria(jsonb), public.iv_calc(bigint), public.iv_visible(bigint) from public, anon, authenticated;
-revoke execute on function public.iv_roles(), public.iv_staff_list(), public.iv_admin_list(), public.iv_session_save(bigint, text, text, jsonb, text, text, date, time), public.iv_session_delete(bigint),
+revoke execute on function public.iv_roles(), public.iv_staff_list(), public.iv_admin_list(), public.iv_session_save(bigint, text, text, jsonb, text, text, date, time, int), public.iv_session_delete(bigint),
   public.iv_set_evaluators(bigint, uuid[]), public.iv_cand_add(bigint, uuid, text), public.iv_cand_delete(bigint), public.iv_cand_obj(bigint, jsonb), public.iv_release(bigint, boolean),
   public.iv_reopen(bigint, uuid), public.iv_admin_detail(bigint), public.iv_my_eval(), public.iv_eval_save(bigint, jsonb, text, boolean), public.iv_my_results(),
   public.iv_set_entrants(bigint, uuid[]), public.iv_my_entry(), public.iv_entry_save(bigint, jsonb) from public, anon;
-grant execute on function public.iv_roles(), public.iv_staff_list(), public.iv_admin_list(), public.iv_session_save(bigint, text, text, jsonb, text, text, date, time), public.iv_session_delete(bigint),
+grant execute on function public.iv_roles(), public.iv_staff_list(), public.iv_admin_list(), public.iv_session_save(bigint, text, text, jsonb, text, text, date, time, int), public.iv_session_delete(bigint),
   public.iv_set_evaluators(bigint, uuid[]), public.iv_cand_add(bigint, uuid, text), public.iv_cand_delete(bigint), public.iv_cand_obj(bigint, jsonb), public.iv_release(bigint, boolean),
   public.iv_reopen(bigint, uuid), public.iv_admin_detail(bigint), public.iv_my_eval(), public.iv_eval_save(bigint, jsonb, text, boolean), public.iv_my_results(),
   public.iv_set_entrants(bigint, uuid[]), public.iv_my_entry(), public.iv_entry_save(bigint, jsonb) to authenticated;

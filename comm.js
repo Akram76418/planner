@@ -625,7 +625,7 @@
   }
   function val(id) { var e = $c('#' + id); return e ? e.value : ''; }
   /* ---------- الجدول الأسبوعي للمحاضرين والموظفين ---------- */
-  var DAYS = [['sun', 'الأحد', 'Sun'], ['mon', 'الاثنين', 'Mon'], ['tue', 'الثلاثاء', 'Tue'], ['wed', 'الأربعاء', 'Wed'], ['thu', 'الخميس', 'Thu'], ['sat', 'السبت', 'Sat']];
+  var DAYS = [['sat', 'السبت', 'Sat'], ['sun', 'الأحد', 'Sun'], ['mon', 'الاثنين', 'Mon'], ['tue', 'الثلاثاء', 'Tue'], ['wed', 'الأربعاء', 'Wed'], ['thu', 'الخميس', 'Thu']];
   async function loadWeek() { ST.week.rows = (await rpc('comm_weekly_list')) || []; }
   function weekHtml() {
     var adm = CAN('weekly'), rows = ST.week.rows || [];

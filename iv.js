@@ -14,10 +14,10 @@
   function fmt(n) { return n == null ? '—' : String(Math.round(Number(n) * 100) / 100); }
 
   var DEF = [
-    { id: 'c1', name: 'المؤهل العلمي (البكالوريوس)', type: 'obj', weight: 10, calc: 'degree', method: 'تُحسب من جدول المؤهلات (حد أقصى 10 درجات: 60-69=3-4، 70-79=5-6، 80-89=7-8، 90-99=9-10)' },
-    { id: 'c2', name: 'المؤهل العلمي (الماجستير)', type: 'obj', weight: 10, calc: 'degree', method: 'تُحسب من جدول المؤهلات (حد أقصى 10 درجات: 60-69=3-4، 70-79=5-6، 80-89=7-8، 90-99=9-10)' },
-    { id: 'c3', name: 'الخبرة التدريسية الجامعية', type: 'obj', weight: 5, calc: 'years', method: 'سنوات الخبرة (حد أقصى 5 درجات: 3 سنوات = 3 درجات وكل سنة بدرجة)' },
-    { id: 'c4', name: 'الخبرة في كلية فلسطين', type: 'obj', weight: 5, calc: 'years', method: 'سنوات الخبرة (حد أقصى 5 درجات: 3 سنوات = 3 درجات وكل سنة بدرجة)' },
+    { id: 'c1', name: 'المؤهل العلمي (البكالوريوس)', type: 'obj', weight: 10, calc: 'degree', method: 'تُدخل نسبة المؤهل من 100 وتُحوَّل إلى الدرجة حسب الوزن' },
+    { id: 'c2', name: 'المؤهل العلمي (الماجستير)', type: 'obj', weight: 10, calc: 'degree', method: 'تُدخل نسبة المؤهل من 100 وتُحوَّل إلى الدرجة حسب الوزن' },
+    { id: 'c3', name: 'الخبرة التدريسية الجامعية', type: 'obj', weight: 5, calc: 'years', cap: 5, method: 'تُدخل عدد السنوات وتُحوَّل إلى الدرجة حسب الوزن (5 سنوات فأكثر = الدرجة كاملة)' },
+    { id: 'c4', name: 'الخبرة في كلية فلسطين', type: 'obj', weight: 5, calc: 'years', cap: 5, method: 'تُدخل عدد السنوات وتُحوَّل إلى الدرجة حسب الوزن (5 سنوات فأكثر = الدرجة كاملة)' },
     { id: 'c5', name: 'خطة الموظف', type: 'com', weight: 20, method: 'عرض خطة موحدة المدة: واقعيتها، قابليتها للقياس، ارتباطها باحتياجات القسم' },
     { id: 'c6', name: 'القيادة والتواصل وإدارة الفريق', type: 'com', weight: 20, method: 'أسئلة سلوكية موحدة عن مواقف قيادية فعلية، مع طلب أمثلة وأدلة' },
     { id: 'c7', name: 'حل المشكلات (دراسة حالة موحدة)', type: 'com', weight: 10, method: 'حالة واحدة لجميع المتقدمين: جودة التحليل والقرار المقترح' },
@@ -75,11 +75,13 @@
       '<label>' + h(T('تاريخ المقابلة', 'Interview date')) + '<input id="iv-date" type="date" value="' + h(f.iv_date || '') + '"></label><label>' + h(T('ساعة المقابلة', 'Time')) + '<input id="iv-time" type="time" value="' + h(String(f.iv_time || '').slice(0, 5)) + '"></label>' +
       '<label style="grid-column:1/-1">' + h(T('ملاحظات', 'Notes')) + '<textarea id="iv-notes" rows="2" maxlength="1000">' + h(f.notes || '') + '</textarea></label>' +
       '<label style="grid-column:1/-1">' + h(T('عرض الدرجة النهائية للمرشح', 'Show final grade to candidate')) + '<select id="iv-mode"><option value="auto"' + (f.release_mode === 'auto' ? ' selected' : '') + '>' + h(T('مباشرة بعد أن يُكمل كل أعضاء اللجنة تقييمهم', 'Right after all committee members finish')) + '</option><option value="admin"' + (f.release_mode !== 'auto' ? ' selected' : '') + '>' + h(T('مؤجَّلة حتى أوافق أنا (الإدارة) على كل مرشح', 'Postponed until admin approves each candidate')) + '</option></select></label></div>' +
+      '<div class="form"><label style="grid-column:1/-1">' + h(T('الحد الأدنى لعدد المقيّمين لعرض النتيجة تلقائياً (0 = كل أعضاء اللجنة)', 'Minimum evaluators for automatic release (0 = all)')) + '<input id="iv-min" type="number" min="0" max="50" value="' + h(f.iv_min || 0) + '"></label></div><p class="sub">' + h(T('المتوسط يُحسب دائماً على عدد من اعتمدوا فعلاً (3 مقيّمين = قسمة على 3) مهما كان حجم اللجنة. مثال: لجنة من 4 وحدّ أدنى 3: تظهر النتيجة تلقائياً حين يعتمد 3 ويُقسم على 3، وإن اعتمد الرابع لاحقاً دخل في المتوسط.', 'The average always divides by the number who actually submitted.')) + '</p>' +
       '<b style="display:block;margin-top:8px">' + h(T('المعايير والأوزان', 'Criteria & weights')) + '</b><p class="sub">' + h(T('«موضوعي» تُدخله الإدارة مرة واحدة للمرشح؛ «لجنة» يُقيّمه كل عضو، ويُؤخذ المتوسط. الوزن = أقصى درجة للمعيار. إن لم يكن المجموع 100 تُحوَّل النتيجة إلى نسبة من 100.', 'Objective: entered once by admin. Committee: scored by each member (average). Weight = max points. If the total is not 100 the result is converted to a percentage.')) + '</p>' +
-      '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th>' + h(T('المعيار', 'Criterion')) + '</th><th>' + h(T('النوع', 'Type')) + '</th><th>' + h(T('الوزن', 'Weight')) + '</th><th>' + h(T('طريقة التقييم', 'Method')) + '</th><th></th></tr></thead><tbody>' +
+      '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th>' + h(T('المعيار', 'Criterion')) + '</th><th>' + h(T('النوع', 'Type')) + '</th><th>' + h(T('الوزن', 'Weight')) + '</th><th>' + h(T('طريقة الإدخال (للموضوعي)', 'Input (objective)')) + '</th><th>' + h(T('طريقة التقييم', 'Method')) + '</th><th></th></tr></thead><tbody>' +
       rows.map(function (c, i) {
         return '<tr><td><input data-ivc="' + i + ':name" value="' + h(c.name) + '" maxlength="160" style="min-width:150px"></td><td><select data-ivc="' + i + ':type"><option value="obj"' + (c.type === 'obj' ? ' selected' : '') + '>' + h(T('موضوعي', 'Objective')) + '</option><option value="com"' + (c.type === 'com' ? ' selected' : '') + '>' + h(T('لجنة', 'Committee')) + '</option></select></td>' +
-          '<td><input data-ivc="' + i + ':weight" type="number" min="0" max="1000" step="0.5" value="' + h(c.weight) + '" style="width:72px"></td><td><input data-ivc="' + i + ':method" value="' + h(c.method || '') + '" maxlength="400" style="min-width:200px"></td>' +
+          '<td><input data-ivc="' + i + ':weight" type="number" min="0" max="1000" step="0.5" value="' + h(c.weight) + '" style="width:72px"></td>' +
+          '<td>' + (c.type === 'obj' ? '<select data-ivc="' + i + ':calc" data-redraw="1"><option value=""' + (!c.calc ? ' selected' : '') + '>' + h(T('درجة مباشرة', 'Points')) + '</option><option value="degree"' + (c.calc === 'degree' ? ' selected' : '') + '>' + h(T('نسبة من 100', 'Percent /100')) + '</option><option value="years"' + (c.calc === 'years' ? ' selected' : '') + '>' + h(T('سنوات', 'Years')) + '</option></select>' + (c.calc === 'years' ? ' <input data-ivc="' + i + ':cap" type="number" min="1" max="100" value="' + h(c.cap || 5) + '" style="width:60px" title="' + h(T('سنوات الدرجة الكاملة', 'Years for full points')) + '">' : '') : '—') + '</td><td><input data-ivc="' + i + ':method" value="' + h(c.method || '') + '" maxlength="400" style="min-width:200px"></td>' +
           '<td><button class="btn sm bad" data-act="iv-crem" data-i="' + i + '">✕</button></td></tr>';
       }).join('') + '</tbody></table></div><div class="tabs" style="margin-top:6px"><button class="btn sm" data-act="iv-cadd">+ ' + h(T('معيار', 'Criterion')) + '</button> <button class="btn sm" data-act="iv-cdef">' + h(T('استرجاع المعايير الافتراضية', 'Restore defaults')) + '</button> <b id="iv-tot" class="pill ' + (tot === 100 ? 'ok' : 'warn') + '">' + h(T('المجموع: ', 'Total: ') + fmt(tot)) + '</b></div>' +
       '<div class="tabs" style="margin-top:8px"><button class="btn pri" data-act="iv-save">' + h(T('حفظ', 'Save')) + '</button> <button class="btn" data-act="iv-cancel">' + h(T('إلغاء', 'Cancel')) + '</button></div></div>';
@@ -111,13 +113,12 @@
     var cj = k.calc || {}, objc = s.criteria.filter(function (c) { return c.type === 'obj'; }), comc = s.criteria.filter(function (c) { return c.type === 'com'; });
     var open = V.open[k.id];
     return '<div class="card" style="margin:8px 0"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><div><b>' + h(k.name) + '</b> ' + (k.user_id ? '' : '<span class="pill">' + h(T('بلا حساب', 'no account')) + '</span>') + '</div>' +
-      '<div><span class="pill ' + (cj.complete ? 'ok' : 'warn') + '">' + h(T('اعتمد ' + cj.nsub + ' من ' + cj.neval, cj.nsub + '/' + cj.neval + ' submitted')) + '</span> <b style="font-size:18px">' + fmt(cj.final) + '</b>/100</div></div>' +
+      '<div><span class="pill ' + (cj.complete ? 'ok' : 'warn') + '">' + h(T('اعتمد ' + cj.nsub + ' من ' + cj.neval + (cj.nsub ? ' — المتوسط على ' + cj.nsub : ''), cj.nsub + '/' + cj.neval + ' submitted')) + '</span> <b style="font-size:18px">' + fmt(cj.final) + '</b>/100</div></div>' +
       '<div class="sub">' + (k.visible ? '👁 ' + h(T('النتيجة ظاهرة للمرشح', 'Visible to candidate')) : '🙈 ' + h(T('النتيجة مخفية عن المرشح', 'Hidden from candidate'))) + '</div>' +
       '<div class="tabs" style="margin:6px 0"><button class="btn sm ' + (k.released ? 'bad' : 'pri') + '" data-act="iv-rel" data-id="' + k.id + '" data-v="' + (k.released ? 0 : 1) + '" data-confirm="1">' + h(k.released ? T('سحب العرض عن المرشح', 'Withdraw') : T('اعتماد عرض النتيجة للمرشح', 'Approve & show to candidate')) + '</button> ' +
       '<button class="btn sm" data-act="iv-open" data-id="' + k.id + '">' + h(open ? T('إخفاء التفاصيل', 'Hide details') : T('التفاصيل والدرجات', 'Details')) + '</button> <button class="btn sm bad" data-act="iv-cdel" data-id="' + k.id + '" data-confirm="1">' + h(T('حذف المرشح', 'Remove')) + '</button></div>' +
       (open ? '<div style="border-top:1px solid rgba(127,127,127,.25);padding-top:8px"><b>' + h(T('المعايير الموضوعية (تُدخلها الإدارة)', 'Objective criteria')) + '</b><div class="form">' +
-        objc.map(function (c) { var v = k.obj && k.obj[c.id]; return '<label>' + h(c.name) + ' <span class="sub">/ ' + fmt(c.weight) + '</span><div style="display:flex;gap:6px"><input class="iv-obj" data-k="' + k.id + '" data-c="' + c.id + '" type="number" min="0" max="' + c.weight + '" step="0.5" value="' + (v == null ? '' : h(v)) + '" style="flex:1">' +
-          (c.calc ? '<input data-ivcalc="' + k.id + ':' + c.id + ':' + c.calc + ':' + c.weight + '" type="number" step="0.5" placeholder="' + h(calcHint(c)) + '" style="width:110px" title="' + h(T('أدخل القيمة لاحتساب الدرجة تلقائياً', 'Enter to auto-fill points')) + '">' : '') + '</div></label>'; }).join('') + '</div>' +
+        objc.map(function (c) { return objInput(k.id, c, k.obj && k.obj[c.id], false); }).join('') + '</div>' +
         (objc.length ? '<button class="btn sm pri" data-act="iv-obj" data-id="' + k.id + '">' + h(T('حفظ الدرجات الموضوعية', 'Save objective scores')) + '</button>' : '') +
         '<b style="display:block;margin-top:10px">' + h(T('تقييم أعضاء اللجنة', 'Committee scores')) + '</b>' +
         (k.evals.map(function (e) {
@@ -146,8 +147,7 @@
       return '<div class="card"><h3 style="margin:0">' + h(s.title) + '</h3>' + (fmtDT(s.iv_date, s.iv_time) ? '<div class="sub">' + h(fmtDT(s.iv_date, s.iv_time)) + '</div>' : '') + (s.status === 'closed' ? '<p class="pill warn">' + h(T('المقابلة مغلقة', 'Closed')) + '</p>' : '') +
         '<p class="sub">' + h(T('أدخل الدرجات الموضوعية لكل مرشح (من 0 حتى الوزن). يمكنك استخدام الحاسبة بجانب الخانة.', 'Enter objective points per candidate (0 to weight). The side box auto-calculates.')) + '</p>' +
         s.candidates.map(function (k) {
-          return '<div class="card" style="margin:8px 0"><b>' + h(k.name) + '</b><div class="form">' + s.criteria.map(function (c) { var v = k.obj && k.obj[c.id]; return '<label>' + h(c.name) + ' <span class="sub">/ ' + fmt(c.weight) + '</span>' + (c.method ? '<span class="sub" style="display:block;font-size:12px">' + h(c.method) + '</span>' : '') + '<div style="display:flex;gap:6px"><input class="iv-obj" data-k="' + k.id + '" data-c="' + c.id + '" type="number" min="0" max="' + c.weight + '" step="0.5" value="' + (v == null ? '' : h(v)) + '" style="flex:1"' + (s.status !== 'open' ? ' disabled' : '') + '>' +
-            (c.calc && s.status === 'open' ? '<input data-ivcalc="' + k.id + ':' + c.id + ':' + c.calc + ':' + c.weight + '" type="number" step="0.5" placeholder="' + h(calcHint(c)) + '" style="width:110px">' : '') + '</div></label>'; }).join('') + '</div>' +
+          return '<div class="card" style="margin:8px 0"><b>' + h(k.name) + '</b><div class="form">' + s.criteria.map(function (c) { return objInput(k.id, c, k.obj && k.obj[c.id], s.status !== 'open'); }).join('') + '</div>' +
             (s.status === 'open' ? '<button class="btn sm pri" data-act="iv-entsave1" data-id="' + k.id + '">' + h(T('حفظ', 'Save')) + '</button>' : '') + '</div>';
         }).join('') + '</div>';
     }).join('');
@@ -199,9 +199,9 @@
   /* ---------- نموذج ورقي (Excel) للتقييم دون إنترنت ---------- */
   function paperRows(title, dt, who, crit, cands, kind) {
     var rows = [[title], [dt || ''], [kind === 'obj' ? T('نموذج إدخال المعايير الموضوعية', 'Objective data sheet') : T('نموذج تقييم المقابلة', 'Interview scoring sheet'), '', '', (kind === 'obj' ? '' : T('اسم المقيّم: ', 'Evaluator: ') + (who || '______________________'))], []];
-    rows.push(['#', T('المعيار', 'Criterion'), T('طريقة التقييم', 'Method'), T('الدرجة العظمى', 'Max')].concat(cands.map(function (n) { return n; })));
-    var tot = 0; crit.forEach(function (c, i) { tot += Number(c.weight); rows.push([i + 1, c.name, c.method || '', Number(c.weight)].concat(cands.map(function () { return ''; }))); });
-    rows.push(['', T('المجموع', 'Total'), '', tot].concat(cands.map(function () { return ''; })));
+    rows.push(['#', T('المعيار', 'Criterion'), T('طريقة التقييم', 'Method'), kind === 'obj' ? T('الإدخال', 'Input') : T('الدرجة العظمى', 'Max')].concat(cands.map(function (n) { return n; })));
+    var tot = 0; crit.forEach(function (c, i) { tot += Number(c.weight); rows.push([i + 1, c.name, c.method || '', kind === 'obj' ? (c.calc === 'degree' ? T('نسبة من 100', '% of 100') : c.calc === 'years' ? T('سنوات', 'Years') : T('درجة من ', 'Points /') + fmt(c.weight)) : Number(c.weight)].concat(cands.map(function () { return ''; }))); });
+    if (kind !== 'obj') rows.push(['', T('المجموع', 'Total'), '', tot].concat(cands.map(function () { return ''; })));
     rows.push([]); rows.push(['', T('ملاحظات:', 'Notes:')]); rows.push([]); rows.push(['', kind === 'obj' ? T('اسم المُدخل وتوقيعه: ______________', 'Name & signature: ______________') : T('توقيع المقيّم: ______________', 'Signature: ______________'), '', '', T('التاريخ: ____ / ____ / ________', 'Date: ____ / ____ / ________')]);
     return rows;
   }
@@ -233,14 +233,22 @@
   }
 
   /* ---------- أفعال ---------- */
-  function newForm() { V.form = { id: null, title: '', notes: '', release_mode: 'admin', iv_date: '', iv_time: '' }; V.crit = DEF.map(function (c) { return Object.assign({}, c); }); draw(); }
+  function newForm() { V.form = { id: null, title: '', notes: '', release_mode: 'admin', iv_date: '', iv_time: '', iv_min: 0 }; V.crit = DEF.map(function (c) { return Object.assign({}, c); }); draw(); }
   function curSess() { return V.det && V.det.session; }
   function readForm() {
     var title = val('iv-title').trim(); if (!title) { toast_(T('اكتب العنوان', 'Enter a title')); return null; }
-    var cr = V.crit.map(function (c) { return { id: c.id, name: String(c.name || '').trim(), type: c.type, weight: num(c.weight), calc: c.calc || null, method: String(c.method || '').trim() }; });
+    var cr = V.crit.map(function (c) { return { id: c.id, name: String(c.name || '').trim(), type: c.type, weight: num(c.weight), calc: c.calc || null, cap: c.calc === 'years' ? (num(c.cap) || 5) : null, method: String(c.method || '').trim() }; });
     for (var i = 0; i < cr.length; i++) { if (!cr[i].name || !(cr[i].weight >= 0)) { toast_(T('أكمل اسم ووزن كل معيار', 'Complete every criterion')); return null; } }
     if (!cr.length) { toast_(T('أضف معياراً واحداً على الأقل', 'Add a criterion')); return null; }
-    return { title: title, notes: val('iv-notes').trim() || null, mode: val('iv-mode'), crit: cr, date: val('iv-date') || null, time: val('iv-time') || null };
+    return { title: title, notes: val('iv-notes').trim() || null, mode: val('iv-mode'), crit: cr, date: val('iv-date') || null, time: val('iv-time') || null, min: Math.max(0, Math.floor(num(val('iv-min')) || 0)) };
+  }
+  function ptsOf(c, raw) { var v = Number(raw); if (!isFinite(v) || v < 0) return null; if (c.calc === 'degree') return Math.min(v, 100) / 100 * c.weight; if (c.calc === 'years') return Math.min(v / (Number(c.cap) || 5), 1) * c.weight; return Math.min(v, c.weight); }
+  function objLabel(c) { return c.calc === 'degree' ? T('النسبة من 100', 'Grade /100') : c.calc === 'years' ? T('عدد السنوات', 'Years') : T('الدرجة', 'Points'); }
+  function objInput(k, c, v, dis) {
+    var mx = c.calc === 'degree' ? 100 : c.calc === 'years' ? 100 : c.weight, pv = v == null || v === '' ? null : ptsOf(c, v);
+    return '<label>' + h(c.name) + ' <span class="sub">/ ' + fmt(c.weight) + '</span>' + (c.method ? '<span class="sub" style="display:block;font-size:12px">' + h(c.method) + '</span>' : '') +
+      '<div style="display:flex;gap:6px;align-items:center"><input class="iv-obj" data-k="' + k + '" data-c="' + c.id + '" data-cw="' + h(JSON.stringify({ calc: c.calc || null, weight: c.weight, cap: c.cap || null })) + '" type="number" min="0" max="' + mx + '" step="0.5" placeholder="' + h(objLabel(c)) + '" value="' + (v == null ? '' : h(v)) + '" style="flex:1"' + (dis ? ' disabled' : '') + '>' +
+      (c.calc ? '<span class="sub iv-pv" style="white-space:nowrap;min-width:90px">' + (pv == null ? '' : '= ' + fmt(pv) + ' / ' + fmt(c.weight)) + '</span>' : '') + '</div></label>';
   }
   function degPts(p, w) { var v = p >= 95 ? 10 : p >= 90 ? 9 : p >= 85 ? 8 : p >= 80 ? 7 : p >= 75 ? 6 : p >= 70 ? 5 : p >= 65 ? 4 : p >= 60 ? 3 : 0; return Math.min(v, w); }
   var ACTS = {
@@ -249,14 +257,14 @@
     'iv-paper-me': function (el) { paperMe(Number(el.dataset.id)); },
     'iv-tab': function (el) { V.tab = el.dataset.t; draw(); },
     'iv-new': function () { newForm(); },
-    'iv-editform': function () { var s = curSess(); if (!s) return; V.form = { id: s.id, title: s.title, notes: s.notes, release_mode: s.release_mode, iv_date: s.iv_date, iv_time: s.iv_time }; V.crit = s.criteria.map(function (c) { return Object.assign({}, c); }); draw(); },
+    'iv-editform': function () { var s = curSess(); if (!s) return; V.form = { id: s.id, title: s.title, notes: s.notes, release_mode: s.release_mode, iv_date: s.iv_date, iv_time: s.iv_time, iv_min: s.iv_min }; V.crit = s.criteria.map(function (c) { return Object.assign({}, c); }); draw(); },
     'iv-cancel': function () { V.form = null; V.crit = null; draw(); },
     'iv-cadd': function () { var n = 1; V.crit.forEach(function (c) { var m = /^x(\d+)$/.exec(c.id); if (m) n = Math.max(n, Number(m[1]) + 1); }); V.crit.push({ id: 'x' + n, name: '', type: 'com', weight: 10, method: '' }); draw(); },
     'iv-crem': function (el) { V.crit.splice(Number(el.dataset.i), 1); draw(); },
     'iv-cdef': function () { V.crit = DEF.map(function (c) { return Object.assign({}, c); }); draw(); },
     'iv-save': function () {
       var f = readForm(); if (!f) return;
-      run(async function () { var id = await rpc('iv_session_save', { p_id: V.form.id, p_title: f.title, p_notes: f.notes, p_criteria: f.crit, p_mode: f.mode, p_status: null, p_date: f.date, p_time: f.time }); V.sid = Number(id); V.form = null; V.crit = null; say(T('تم الحفظ', 'Saved')); await reloadAll(); });
+      run(async function () { var id = await rpc('iv_session_save', { p_id: V.form.id, p_title: f.title, p_notes: f.notes, p_criteria: f.crit, p_mode: f.mode, p_status: null, p_date: f.date, p_time: f.time, p_min: f.min }); V.sid = Number(id); V.form = null; V.crit = null; say(T('تم الحفظ', 'Saved')); await reloadAll(); });
     },
     'iv-toggle': function () { var s = curSess(); if (!s) return; run(async function () { await rpc('iv_session_save', { p_id: s.id, p_title: s.title, p_notes: s.notes, p_criteria: s.criteria, p_mode: s.release_mode, p_status: s.status === 'open' ? 'closed' : 'open' }); await reloadAll(); }); },
     'iv-del': function () { var s = curSess(); if (!s) return; run(async function () { await rpc('iv_session_delete', { p_id: s.id }); V.sid = 0; V.det = null; say(T('حُذفت المقابلة', 'Deleted')); await reloadAll(); }); },
@@ -293,9 +301,11 @@
     var t = e.target, k = t && t.dataset && t.dataset.iv;
     if (k === 'sid') { V.sid = Number(t.value) || 0; V.form = null; run(async function () { V.det = V.sid ? await rpc('iv_admin_detail', { p_session: V.sid }) : null; }); }
   });
+  document.addEventListener('change', function (e) { var t = e.target, d = t && t.dataset; if (d && d.ivc && /:(type|calc)$/.test(d.ivc)) { var p = d.ivc.split(':'), c = V.crit && V.crit[Number(p[0])]; if (c) { c[p[1]] = p[1] === 'calc' ? (t.value || null) : t.value; if (p[1] === 'type' && t.value === 'com') c.calc = null; draw(); } } });
   document.addEventListener('input', function (e) {
     var t = e.target, d = t && t.dataset; if (!d) return;
-    if (d.ivc) { var p = d.ivc.split(':'), c = V.crit && V.crit[Number(p[0])]; if (c) { c[p[1]] = t.value; if (p[1] === 'weight') { var tot = V.crit.reduce(function (a, x) { return a + (num(x.weight) || 0); }, 0), b = document.getElementById('iv-tot'); if (b) { b.textContent = T('المجموع: ', 'Total: ') + fmt(tot); b.className = 'pill ' + (tot === 100 ? 'ok' : 'warn'); } } } }
+    if (d.ivc) { var p = d.ivc.split(':'), c = V.crit && V.crit[Number(p[0])]; if (c) { c[p[1]] = t.value; if (p[1] === 'calc' || p[1] === 'type') return; if (p[1] === 'weight') { var tot = V.crit.reduce(function (a, x) { return a + (num(x.weight) || 0); }, 0), b = document.getElementById('iv-tot'); if (b) { b.textContent = T('المجموع: ', 'Total: ') + fmt(tot); b.className = 'pill ' + (tot === 100 ? 'ok' : 'warn'); } } } }
+    else if (t.classList && t.classList.contains('iv-obj')) { var cw = {}; try { cw = JSON.parse(d.cw || '{}'); } catch (x) {} var pv = t.parentNode.querySelector('.iv-pv'); if (pv && cw.calc) { var r = t.value === '' ? null : ptsOf(cw, t.value); pv.textContent = r == null ? '' : '= ' + fmt(r) + ' / ' + fmt(cw.weight); } }
     else if (d.ivcalc) { var q = d.ivcalc.split(':'), v = num(t.value), box = document.querySelector('.iv-obj[data-k="' + q[0] + '"][data-c="' + q[1] + '"]'), w = Number(q[3]); if (box && isFinite(v)) box.value = q[2] === 'degree' ? degPts(v, w) : Math.min(Math.max(v, 0), w); }
     else if (t.classList && t.classList.contains('iv-ev')) V.dr[d.k + ':' + d.c] = t.value;
     else if (d.iv === 'staffq') { var s = String(t.value).trim().toLowerCase(); Array.prototype.forEach.call(document.querySelectorAll('#iv-evlist .ivrow'), function (r) { r.style.display = !s || (r.dataset.n || '').toLowerCase().indexOf(s) >= 0 ? 'flex' : 'none'; }); }
