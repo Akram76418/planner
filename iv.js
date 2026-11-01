@@ -260,7 +260,7 @@
     'iv-new': function () { newForm(); },
     'iv-editform': function () { var s = curSess(); if (!s) return; V.form = { id: s.id, title: s.title, notes: s.notes, release_mode: s.release_mode, iv_date: s.iv_date, iv_time: s.iv_time, iv_min: s.iv_min }; V.crit = s.criteria.map(function (c) { return Object.assign({}, c); }); draw(); },
     'iv-cancel': function () { V.form = null; V.crit = null; draw(); },
-    'iv-cadd': function (el) { var n = 1, tp = el && el.dataset.t === 'obj' ? 'obj' : 'com'; V.crit.forEach(function (c) { var m = /^x(\d+)$/.exec(c.id); if (m) n = Math.max(n, Number(m[1]) + 1); }); V.crit.push(tp === 'obj' ? { id: 'x' + n, name: '', type: 'obj', weight: 5, calc: null, method: '' } : { id: 'x' + n, name: '', type: 'com', weight: 10, method: '' }); draw(); },
+    'iv-cadd': function (el) { var n = 1, tp = el && el.dataset.t === 'obj' ? 'obj' : 'com'; V.crit.forEach(function (c) { var m = /^x(\d+)$/.exec(c.id); if (m) n = Math.max(n, Number(m[1]) + 1); }); var nc = tp === 'obj' ? { id: 'x' + n, name: '', type: 'obj', weight: 5, calc: null, method: '' } : { id: 'x' + n, name: '', type: 'com', weight: 10, method: '' }, at = -1; V.crit.forEach(function (c, i) { if (c.type === tp) at = i; }); if (at < 0) at = tp === 'obj' ? -1 : V.crit.length - 1; V.crit.splice(at + 1, 0, nc); draw(); },
     'iv-crem': function (el) { V.crit.splice(Number(el.dataset.i), 1); draw(); },
     'iv-cdef': function () { V.crit = DEF.map(function (c) { return Object.assign({}, c); }); draw(); },
     'iv-save': function () {
