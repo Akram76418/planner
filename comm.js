@@ -216,7 +216,7 @@
 
   var SUBPERM = { create: 'create', requests: 'requests', pending: 'reset', students: 'students', dups: 'students', staff: 'staff', assign: 'staff', cohorts: 'cohorts', admins: 'main' };
   function admSubs() { return Object.keys(SUBPERM).filter(function (k) { return CAN(SUBPERM[k]); }).map(function (k) { return [k]; }); }
-  var PERM_LIST = [['create', 'إنشاء حسابات', 'Create accounts'], ['requests', 'طلبات التسجيل', 'Sign-up requests'], ['students', 'الطلبة والشعب والتكرار', 'Students, cohorts, duplicates'], ['staff', 'الموظفون والأكاديميون', 'Staff & academics'], ['cohorts', 'إدارة الشعب', 'Manage cohorts'], ['reset', 'إعادة كلمات المرور', 'Reset passwords'], ['delete', 'حذف الحسابات', 'Delete accounts'], ['ann', 'الإعلانات والقنوات', 'Announcements & channels'], ['sched', 'جدول المحاضرات', 'Schedule'], ['poll', 'الاستبيانات', 'Polls'], ['weekly', 'جدول الدوام', 'Weekly roster'], ['logs', 'السجلات', 'Logs'], ['wipe', 'مسح الرسائل', 'Wipe messages'], ['proj', 'المشاريع الخارجية', 'External projects'], ['book', 'حجز المحاضرات', 'Lecture booking'], ['p_dash', 'منظّم الأعمال: لوحة التحكم', 'Planner: Dashboard'], ['p_cal', 'منظّم الأعمال: التقويم', 'Planner: Calendar'], ['p_appts', 'منظّم الأعمال: المواعيد', 'Planner: Appointments'], ['p_follow', 'منظّم الأعمال: متابعاتي اليومية', 'Planner: Daily follow-ups'], ['p_reports', 'منظّم الأعمال: التقارير والإنجازات', 'Planner: Reports']];
+  var PERM_LIST = [['create', 'إنشاء حسابات', 'Create accounts'], ['requests', 'طلبات التسجيل', 'Sign-up requests'], ['students', 'الطلبة والشعب والتكرار', 'Students, cohorts, duplicates'], ['staff', 'الموظفون والأكاديميون', 'Staff & academics'], ['cohorts', 'إدارة الشعب', 'Manage cohorts'], ['reset', 'إعادة كلمات المرور', 'Reset passwords'], ['delete', 'حذف الحسابات', 'Delete accounts'], ['ann', 'الإعلانات والقنوات', 'Announcements & channels'], ['sched', 'جدول المحاضرات', 'Schedule'], ['poll', 'الاستبيانات', 'Polls'], ['weekly', 'جدول الدوام', 'Weekly roster'], ['logs', 'السجلات', 'Logs'], ['wipe', 'مسح الرسائل', 'Wipe messages'], ['proj', 'المشاريع الخارجية', 'External projects'], ['book', 'حجز المحاضرات', 'Lecture booking'], ['iv', 'المقابلات', 'Interviews'], ['p_dash', 'منظّم الأعمال: لوحة التحكم', 'Planner: Dashboard'], ['p_cal', 'منظّم الأعمال: التقويم', 'Planner: Calendar'], ['p_appts', 'منظّم الأعمال: المواعيد', 'Planner: Appointments'], ['p_follow', 'منظّم الأعمال: متابعاتي اليومية', 'Planner: Daily follow-ups'], ['p_reports', 'منظّم الأعمال: التقارير والإنجازات', 'Planner: Reports']];
   function normQ(t) { return String(t || '').toLowerCase().replace(/[\u064B-\u0652\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim(); }
   function staffTools(A) {
     var found = A.found ? '<div class="list" style="margin-top:6px">' + (A.found.map(function (x) {
@@ -625,7 +625,7 @@
   }
   function val(id) { var e = $c('#' + id); return e ? e.value : ''; }
   /* ---------- الجدول الأسبوعي للمحاضرين والموظفين ---------- */
-  var DAYS = [['sun', 'الأحد', 'Sun'], ['mon', 'الاثنين', 'Mon'], ['tue', 'الثلاثاء', 'Tue'], ['wed', 'الأربعاء', 'Wed'], ['thu', 'الخميس', 'Thu']];
+  var DAYS = [['sun', 'الأحد', 'Sun'], ['mon', 'الاثنين', 'Mon'], ['tue', 'الثلاثاء', 'Tue'], ['wed', 'الأربعاء', 'Wed'], ['thu', 'الخميس', 'Thu'], ['sat', 'السبت', 'Sat']];
   async function loadWeek() { ST.week.rows = (await rpc('comm_weekly_list')) || []; }
   function weekHtml() {
     var adm = CAN('weekly'), rows = ST.week.rows || [];
@@ -641,7 +641,7 @@
       (ST.week.note ? '<p class="pill ok">' + h(ST.week.note) + '</p>' : '') +
       '<div class="tabs" style="margin:8px 0">' + (adm ? '<button class="btn pri" data-act="wk-add">+ ' + h(T('إضافة صف', 'Add row')) + '</button><button class="btn" data-act="wk-fill">' + h(T('إضافة كل الموظفين المسجلين', 'Add all registered staff')) + '</button>' : '') +
       '<button class="btn" data-act="wk-export">⬇ ' + h(T('تصدير Word', 'Export to Word')) + '</button>' + (adm && rows.length ? '<button class="btn sm bad" data-act="wk-clear" data-confirm="1">' + h(T('مسح الجدول', 'Clear table')) + '</button>' : '') + '</div>' +
-      '<div style="overflow-x:auto"><table class="cm-wk" style="border-collapse:collapse;width:100%">' + head + (body || '<tr><td colspan="9" class="empty">' + h(T('لا بيانات. أضف صفاً أو أضف الموظفين المسجلين.', 'No rows yet.')) + '</td></tr>') + '</table></div></div>';
+      '<div style="overflow-x:auto"><table class="cm-wk" style="border-collapse:collapse;width:100%">' + head + (body || '<tr><td colspan="10" class="empty">' + h(T('لا بيانات. أضف صفاً أو أضف الموظفين المسجلين.', 'No rows yet.')) + '</td></tr>') + '</table></div></div>';
   }
   function weekRowValues(id) {
     var o = { cells: {}, notes: '' };
@@ -662,7 +662,7 @@
       '<p style="text-align:center;font-size:13pt;color:#0B8A97;margin:0"><b>كلية فلسطين للتمريض - غزة</b></p>' +
       '<p style="text-align:center;font-size:20pt;color:#12304D;margin:4pt 0 2pt"><b>الجدول الأسبوعي للمحاضرين والموظفين</b></p>' +
       '<p style="text-align:center;font-size:10pt;color:#6B7C8A;margin:0 0 10pt">تاريخ الإصدار: ' + esc(d.toLocaleDateString('ar', { year: 'numeric', month: 'long', day: 'numeric' })) + '</p>' +
-      '<table dir="rtl" width="100%" border="1" cellspacing="0" cellpadding="4" style="width:100%;border-collapse:collapse"><thead><tr><th ' + th + ' width="4%">#</th><th ' + th + ' width="20%">الاسم</th>' + DAYS.map(function (x) { return '<th ' + th + ' width="13%">' + x[1] + '</th>'; }).join('') + '<th ' + th + ' width="12%">ملاحظات</th></tr></thead><tbody>' +
+      '<table dir="rtl" width="100%" border="1" cellspacing="0" cellpadding="4" style="width:100%;border-collapse:collapse"><thead><tr><th ' + th + ' width="4%">#</th><th ' + th + ' width="20%">الاسم</th>' + DAYS.map(function (x) { return '<th ' + th + ' width="11%">' + x[1] + '</th>'; }).join('') + '<th ' + th + ' width="12%">ملاحظات</th></tr></thead><tbody>' +
       rows.map(function (r, i) { var c = r.cells || {}; return '<tr>' + td(i + 1) + td(r.name, true) + DAYS.map(function (x) { return td(c[x[0]]); }).join('') + td(r.notes) + '</tr>'; }).join('') +
       '</tbody></table></div></body></html>';
   }
