@@ -16,8 +16,8 @@
   var DEF = [
     { id: 'c1', name: 'المؤهل العلمي (البكالوريوس)', type: 'obj', weight: 10, calc: 'degree', method: 'تُدخل نسبة المؤهل من 100 وتُحوَّل إلى الدرجة حسب الوزن' },
     { id: 'c2', name: 'المؤهل العلمي (الماجستير)', type: 'obj', weight: 10, calc: 'degree', method: 'تُدخل نسبة المؤهل من 100 وتُحوَّل إلى الدرجة حسب الوزن' },
-    { id: 'c3', name: 'الخبرة التدريسية الجامعية', type: 'obj', weight: 5, calc: 'years', cap: 5, method: 'تُدخل عدد السنوات وتُحوَّل إلى الدرجة حسب الوزن (5 سنوات فأكثر = الدرجة كاملة)' },
-    { id: 'c4', name: 'الخبرة في كلية فلسطين', type: 'obj', weight: 5, calc: 'years', cap: 5, method: 'تُدخل عدد السنوات وتُحوَّل إلى الدرجة حسب الوزن (5 سنوات فأكثر = الدرجة كاملة)' },
+    { id: 'c3', name: 'الخبرة التدريسية الجامعية', type: 'obj', weight: 5, calc: 'years', cap: 10, method: 'تُدخل عدد السنوات وتُحوَّل إلى الدرجة حسب الوزن (10 سنوات فأكثر = الدرجة كاملة)' },
+    { id: 'c4', name: 'الخبرة في كلية فلسطين', type: 'obj', weight: 5, calc: 'years', cap: 10, method: 'تُدخل عدد السنوات وتُحوَّل إلى الدرجة حسب الوزن (10 سنوات فأكثر = الدرجة كاملة)' },
     { id: 'c5', name: 'خطة الموظف', type: 'com', weight: 20, method: 'عرض خطة موحدة المدة: واقعيتها، قابليتها للقياس، ارتباطها باحتياجات القسم' },
     { id: 'c6', name: 'القيادة والتواصل وإدارة الفريق', type: 'com', weight: 20, method: 'أسئلة سلوكية موحدة عن مواقف قيادية فعلية، مع طلب أمثلة وأدلة' },
     { id: 'c7', name: 'حل المشكلات (دراسة حالة موحدة)', type: 'com', weight: 10, method: 'حالة واحدة لجميع المتقدمين: جودة التحليل والقرار المقترح' },
@@ -81,7 +81,7 @@
       rows.map(function (c, i) {
         return '<tr><td><input data-ivc="' + i + ':name" value="' + h(c.name) + '" maxlength="160" style="min-width:150px"></td><td><select data-ivc="' + i + ':type"><option value="obj"' + (c.type === 'obj' ? ' selected' : '') + '>' + h(T('موضوعي', 'Objective')) + '</option><option value="com"' + (c.type === 'com' ? ' selected' : '') + '>' + h(T('لجنة', 'Committee')) + '</option></select></td>' +
           '<td><input data-ivc="' + i + ':weight" type="number" min="0" max="1000" step="0.5" value="' + h(c.weight) + '" style="width:72px"></td>' +
-          '<td>' + (c.type === 'obj' ? '<select data-ivc="' + i + ':calc" data-redraw="1"><option value=""' + (!c.calc ? ' selected' : '') + '>' + h(T('درجة مباشرة', 'Points')) + '</option><option value="degree"' + (c.calc === 'degree' ? ' selected' : '') + '>' + h(T('نسبة من 100', 'Percent /100')) + '</option><option value="years"' + (c.calc === 'years' ? ' selected' : '') + '>' + h(T('سنوات', 'Years')) + '</option></select>' + (c.calc === 'years' ? ' <input data-ivc="' + i + ':cap" type="number" min="1" max="100" value="' + h(c.cap || 5) + '" style="width:60px" title="' + h(T('سنوات الدرجة الكاملة', 'Years for full points')) + '">' : '') : '—') + '</td><td><input data-ivc="' + i + ':method" value="' + h(c.method || '') + '" maxlength="400" style="min-width:200px"></td>' +
+          '<td>' + (c.type === 'obj' ? '<select data-ivc="' + i + ':calc" data-redraw="1"><option value=""' + (!c.calc ? ' selected' : '') + '>' + h(T('درجة مباشرة', 'Points')) + '</option><option value="degree"' + (c.calc === 'degree' ? ' selected' : '') + '>' + h(T('نسبة من 100', 'Percent /100')) + '</option><option value="years"' + (c.calc === 'years' ? ' selected' : '') + '>' + h(T('سنوات', 'Years')) + '</option></select>' + (c.calc === 'years' ? ' <input data-ivc="' + i + ':cap" type="number" min="1" max="100" value="' + h(c.cap || 10) + '" style="width:60px" title="' + h(T('سنوات الدرجة الكاملة', 'Years for full points')) + '">' : '') : '—') + '</td><td><input data-ivc="' + i + ':method" value="' + h(c.method || '') + '" maxlength="400" style="min-width:200px"></td>' +
           '<td><button class="btn sm bad" data-act="iv-crem" data-i="' + i + '">✕</button></td></tr>';
       }).join('') + '</tbody></table></div><div class="tabs" style="margin-top:6px"><button class="btn sm" data-act="iv-cadd">+ ' + h(T('معيار', 'Criterion')) + '</button> <button class="btn sm" data-act="iv-cdef">' + h(T('استرجاع المعايير الافتراضية', 'Restore defaults')) + '</button> <b id="iv-tot" class="pill ' + (tot === 100 ? 'ok' : 'warn') + '">' + h(T('المجموع: ', 'Total: ') + fmt(tot)) + '</b></div>' +
       '<div class="tabs" style="margin-top:8px"><button class="btn pri" data-act="iv-save">' + h(T('حفظ', 'Save')) + '</button> <button class="btn" data-act="iv-cancel">' + h(T('إلغاء', 'Cancel')) + '</button></div></div>';
@@ -237,12 +237,12 @@
   function curSess() { return V.det && V.det.session; }
   function readForm() {
     var title = val('iv-title').trim(); if (!title) { toast_(T('اكتب العنوان', 'Enter a title')); return null; }
-    var cr = V.crit.map(function (c) { return { id: c.id, name: String(c.name || '').trim(), type: c.type, weight: num(c.weight), calc: c.calc || null, cap: c.calc === 'years' ? (num(c.cap) || 5) : null, method: String(c.method || '').trim() }; });
+    var cr = V.crit.map(function (c) { return { id: c.id, name: String(c.name || '').trim(), type: c.type, weight: num(c.weight), calc: c.calc || null, cap: c.calc === 'years' ? (num(c.cap) || 10) : null, method: String(c.method || '').trim() }; });
     for (var i = 0; i < cr.length; i++) { if (!cr[i].name || !(cr[i].weight >= 0)) { toast_(T('أكمل اسم ووزن كل معيار', 'Complete every criterion')); return null; } }
     if (!cr.length) { toast_(T('أضف معياراً واحداً على الأقل', 'Add a criterion')); return null; }
     return { title: title, notes: val('iv-notes').trim() || null, mode: val('iv-mode'), crit: cr, date: val('iv-date') || null, time: val('iv-time') || null, min: Math.max(0, Math.floor(num(val('iv-min')) || 0)) };
   }
-  function ptsOf(c, raw) { var v = Number(raw); if (!isFinite(v) || v < 0) return null; if (c.calc === 'degree') return Math.min(v, 100) / 100 * c.weight; if (c.calc === 'years') return Math.min(v / (Number(c.cap) || 5), 1) * c.weight; return Math.min(v, c.weight); }
+  function ptsOf(c, raw) { var v = Number(raw); if (!isFinite(v) || v < 0) return null; if (c.calc === 'degree') return Math.min(v, 100) / 100 * c.weight; if (c.calc === 'years') return Math.min(v / (Number(c.cap) || 10), 1) * c.weight; return Math.min(v, c.weight); }
   function objLabel(c) { return c.calc === 'degree' ? T('النسبة من 100', 'Grade /100') : c.calc === 'years' ? T('عدد السنوات', 'Years') : T('الدرجة', 'Points'); }
   function objInput(k, c, v, dis) {
     var mx = c.calc === 'degree' ? 100 : c.calc === 'years' ? 100 : c.weight, pv = v == null || v === '' ? null : ptsOf(c, v);
