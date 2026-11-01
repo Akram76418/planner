@@ -97,7 +97,7 @@
       '<label>' + h(T('أو اسم يدوي (بلا حساب)', 'Or a manual name')) + '<input id="iv-cname" maxlength="120"></label></div><button class="btn sm pri" data-act="iv-cand">+ ' + h(T('إضافة', 'Add')) + '</button>' +
       (Math.round(tot * 100) !== 10000 ? '<p class="pill warn">' + h(T('مجموع الأوزان ' + fmt(tot) + ' (تُحوَّل النتيجة إلى نسبة من 100)', 'Weights total ' + fmt(tot))) + '</p>' : '') + '</div>';
     var ranked = d.candidates.slice().sort(function (a, b) { return (Number(b.calc && b.calc.final) || -1) - (Number(a.calc && a.calc.final) || -1); });
-    if (ranked.length > 1) out += '<div class="card"><b>🏆 ' + h(T('الترتيب', 'Ranking')) + '</b><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><tbody>' + ranked.map(function (c, i) { return '<tr><td>' + (i + 1) + '</td><td>' + h(c.name) + '</td><td><b>' + fmt(c.calc && c.calc.final) + '</b></td><td>' + (c.calc && c.calc.complete ? '✔' : '…') + '</td></tr>'; }).join('') + '</tbody></table></div></div>';
+    if (ranked.length) out += '<div class="card"><b>🏆 ' + h(T('الترتيب', 'Ranking')) + '</b> <button class="btn sm" data-act="iv-export">⬇ ' + h(T('تصدير النتائج Excel', 'Export results (Excel)')) + '</button><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><tbody>' + ranked.map(function (c, i) { return '<tr><td>' + (i + 1) + '</td><td>' + h(c.name) + '</td><td><b>' + fmt(c.calc && c.calc.final) + '</b></td><td>' + (c.calc && c.calc.complete ? '✔' : '…') + '</td></tr>'; }).join('') + '</tbody></table></div></div>';
     out += d.candidates.map(function (c) { return candCard(c, s); }).join('');
     return out;
   }
@@ -145,6 +145,39 @@
     }).join('');
   }
 
+
+  /* ---------- تصدير النتائج النهائية (Excel) مرتبة من الأعلى إلى الأدنى ---------- */
+  function saveBlob(name, blob) { var u = URL.createObjectURL(blob), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 4000); }
+  function loadXlsx() {
+    if (window.XLSX) return Promise.resolve();
+    return new Promise(function (res, rej) { var sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; sc.onload = res; sc.onerror = function () { rej(new Error('xlsx')); }; document.head.appendChild(sc); });
+  }
+  function exportRows() {
+    var d = V.det, s = d.session, hasF = function (c) { return c.calc && c.calc.final != null; };
+    var list = d.candidates.slice().sort(function (a, b) { return (hasF(b) ? Number(b.calc.final) : -1) - (hasF(a) ? Number(a.calc.final) : -1); });
+    var head = [T('الترتيب', 'Rank'), T('الاسم', 'Name')].concat(s.criteria.map(function (c) { return c.name + ' (' + fmt(c.weight) + ')'; }), [T('المجموع', 'Total'), T('المجموع الكلي الممكن', 'Max'), T('النتيجة من 100', 'Result /100'), T('اعتمد من اللجنة', 'Submitted'), T('اكتمال التقييم', 'Complete'), T('الظهور للمرشح', 'Visible to candidate')]);
+    var rows = [[s.title + (s.iv_date ? ' — ' + s.iv_date + (s.iv_time ? ' ' + String(s.iv_time).slice(0, 5) : '') : '')], head];
+    list.forEach(function (k, i) {
+      var cj = k.calc || {}, byId = {}; (cj.rows || []).forEach(function (r) { byId[r.id] = r.points; });
+      rows.push([hasF(k) ? i + 1 : '', k.name].concat(s.criteria.map(function (c) { return byId[c.id] == null ? '' : Number(byId[c.id]); }), [cj.total == null ? '' : Number(cj.total), cj.max == null ? '' : Number(cj.max), hasF(k) ? Number(cj.final) : '', (cj.nsub || 0) + '/' + (cj.neval || 0), cj.complete ? T('نعم', 'Yes') : T('لا', 'No'), k.visible ? T('ظاهرة', 'Yes') : T('مخفية', 'No')]));
+    });
+    return rows;
+  }
+  async function doExport() {
+    if (!V.det) return;
+    var rows = exportRows(), lab = String(V.det.session.title).replace(/[\\/:*?"<>|\s]+/g, '-'), name = 'نتائج-' + lab + '-' + new Date().toISOString().slice(0, 10);
+    try {
+      await loadXlsx();
+      var ws = window.XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = [{ wch: 9 }, { wch: 28 }].concat(V.det.session.criteria.map(function () { return { wch: 16 }; }), [{ wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 14 }]);
+      ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }];
+      var wb = window.XLSX.utils.book_new(); wb.Workbook = { Views: [{ RTL: true }] }; window.XLSX.utils.book_append_sheet(wb, ws, T('النتائج', 'Results'));
+      saveBlob(name + '.xlsx', new Blob([window.XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/octet-stream' }));
+    } catch (e) {
+      var csv = '﻿' + rows.map(function (r) { return r.map(function (c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(','); }).join('\r\n');
+      saveBlob(name + '.csv', new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    }
+  }
+
   /* ---------- أفعال ---------- */
   function newForm() { V.form = { id: null, title: '', notes: '', release_mode: 'admin', iv_date: '', iv_time: '' }; V.crit = DEF.map(function (c) { return Object.assign({}, c); }); draw(); }
   function curSess() { return V.det && V.det.session; }
@@ -157,6 +190,7 @@
   }
   function degPts(p, w) { var v = p >= 95 ? 10 : p >= 90 ? 9 : p >= 85 ? 8 : p >= 80 ? 7 : p >= 75 ? 6 : p >= 70 ? 5 : p >= 65 ? 4 : p >= 60 ? 3 : 0; return Math.min(v, w); }
   var ACTS = {
+    'iv-export': function () { doExport(); },
     'iv-tab': function (el) { V.tab = el.dataset.t; draw(); },
     'iv-new': function () { newForm(); },
     'iv-editform': function () { var s = curSess(); if (!s) return; V.form = { id: s.id, title: s.title, notes: s.notes, release_mode: s.release_mode, iv_date: s.iv_date, iv_time: s.iv_time }; V.crit = s.criteria.map(function (c) { return Object.assign({}, c); }); draw(); },
