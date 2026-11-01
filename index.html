@@ -322,7 +322,7 @@ const ic=(n,s=20)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="no
 const BASE_VIEWS=['dash','cal','appts','follow','reports','settings'];
 const PV=k=>!(window.CTX&&window.CTX.role==='admin')||!!(window.CAN&&window.CAN(k));
 const IVV=()=>window.IV?['iv']:[];
-const views=()=>window.COMM_ONLY?['comm',...IVV()]:window.HAS_COMM?[...['dash','cal','appts','follow','reports'].filter(v=>PV('p_'+v)),'comm',...(window.CAN&&window.CAN('proj')?['proj']:[]),...(window.CAN&&window.CAN('logs')?['logs']:[]),...(window.CAN&&window.CAN('book')?['book']:[]),...IVV(),...(window.CAN&&window.CAN('main')?['ledger']:[]),'settings']:BASE_VIEWS;
+const views=()=>window.COMM_ONLY?['comm',...IVV()]:window.HAS_COMM?[...['dash','cal','appts','follow','reports'].filter(v=>PV('p_'+v)&&!(window.PERMS&&window.CTX&&window.CTX.planner===false)),'comm',...(window.CAN&&window.CAN('proj')?['proj']:[]),...(window.CAN&&window.CAN('logs')?['logs']:[]),...(window.CAN&&window.CAN('book')?['book']:[]),...IVV(),...(window.CAN&&window.CAN('main')?['ledger']:[]),'settings']:BASE_VIEWS;
 
 /* ---------- domain helpers ---------- */
 const PR={high:0,med:1,low:2};

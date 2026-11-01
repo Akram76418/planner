@@ -317,6 +317,7 @@
     var ar = lang() === 'ar';
     if (!enabled) return ar ? 'وضع محلي: البيانات محفوظة على هذا الجهاز فقط ولا تتم مزامنتها. فعّل Supabase في config.js لتفعيل الحسابات والمزامنة.' : 'Local mode: data is stored on this device only and is not synced. Set up Supabase in config.js to enable accounts and sync.';
     if (!user) return ar ? 'أنت تعمل دون حساب: البيانات على هذا الجهاز فقط ولن تتم مزامنتها.' : 'No account: data stays on this device and will not sync.';
+    if (st.access && !st.access.allowed && window.PERMS && window.CTX && window.CTX.planner === false) return '';   // مسؤول فرعي بلا صلاحية منظّم الأعمال: لا تُعرض رسالة الإذن
     if (st.access && !st.access.allowed) return ar ? 'هذا الحساب (' + (user.email || '') + ') غير مسموح له باستخدام التطبيق. اطلب من المسؤول إضافة بريدك ثم أعد فتح التطبيق.' : 'This account (' + (user.email || '') + ') is not allowed to use the app. Ask the administrator to add your email, then reopen the app.';
     if (st.needLogin) return ar ? 'انتهت جلسة الدخول. سجّل الدخول مجدداً لمزامنة ' + pending() + ' تغيير معلّق.' : 'Your session expired. Sign in again to sync ' + pending() + ' pending change(s).';
     if (!navigator.onLine) return ar ? 'لا يوجد اتصال. التغييرات تُحفظ على الجهاز وتُزامن عند عودة الاتصال (' + pending() + ' معلّق).' : 'Offline. Changes are saved on the device and sync when you reconnect (' + pending() + ' pending).';
