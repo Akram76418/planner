@@ -56,6 +56,7 @@ create or replace function public.iv_default_criteria() returns jsonb language s
    {"id":"c2","name":"المؤهل العلمي (الماجستير)","type":"obj","weight":10,"calc":"degree","method":"تُدخل نسبة المؤهل من 100 وتُحوَّل إلى الدرجة حسب الوزن"},
    {"id":"c3","name":"الخبرة التدريسية الجامعية","type":"obj","weight":5,"calc":"years","cap":10,"method":"تُدخل عدد السنوات وتُحوَّل إلى الدرجة حسب الوزن (10 سنوات فأكثر = الدرجة كاملة)"},
    {"id":"c4","name":"الخبرة في كلية فلسطين","type":"obj","weight":5,"calc":"years","cap":10,"method":"تُدخل عدد السنوات وتُحوَّل إلى الدرجة حسب الوزن (10 سنوات فأكثر = الدرجة كاملة)"},
+   {"id":"c10","name":"مرشح دكتوراه","type":"obj","weight":3,"calc":"flag","method":"3 درجات لمن هو مرشح دكتوراه (نعم/لا) — الوزن قابل للتعديل"},
    {"id":"c5","name":"خطة الموظف","type":"com","weight":20,"method":"عرض خطة موحدة المدة: واقعيتها، قابليتها للقياس، ارتباطها باحتياجات القسم"},
    {"id":"c6","name":"القيادة والتواصل وإدارة الفريق","type":"com","weight":20,"method":"أسئلة سلوكية موحدة عن مواقف قيادية فعلية، مع طلب أمثلة وأدلة"},
    {"id":"c7","name":"حل المشكلات (دراسة حالة موحدة)","type":"com","weight":10,"method":"حالة واحدة لجميع المتقدمين: جودة التحليل والقرار المقترح"},
@@ -74,7 +75,7 @@ begin
     begin w := (c ->> 'weight')::numeric; exception when others then raise exception 'bad weight'; end;
     if w is null or w < 0 or w > 1000 then raise exception 'bad weight'; end if;
     if length(trim(coalesce(c ->> 'name', ''))) = 0 or length(c ->> 'name') > 160 or length(coalesce(c ->> 'method', '')) > 400 then raise exception 'bad criteria text'; end if;
-    out := out || jsonb_build_object('id', c ->> 'id', 'name', trim(c ->> 'name'), 'type', c ->> 'type', 'weight', w, 'calc', case when (c ->> 'calc') in ('degree', 'years') then c ->> 'calc' else null end, 'cap', case when (c ->> 'calc') = 'years' then least(greatest(coalesce(nullif(c ->> 'cap', '')::numeric, 10), 1), 100) else null end, 'method', nullif(trim(coalesce(c ->> 'method', '')), ''));
+    out := out || jsonb_build_object('id', c ->> 'id', 'name', trim(c ->> 'name'), 'type', c ->> 'type', 'weight', w, 'calc', case when (c ->> 'calc') in ('degree', 'years', 'flag') then c ->> 'calc' else null end, 'cap', case when (c ->> 'calc') = 'years' then least(greatest(coalesce(nullif(c ->> 'cap', '')::numeric, 10), 1), 100) else null end, 'method', nullif(trim(coalesce(c ->> 'method', '')), ''));
   end loop;
   return out;
 end $$;
@@ -94,6 +95,7 @@ begin
         pts := greatest((k.obj ->> (c ->> 'id'))::numeric, 0);
         if c ->> 'calc' = 'degree' then pts := least(pts, 100) / 100 * w;
         elsif c ->> 'calc' = 'years' then pts := least(pts / coalesce(nullif(c ->> 'cap', '')::numeric, 10), 1) * w;
+        elsif c ->> 'calc' = 'flag' then pts := least(pts, 1) * w;
         else pts := least(pts, w); end if;
       end if;
     elsif nsub > 0 then
