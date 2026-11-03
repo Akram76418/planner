@@ -51,7 +51,8 @@
   async function boot() {
     try {
       if (!isAdmin()) { try { ST.admNames = {}; (await rpc('comm_admin_names') || []).forEach(function (x) { ST.admNames[String(x).trim()] = 1; }); ST.admIds = {}; (await rpc('comm_admin_ids') || []).forEach(function (x) { ST.admIds[x] = 1; }); } catch (e) {} }
-      if (isStaff()) ST.cohorts = await rpc('comm_list_cohorts');
+      ST.access = null; if (isStaff() && !isAdmin()) { try { ST.access = await rpc('comm_my_access'); } catch (e) { ST.access = { weekly: true, cohorts: true }; } }
+      if (isStaff()) ST.cohorts = (await rpc('comm_list_cohorts')) || [];
       if (role() === 'student' && ctx().cohort_id) ST.cohort = ctx().cohort_id;
       else if (ST.cohorts[0]) ST.cohort = ST.cohorts[0].id;
       if (isAdmin()) { ST.admin.pending = CAN('reset') ? await rpc('comm_pending_passwords').catch(function () { return []; }) : []; ST.admin.reqs = CAN('requests') ? await rpc('comm_list_requests').catch(function () { return []; }) : []; }
@@ -81,7 +82,11 @@
     ST.msgs = (rows || []).slice().reverse();
     if (!keepScroll) { try { await rpc('mark_communication_conversation_read', { target_conversation_id: ST.conv.id }); } catch (e) {} }
   }
+  function acc(k) { return !(isStaff() && !isAdmin()) || !ST.access || !!ST.access[k]; }
+  function blocked(tab) { return (tab === 'week' && !acc('weekly')) || ((tab === 'sched' || tab === 'ann') && isStaff() && !acc('cohorts')); }
+  function lockHtml() { return '<div class="card"><h2>🔒 ' + h(T('ليست لديك صلاحية', 'No permission')) + '</h2><p class="sub">' + h(T('ليس لديك صلاحية لعرض هذا القسم. إن كنت تحتاجه فتواصل مع الإدارة لمنحك الصلاحية.', 'You do not have permission to view this section. Contact the administration to request access.')) + '</p></div>'; }
   async function loadTab(quiet) {
+    if (blocked(ST.tab)) return;
     if (ST.tab === 'home') return loadHome();
     if (ST.tab === 'sched') return loadSched();
     if (ST.tab === 'poll') return loadPolls();
@@ -98,7 +103,7 @@
       if (ST.admin.sub === 'requests') ST.admin.reqs = await rpc('comm_list_requests');
       if (ST.admin.sub === 'pending') ST.admin.pending = await rpc('comm_pending_passwords');
       if (ST.admin.sub === 'students') ST.admin.students = await rpc('comm_list_students', { p_search: ST.admin.q || '' });
-      if (ST.admin.sub === 'staff') ST.admin.staff = await rpc('comm_list_staff');
+      if (ST.admin.sub === 'staff') { ST.admin.staff = await rpc('comm_list_staff'); await loadAcc(); }
       if (ST.admin.sub === 'assign') { ST.admin.staff = await rpc('comm_list_staff'); ST.admin.cp = await rpc('comm_cohort_professors'); }
       if (ST.admin.sub === 'cohorts') ST.cohorts = await rpc('comm_list_cohorts');
       if (ST.admin.sub === 'admins') { ST.admin.admins = await rpc('comm_list_admins'); ST.admin.staff = await rpc('comm_list_staff'); }
@@ -128,10 +133,10 @@
     var t = role() === 'student' ? [['home', T('الرئيسية', 'Home'), 0]] : [];
     t.push(['dm', T('المحادثات', 'Chats'), ST.dmUnread]);
     if (isStaff()) t.push(['staff', T('قنوات الموظفين', 'Staff channels'), chU]);
-    t.push(['ann', T('إعلانات الشعب', 'Cohort announcements'), ST.unread.ann || 0]);
-    t.push(['sched', T('الجدول', 'Schedule'), 0]);
+    t.push(['ann', (blocked('ann') ? '🔒 ' : '') + T('إعلانات الشعب', 'Cohort announcements'), blocked('ann') ? 0 : (ST.unread.ann || 0)]);
+    t.push(['sched', (blocked('sched') ? '🔒 ' : '') + T('الجدول', 'Schedule'), 0]);
     t.push(['poll', T('استبيانات', 'Polls'), !isAdmin() ? unvoted() : 0]);
-    if (isStaff()) t.push(['week', T('جدول الدوام', 'Weekly roster'), 0]);
+    if (isStaff()) t.push(['week', (blocked('week') ? '🔒 ' : '') + T('جدول الدوام', 'Weekly roster'), 0]);
     if (isAdmin() && admSubs().length) t.push(['admin', T('إدارة', 'Admin'), 0]);
     t.push(['me', T('حسابي', 'My account'), 0]);
     return '<div class="cm-tabs">' + t.map(function (x) { return '<button class="btn' + (ST.tab === x[0] ? ' pri' : '') + '" data-act="cm-tab" data-t="' + x[0] + '">' + h(x[1]) + badge(x[2]) + '</button>'; }).join('') + '</div>';
@@ -139,7 +144,7 @@
   function draw() {
     var root = $c('#cm-root'); if (!root) return;
     var body = '';
-    if (ST.tab === 'dm') body = dmHtml(); else if (ST.tab === 'staff') body = staffHtml(); else if (ST.tab === 'ann') body = annHtml();
+    if (blocked(ST.tab)) body = lockHtml(); else if (ST.tab === 'dm') body = dmHtml(); else if (ST.tab === 'staff') body = staffHtml(); else if (ST.tab === 'ann') body = annHtml();
     else if (ST.tab === 'home') body = homeHtml(); else if (ST.tab === 'sched') body = schedHtml(); else if (ST.tab === 'poll') body = pollHtml(); else if (ST.tab === 'week') body = weekHtml();
     else if (ST.tab === 'admin') body = adminHtml(); else body = meHtml();
     root.innerHTML = '<header class="top"><h1>' + h(T('التواصل', 'Communication')) + '</h1></header>' + tabs() +
@@ -303,7 +308,7 @@
         (A.note ? '<p class="pill ok">' + h(A.note) + '</p>' : '') + staffTools(A) +
         '<div class="tabs" style="margin:8px 0"><button class="btn sm" data-act="cm-exp-staff-xlsx">⬇ ' + h(T('تصدير الموظفين Excel', 'Export staff (Excel)')) + '</button> <button class="btn sm" data-act="cm-exp-staff-csv">⬇ CSV</button></div>' +
         '<div class="tabs" style="margin:8px 0"><label class="ck"><input type="checkbox" data-cm="stselall"' + (stf.length && stSel === stf.length ? ' checked' : '') + '> ' + h(T('تحديد الكل', 'Select all')) + ' (' + stf.length + ')</label><button class="btn sm bad" data-act="cm-del-staff"' + (stSel ? '' : ' disabled') + '>' + h(T('حذف المحدد', 'Delete selected')) + (stSel ? ' (' + stSel + ')' : '') + '</button> <button class="btn sm" data-act="cm-reset-sel"' + (stSel ? '' : ' disabled') + '>' + h(T('كلمة افتراضية للمحدد', 'Reset selected')) + '</button> <button class="btn sm bad" data-act="cm-reset-all" data-scope="staff">' + h(T('إعادة كلمة المرور لكل الموظفين', 'Reset all staff')) + '</button> <button class="btn sm" data-act="cm-titles">' + h(T('تطبيق الألقاب (د./أ.)', 'Apply titles')) + '</button></div>' +
-        '<div class="list">' + (stf.map(function (s) { return '<div class="row"><label style="padding-inline-end:8px"><input type="checkbox" data-cm="stsel" data-id="' + h(s.id) + '"' + (A.sel[s.id] ? ' checked' : '') + '></label><div class="main"><div class="t">' + h(s.full_name) + '</div><div class="sub">' + h((ROLE[s.role] || [s.role, s.role])[ar() ? 0 : 1]) + (s.university_id ? ' · ' + h(s.university_id) : '') + '</div></div><div class="act"><select data-cm="srole" data-id="' + h(s.id) + '"><option value="staff"' + (s.role === 'staff' ? ' selected' : '') + '>' + h(ROLE.staff[ar() ? 0 : 1]) + '</option><option value="professor"' + (s.role === 'professor' ? ' selected' : '') + '>' + h(ROLE.professor[ar() ? 0 : 1]) + '</option></select> <select data-cm="cat" data-id="' + h(s.id) + '"><option value="">—</option>' + ['academic', 'practical', 'admin'].map(function (k) { return '<option value="' + k + '"' + (s.category === k ? ' selected' : '') + '>' + h(CHAN[k][ar() ? 0 : 1]) + '</option>'; }).join('') + '</select> <button class="btn sm bad" data-act="cm-reset" data-id="' + h(s.id) + '" data-confirm="1" data-confirm-text="اضغط لتأكيد إعادة التعيين">' + h(T('كلمة افتراضية', 'Reset pw')) + '</button></div></div>'; }).join('') || '<div class="empty">—</div>') + '</div>';
+        '<div class="list">' + (stf.map(function (s) { return '<div class="row"><label style="padding-inline-end:8px"><input type="checkbox" data-cm="stsel" data-id="' + h(s.id) + '"' + (A.sel[s.id] ? ' checked' : '') + '></label><div class="main"><div class="t">' + h(s.full_name) + '</div><div class="sub">' + h((ROLE[s.role] || [s.role, s.role])[ar() ? 0 : 1]) + (s.university_id ? ' · ' + h(s.university_id) : '') + '</div></div><div class="act"><label class="sub" title="' + h(T('عرض جدول الدوام', 'View roster')) + '"><input type="checkbox" data-cm="sacc" data-k="weekly" data-id="' + h(s.id) + '"' + (((ST.admin.acc || {})[s.id] || {}).weekly ? ' checked' : '') + '> ' + h(T('الدوام', 'Roster')) + '</label> <label class="sub" title="' + h(T('عرض الشعب والطلبة', 'View cohorts & students')) + '"><input type="checkbox" data-cm="sacc" data-k="cohorts" data-id="' + h(s.id) + '"' + (((ST.admin.acc || {})[s.id] || {}).cohorts ? ' checked' : '') + '> ' + h(T('الشعب', 'Cohorts')) + '</label> <select data-cm="srole" data-id="' + h(s.id) + '"><option value="staff"' + (s.role === 'staff' ? ' selected' : '') + '>' + h(ROLE.staff[ar() ? 0 : 1]) + '</option><option value="professor"' + (s.role === 'professor' ? ' selected' : '') + '>' + h(ROLE.professor[ar() ? 0 : 1]) + '</option></select> <select data-cm="cat" data-id="' + h(s.id) + '"><option value="">—</option>' + ['academic', 'practical', 'admin'].map(function (k) { return '<option value="' + k + '"' + (s.category === k ? ' selected' : '') + '>' + h(CHAN[k][ar() ? 0 : 1]) + '</option>'; }).join('') + '</select> <button class="btn sm bad" data-act="cm-reset" data-id="' + h(s.id) + '" data-confirm="1" data-confirm-text="اضغط لتأكيد إعادة التعيين">' + h(T('كلمة افتراضية', 'Reset pw')) + '</button></div></div>'; }).join('') || '<div class="empty">—</div>') + '</div>';
     } else {
       body = '<div class="form"><label>' + h(T('اسم شعبة جديدة', 'New cohort')) + '<input id="co-name" dir="ltr"></label><div style="align-self:end"><button class="btn pri" data-act="cm-addcoh">' + h(T('إضافة', 'Add')) + '</button></div></div>' +
         '<button class="btn sm" data-act="cm-preset" style="margin:6px 0">' + h(T('إنشاء الشعب المعتمدة (11) وحذف الشعب الخمس القديمة الفارغة', 'Create the 11 standard cohorts and remove the old empty five')) + '</button>' +
@@ -451,6 +456,7 @@
     else if (k === 'stq') { ST.admin.stq = e.target.value; draw(); }
     else if (k === 'stfq') { ST.admin.fq = e.target.value; var qv = e.target.value.trim(); if (qv.length < 2) { ST.admin.found = null; draw(); } else guard(async function () { ST.admin.found = await rpc('comm_find_account', { p_q: qv }); }); }
     else if (k === 'cf') { var cv = e.target.type === 'checkbox' ? e.target.checked : e.target.value; ST.admin['c' + e.target.dataset.k] = cv; }
+    else if (k === 'sacc') { var uid = e.target.dataset.id, cur = (ST.admin.acc = ST.admin.acc || {})[uid] || { user_id: uid, weekly: false, cohorts: false }; cur[e.target.dataset.k] = e.target.checked; ST.admin.acc[uid] = cur; guard(async function () { await rpc('comm_set_staff_access', { p_user: uid, p_weekly: !!cur.weekly, p_cohorts: !!cur.cohorts }); toast_(T('تم حفظ الصلاحية', 'Saved')); }); }
     else if (k === 'srole') guard(async function () { await rpc('comm_set_staff_role', { p_user: e.target.dataset.id, p_role: e.target.value }); ST.admin.staff = await rpc('comm_list_staff'); toast_('OK'); });
     else if (k === 'wk') {
       var wid = e.target.dataset.id, v = weekRowValues(wid), row = (ST.week.rows || []).filter(function (x) { return String(x.id) === wid; })[0] || {};
@@ -704,6 +710,7 @@
       ST.week.note = T('تم الاستيراد: أُضيف ' + added.length + (added.length ? ' (' + added.slice(0, 6).join('، ') + (added.length > 6 ? '…' : '') + ')' : '') + '، وحُدّثت بياناته لـ ' + updated + ' موجودين بأسمائهم دون تغيير' + (dup ? '، وتُجوهل ' + dup + ' اسم مكرر في الملف' : ''), 'Imported: ' + added.length + ' added, ' + updated + ' existing updated (names unchanged), ' + dup + ' duplicates ignored');
     });
   }
+  async function loadAcc() { ST.admin.acc = {}; try { ((await rpc('comm_staff_access_list')) || []).forEach(function (x) { ST.admin.acc[x.user_id] = x; }); } catch (e) { ST.admin.accErr = true; } }
   async function loadWeek() { ST.week.rows = (await rpc('comm_weekly_list')) || []; }
   function weekHtml() {
     var adm = CAN('weekly'), rows = ST.week.rows || [];
