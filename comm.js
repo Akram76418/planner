@@ -541,7 +541,7 @@
   }
   function hhmm(t) { return t ? String(t).slice(0, 5) : ''; }
   async function loadSched() { ST.sched.rows = (await rpc('comm_sched_list', { p_from: todayStr() })) || []; }
-  async function loadPolls() { ST.polls.rows = (await rpc('comm_poll_list')) || []; }
+  async function loadPolls() { ST.polls.rows = (await rpc('comm_poll_list')) || []; ST.polls.voters = {}; if (CAN('main')) { try { ((await rpc('comm_poll_voters')) || []).forEach(function (x) { var k = x.poll_id + ':' + x.opt; (ST.polls.voters[k] = ST.polls.voters[k] || []).push(x.voter); }); } catch (e) {} } }
   async function loadHome() {
     try { ST.home.sup = (await rpc('comm_my_supervisor')) || []; } catch (e) { ST.home.sup = []; }
     try { await loadSched(); } catch (e) {}
@@ -603,11 +603,16 @@
     return '<div class="card"><h2>' + h(T('الاستبيانات', 'Polls')) + '</h2>' + form +
       (rows.map(function (p) {
         var canVote = !!p.can_vote, showRes = p.counts != null, total = Number(p.total) || 0;
-        var opts = (p.options || []).map(function (o, i) {
+        var ord = (p.options || []).map(function (o, i) { return i; });
+        if (showRes) ord.sort(function (a, b) { return (Number((p.counts || [])[b]) || 0) - (Number((p.counts || [])[a]) || 0) || a - b; });
+        var top = showRes && total ? Number((p.counts || [])[ord[0]]) || 0 : -1;
+        var opts = ord.map(function (i) {
+          var o = p.options[i];
           var n = showRes ? Number((p.counts || [])[i]) || 0 : 0, pc = total ? Math.round(n * 100 / total) : 0, mine = p.my_vote === i;
           var bar = showRes ? '<div style="height:6px;border-radius:4px;background:rgba(127,127,127,.2);margin-top:4px"><div style="height:6px;border-radius:4px;background:var(--accent,#0b8a97);width:' + pc + '%"></div></div>' : '';
-          var label = h(o) + (showRes ? ' — ' + n + ' (' + pc + '%)' : '');
-          return canVote ? '<button class="btn" style="display:block;width:100%;text-align:start;margin:4px 0' + (mine ? ';outline:2px solid var(--accent,#0b8a97)' : '') + '" data-act="pl-vote" data-p="' + p.id + '" data-o="' + i + '">' + (mine ? '✓ ' : '') + label + bar + '</button>' : '<div style="margin:6px 0">' + (mine ? '✓ ' : '') + label + bar + '</div>';
+          var label = h(o) + (showRes ? ' — ' + n + ' (' + pc + '%)' : '') + (top > 0 && n === top ? ' 🏆' : '');
+          var vn = (ST.polls.voters || {})[p.id + ':' + i]; var names = vn && vn.length ? '<div class="sub" style="margin-top:4px">' + vn.map(h).join('، ') + '</div>' : '';
+          return canVote ? '<button class="btn" style="display:block;width:100%;text-align:start;margin:4px 0' + (mine ? ';outline:2px solid var(--accent,#0b8a97)' : '') + '" data-act="pl-vote" data-p="' + p.id + '" data-o="' + i + '">' + (mine ? '✓ ' : '') + label + bar + names + '</button>' : '<div style="margin:6px 0">' + (mine ? '✓ ' : '') + label + bar + names + '</div>';
         }).join('');
         return '<div class="card" style="margin:10px 0"><b>' + h(p.question) + '</b> ' + (p.closed ? '<span class="pill">' + h(T('مغلق', 'Closed')) + '</span>' : '') +
           '<div class="sub">' + h(AUD[p.audience] ? AUD[p.audience][ar() ? 0 : 1] : (p.cohort_name || T('كل الطلبة', 'All students'))) + ((isStaff() && (!p.audience || isAdmin())) ? ' · ' + h(T('أجاب ', 'Answered ') + total + T(' من ', ' of ') + p.eligible) : '') + '</div>' + opts +

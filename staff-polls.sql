@@ -83,3 +83,14 @@ revoke execute on function public.comm_poll_aud_ok(text, uuid) from public, anon
 revoke execute on function public.comm_poll_list(), public.comm_poll_vote(bigint, integer), public.comm_poll_create(integer, text, text[], text) from public, anon;
 grant execute on function public.comm_poll_list(), public.comm_poll_vote(bigint, integer), public.comm_poll_create(integer, text, text[], text) to authenticated;
 select 'ready' as status;
+
+-- أسماء المصوّتين: للأدمن الرئيسي فقط
+create or replace function public.comm_poll_voters() returns table(poll_id bigint, opt integer, voter text)
+language plpgsql stable security definer set search_path = public set row_security = off as $$
+begin
+  if not public.admin_can('main') then raise exception 'main admin only'; end if;
+  return query select v.poll_id, v.opt, coalesce(nullif(trim(p.full_name), ''), '—') from comm_poll_votes v left join profiles p on p.id = v.user_id order by v.poll_id, v.opt, p.full_name;
+end $$;
+revoke execute on function public.comm_poll_voters() from public, anon;
+grant execute on function public.comm_poll_voters() to authenticated;
+select 'ready' as status;
