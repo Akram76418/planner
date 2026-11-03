@@ -82,7 +82,7 @@ end $$;
 revoke execute on function public.comm_poll_aud_ok(text, uuid) from public, anon, authenticated;
 revoke execute on function public.comm_poll_list(), public.comm_poll_vote(bigint, integer), public.comm_poll_create(integer, text, text[], text) from public, anon;
 grant execute on function public.comm_poll_list(), public.comm_poll_vote(bigint, integer), public.comm_poll_create(integer, text, text[], text) to authenticated;
-select 'ready' as status;
+
 
 -- أسماء المصوّتين: للأدمن الرئيسي فقط
 create or replace function public.comm_poll_voters() returns table(poll_id bigint, opt integer, voter text)
@@ -93,4 +93,21 @@ begin
 end $$;
 revoke execute on function public.comm_poll_voters() from public, anon;
 grant execute on function public.comm_poll_voters() to authenticated;
+
+-- تعديل نص الاستبيان (الأدمن): السؤال والخيارات ؛ مع وجود أصوات لا يجوز تقليل عدد الخيارات
+create or replace function public.comm_poll_update(p_id bigint, p_question text, p_options text[]) returns void
+language plpgsql security definer set search_path = public as $$
+declare opts text[]; mx integer;
+begin
+  if public.current_user_role() <> 'admin' then raise exception 'admin only'; end if;
+  if length(trim(coalesce(p_question, ''))) = 0 then raise exception 'السؤال فارغ'; end if;
+  select array_agg(trim(x)) into opts from unnest(p_options) x where length(trim(x)) > 0;
+  if coalesce(array_length(opts, 1), 0) < 2 then raise exception 'يلزم خياران على الأقل'; end if;
+  opts := opts[1:8];
+  select max(opt) + 1 into mx from comm_poll_votes where poll_id = p_id;
+  if coalesce(mx, 0) > array_length(opts, 1) then raise exception 'لا يمكن تقليل الخيارات لوجود أصوات عليها'; end if;
+  update comm_polls set question = trim(p_question), options = opts where id = p_id;
+end $$;
+revoke execute on function public.comm_poll_update(bigint, text, text[]) from public, anon;
+grant execute on function public.comm_poll_update(bigint, text, text[]) to authenticated;
 select 'ready' as status;

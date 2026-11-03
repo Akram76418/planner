@@ -369,6 +369,13 @@
       if (!q || opts.length < 2) { toast_(T('اكتب السؤال وخيارين على الأقل', 'Write a question and at least two options')); return; }
       guard(async function () { await rpc('comm_poll_create', { p_cohort: /^\d+$/.test(val('pf-cohort')) ? Number(val('pf-cohort')) : null, p_question: q, p_options: opts, p_audience: /^staff_/.test(val('pf-cohort')) ? val('pf-cohort') : null }); ST.polls.form = false; await loadPolls(); toast_(T('تم النشر', 'Published')); });
     },
+    'pl-edit': function (el) { ST.polls.edit = Number(el.dataset.id); draw(); },
+    'pl-edit-cancel': function () { ST.polls.edit = null; draw(); },
+    'pl-edit-save': function (el) {
+      var q = val('pe-q').trim(), opts = val('pe-opts').split(/\r?\n/).map(function (x) { return x.trim(); }).filter(Boolean);
+      if (!q || opts.length < 2) { toast_(T('اكتب السؤال وخيارين على الأقل', 'Write a question and at least two options')); return; }
+      guard(async function () { await rpc('comm_poll_update', { p_id: Number(el.dataset.id), p_question: q, p_options: opts }); ST.polls.edit = null; await loadPolls(); toast_(T('تم الحفظ', 'Saved')); });
+    },
     'pl-vote': function (el) { guard(async function () { await rpc('comm_poll_vote', { p_poll: Number(el.dataset.p), p_opt: Number(el.dataset.o) }); await loadPolls(); toast_(T('تم تسجيل إجابتك', 'Answer recorded')); }); },
     'pl-close': function (el) { guard(async function () { await rpc('comm_poll_close', { p_id: Number(el.dataset.id), p_closed: el.dataset.c === '1' }); await loadPolls(); }); },
     'pl-del': function (el) { guard(async function () { await rpc('comm_poll_delete', { p_id: Number(el.dataset.id) }); await loadPolls(); }); },
@@ -614,9 +621,10 @@
           var vn = (ST.polls.voters || {})[p.id + ':' + i]; var names = vn && vn.length ? '<div class="sub" style="margin-top:4px">' + vn.map(h).join('، ') + '</div>' : '';
           return canVote ? '<button class="btn" style="display:block;width:100%;text-align:start;margin:4px 0' + (mine ? ';outline:2px solid var(--accent,#0b8a97)' : '') + '" data-act="pl-vote" data-p="' + p.id + '" data-o="' + i + '">' + (mine ? '✓ ' : '') + label + bar + names + '</button>' : '<div style="margin:6px 0">' + (mine ? '✓ ' : '') + label + bar + names + '</div>';
         }).join('');
+        if (CAN('poll') && ST.polls.edit === p.id) return '<div class="card" style="margin:10px 0"><label>' + h(T('السؤال', 'Question')) + '<input id="pe-q" value="' + h(p.question) + '"></label><label>' + h(T('الخيارات: خيار في كل سطر (مع وجود أصوات لا يمكن تقليل العدد)', 'Options: one per line (cannot reduce if votes exist)')) + '<textarea id="pe-opts" class="cm-ta" style="direction:rtl;font-family:inherit">' + h((p.options || []).join('\n')) + '</textarea></label><div class="tabs"><button class="btn pri" data-act="pl-edit-save" data-id="' + p.id + '">' + h(T('حفظ', 'Save')) + '</button><button class="btn" data-act="pl-edit-cancel">' + h(T('إلغاء', 'Cancel')) + '</button></div></div>';
         return '<div class="card" style="margin:10px 0"><b>' + h(p.question) + '</b> ' + (p.closed ? '<span class="pill">' + h(T('مغلق', 'Closed')) + '</span>' : '') +
           '<div class="sub">' + h(AUD[p.audience] ? AUD[p.audience][ar() ? 0 : 1] : (p.cohort_name || T('كل الطلبة', 'All students'))) + ((isStaff() && (!p.audience || isAdmin())) ? ' · ' + h(T('أجاب ', 'Answered ') + total + T(' من ', ' of ') + p.eligible) : '') + '</div>' + opts +
-          (CAN('poll') ? '<div class="tabs"><button class="btn sm" data-act="pl-close" data-id="' + p.id + '" data-c="' + (p.closed ? 0 : 1) + '">' + h(p.closed ? T('إعادة فتح', 'Reopen') : T('إغلاق', 'Close')) + '</button> <button class="btn sm bad" data-act="pl-del" data-id="' + p.id + '" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button></div>' : '') + '</div>';
+          (CAN('poll') ? '<div class="tabs"><button class="btn sm" data-act="pl-edit" data-id="' + p.id + '">' + h(T('تعديل', 'Edit')) + '</button> <button class="btn sm" data-act="pl-close" data-id="' + p.id + '" data-c="' + (p.closed ? 0 : 1) + '">' + h(p.closed ? T('إعادة فتح', 'Reopen') : T('إغلاق', 'Close')) + '</button> <button class="btn sm bad" data-act="pl-del" data-id="' + p.id + '" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button></div>' : '') + '</div>';
       }).join('') || '<div class="empty">' + h(T('لا استبيانات', 'No polls')) + '</div>') + '</div>';
   }
 
