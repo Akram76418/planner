@@ -380,7 +380,7 @@
     'pl-vote': function (el) { var pid = el.dataset.p, o = (ST.polls.pick || {})[pid]; if (o == null) { toast_(T('اختر إجابة أولاً', 'Pick an answer first')); return; } guard(async function () { await rpc('comm_poll_vote', { p_poll: Number(pid), p_opt: o }); delete ST.polls.pick[pid]; await loadPolls(); toast_(T('تم تسجيل إجابتك', 'Answer recorded')); }); },
     'pl-close': function (el) { guard(async function () { await rpc('comm_poll_close', { p_id: Number(el.dataset.id), p_closed: el.dataset.c === '1' }); await loadPolls(); }); },
     'pl-del': function (el) { guard(async function () { await rpc('comm_poll_delete', { p_id: Number(el.dataset.id) }); await loadPolls(); }); },
-    'wk-add': function () { var n = window.prompt(T('اسم الموظف:', 'Name:')); if (!n || !n.trim()) return; guard(async function () { await rpc('comm_weekly_save', { p_id: null, p_name: n.trim(), p_cells: {}, p_notes: '', p_user: null }); await loadWeek(); }); },
+    'wk-add': function () { var n = window.prompt(T('اسم الموظف:', 'Name:')); if (!n || !n.trim()) return; var nn0 = n.trim().replace(/\s+/g, ' '); if ((ST.week.rows || []).some(function (r) { return String(r.name || '').trim().replace(/\s+/g, ' ') === nn0; })) { toast_(T('الاسم موجود مسبقاً في الجدول', 'Name already exists')); return; } guard(async function () { await rpc('comm_weekly_save', { p_id: null, p_name: n.trim(), p_cells: {}, p_notes: '', p_user: null }); await loadWeek(); }); },
     'wk-imp-hint': function () { ST.week.note = T('الأعمدة: الاسم | السبت | الأحد | الاثنين | الثلاثاء | الأربعاء | الخميس | ملاحظات (الصف الأول عناوين). الموجود بنفس الاسم يُحدَّث والجديد يُضاف.', 'Columns: Name | Sat..Thu | Notes (header row). Same name is updated, new names added.'); draw(); },
     'wk-fill': function () { guard(async function () { var n = await rpc('comm_weekly_fill'); await loadWeek(); ST.week.note = T('أُضيف ' + n + ' موظف', n + ' added'); }); },
     'wk-del': function (el) { guard(async function () { await rpc('comm_weekly_delete', { p_id: Number(el.dataset.id) }); await loadWeek(); }); },
@@ -673,19 +673,35 @@
         var off = /^\d+$/.test(String(data[0][0]).trim()) ? 1 : 0; iName = off; start = 0;
         ['sat', 'sun', 'mon', 'tue', 'wed', 'thu'].forEach(function (k, i) { col[k] = off + 1 + i; }); iNotes = off + 7;
       }
-      var existing = {}; (ST.week.rows || []).forEach(function (x) { existing[norm(x.name)] = x; });
-      var added = 0, updated = 0, skipped = 0;
+      var nm = function (x) { return norm(x).replace(/ـ/g, '').replace(/\s+/g, ' '); };
+      var rowsW = (ST.week.rows || []).map(function (x) { return { id: x.id, name: x.name, cells: x.cells || {}, notes: x.notes || '', user_id: x.user_id || null, k: nm(x.name), tk: nm(x.name).split(' ') }; });
+      var findEx = function (name) {
+        var k = nm(name), tk = k.split(' '), i2;
+        for (i2 = 0; i2 < rowsW.length; i2++) if (rowsW[i2].k === k) return rowsW[i2];
+        if (tk.length < 2) return null;
+        var hit = rowsW.filter(function (r) { var a = r.tk.length <= tk.length ? r.tk : tk, b = r.tk.length <= tk.length ? tk : r.tk; return a.length >= 2 && a.every(function (w) { return b.indexOf(w) >= 0; }); });
+        return hit.length === 1 ? hit[0] : null;
+      };
+      var seen = {}, added = [], updated = 0, dup = 0, skipped = 0;
       for (var i = start; i < data.length; i++) {
         var row = data[i], name = String(row[iName] == null ? '' : row[iName]).trim();
         if (!name || /^(الاسم|اسم|name)$/i.test(name)) { skipped++; continue; }
-        var cells = {}; Object.keys(col).forEach(function (k) { var v = row[col[k]]; cells[k] = String(v == null ? '' : v).trim(); });
+        if (seen[nm(name)]) { dup++; continue; }
+        seen[nm(name)] = 1;
+        var cells = {}; Object.keys(col).forEach(function (k) { var v = String(row[col[k]] == null ? '' : row[col[k]]).trim(); if (v) cells[k] = v; });
         var notes = iNotes >= 0 ? String(row[iNotes] == null ? '' : row[iNotes]).trim() : '';
-        var ex = existing[norm(name)];
-        var sid = await rpc('comm_weekly_save', { p_id: ex && ex.id > 0 ? ex.id : null, p_name: name, p_cells: ex && ex.cells ? Object.assign({}, ex.cells, cells) : cells, p_notes: iNotes >= 0 ? notes : (ex ? ex.notes || '' : ''), p_user: ex ? ex.user_id || null : null });
-        if (ex) updated++; else { added++; existing[norm(name)] = { id: Number(sid) || -1, cells: cells, notes: notes }; }
+        var ex = findEx(name);
+        if (ex) {
+          var mc = Object.assign({}, ex.cells, cells), mn = notes || ex.notes;
+          await rpc('comm_weekly_save', { p_id: ex.id, p_name: ex.name, p_cells: mc, p_notes: mn, p_user: ex.user_id });
+          ex.cells = mc; ex.notes = mn; updated++;
+        } else {
+          var nid = await rpc('comm_weekly_save', { p_id: null, p_name: name, p_cells: cells, p_notes: notes, p_user: null });
+          var nr = { id: Number(nid), name: name, cells: cells, notes: notes, user_id: null, k: nm(name), tk: nm(name).split(' ') }; rowsW.push(nr); added.push(name);
+        }
       }
       await loadWeek();
-      ST.week.note = T('تم الاستيراد: أُضيف ' + added + ' وحُدّث ' + updated + (skipped ? ' وتُجوهل ' + skipped : ''), 'Imported: ' + added + ' added, ' + updated + ' updated');
+      ST.week.note = T('تم الاستيراد: أُضيف ' + added.length + (added.length ? ' (' + added.slice(0, 6).join('، ') + (added.length > 6 ? '…' : '') + ')' : '') + '، وحُدّثت بياناته لـ ' + updated + ' موجودين بأسمائهم دون تغيير' + (dup ? '، وتُجوهل ' + dup + ' اسم مكرر في الملف' : ''), 'Imported: ' + added.length + ' added, ' + updated + ' existing updated (names unchanged), ' + dup + ' duplicates ignored');
     });
   }
   async function loadWeek() { ST.week.rows = (await rpc('comm_weekly_list')) || []; }
