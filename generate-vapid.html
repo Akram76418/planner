@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>مولّد مفاتيح VAPID</title>
+<style>
+body{font-family:Tahoma,Arial,sans-serif;max-width:720px;margin:24px auto;padding:0 16px;line-height:1.7;color:#0f2236;background:#f4f8fa}
+button{background:#0b8f9c;color:#fff;border:0;border-radius:8px;padding:10px 18px;font-size:16px;cursor:pointer}
+textarea{width:100%;direction:ltr;font-family:Consolas,monospace;font-size:13px;padding:8px;box-sizing:border-box}
+.warn{background:#fbefd5;border:1px solid #b7791f;border-radius:8px;padding:10px 14px}
+</style></head><body>
+<h1>مولّد مفاتيح VAPID</h1>
+<p>يعمل هذا الملف داخل متصفحك فقط ولا يرسل شيئاً إلى أي موقع.</p>
+<button id="go">توليد المفاتيح</button>
+<h3>المفتاح العام (Public) — يوضع في config.js وفي أسرار Supabase</h3>
+<textarea id="pub" rows="2" readonly></textarea>
+<h3>المفتاح الخاص (Private) — يوضع في أسرار Supabase فقط</h3>
+<textarea id="priv" rows="2" readonly></textarea>
+<p class="warn">لا تضع المفتاح الخاص في config.js ولا ترسله لأحد ولا تنشره. وأي مفتاح خاص يظهر في محادثة أو صفحة عامة يجب استبداله.</p>
+<script>
+function b64u(buf){var s='';new Uint8Array(buf).forEach(function(b){s+=String.fromCharCode(b)});return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+function fromB64u(s){s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';var r=atob(s),a=new Uint8Array(r.length);for(var i=0;i<r.length;i++)a[i]=r.charCodeAt(i);return a}
+document.getElementById('go').onclick=async function(){
+  var kp=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);
+  var jwk=await crypto.subtle.exportKey('jwk',kp.privateKey);
+  var x=fromB64u(jwk.x),y=fromB64u(jwk.y),pub=new Uint8Array(65);pub[0]=4;pub.set(x,1);pub.set(y,33);
+  document.getElementById('pub').value=b64u(pub);
+  document.getElementById('priv').value=jwk.d;
+};
+</script></body></html>

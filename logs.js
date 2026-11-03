@@ -43,7 +43,7 @@
     el.innerHTML = '<div class="card"><h2>' + h(T('سجل الدخول ومشاكل التطبيق', 'Sign-in & app log')) + '</h2>' +
       '<p class="sub">' + h(T('آخر 300 حدث. يُحذف ما يزيد عمره على 90 يوماً تلقائياً. لا تُسجَّل كلمات المرور.', 'Last 300 events. Entries older than 90 days are removed automatically. Passwords are never logged.')) + '</p>' +
       '<div class="cm-tabs">' + chips.map(function (c) { return '<button class="btn sm' + (L.kind === c[0] ? ' pri' : '') + '" data-act="lg-kind" data-k="' + c[0] + '">' + h(c[1]) + '</button>'; }).join('') +
-      ' <button class="btn sm" data-act="lg-refresh">⟳ ' + h(T('تحديث', 'Refresh')) + '</button> <button class="btn sm" data-act="lg-csv">⬇ CSV</button> <button class="btn sm bad" data-act="lg-clear" data-confirm="1">' + h(T('مسح السجل', 'Clear log')) + '</button></div>' +
+      ' <button class="btn sm" data-act="lg-refresh">⟳ ' + h(T('تحديث', 'Refresh')) + '</button> <button class="btn sm" data-act="lg-csv">⬇ CSV</button> <button class="btn sm bad" data-act="lg-clear" data-confirm="1" data-confirm-text="اضغط لتأكيد المسح">' + h(T('مسح السجل', 'Clear log')) + '</button></div>' +
       (L.err ? '<p class="pill bad">' + h(L.err) + '</p>' : '') + (L.busy ? '<p class="sub">…</p>' : '') +
       '<div class="list">' + (L.rows.map(function (r) {
         var k = KIND[r.kind] || [r.kind, r.kind, ''];

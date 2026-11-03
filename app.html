@@ -888,7 +888,7 @@ document.addEventListener('click',e=>{
   const el=e.target.closest('[data-act]');
   if(!el){if(e.target.id==='modal')closeModal();return}
   if(el.tagName==='INPUT'&&el.type==='checkbox')return; /* handled on change */
-  if(el.dataset.confirm&&!el.dataset.armed){el.dataset.armed='1';el.dataset.orig=el.textContent;el.textContent=t('delOk');e.stopPropagation();return}
+  if(el.dataset.confirm&&!el.dataset.armed){el.dataset.armed='1';el.dataset.orig=el.textContent;el.textContent=el.dataset.confirmText||t('delOk');e.stopPropagation();return}
   const fn=ACT[el.dataset.act]||(window.EXTRA_ACT||{})[el.dataset.act];if(fn){e.preventDefault();fn(el,e)}
 });
 document.addEventListener('change',e=>{
