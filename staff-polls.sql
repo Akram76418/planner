@@ -61,8 +61,8 @@ begin
     raise exception 'غير موجّه إليك';
   end if;
   if p_opt < 0 or p_opt >= array_length(pl.options, 1) then raise exception 'bad option'; end if;
-  insert into comm_poll_votes (poll_id, user_id, opt) values (p_poll, auth.uid(), p_opt)
-  on conflict (poll_id, user_id) do update set opt = excluded.opt, at = now();
+  if exists (select 1 from comm_poll_votes v where v.poll_id = p_poll and v.user_id = auth.uid()) then raise exception 'سبق أن أجبت على هذا الاستبيان'; end if;
+  insert into comm_poll_votes (poll_id, user_id, opt) values (p_poll, auth.uid(), p_opt);
 end $$;
 
 drop function if exists public.comm_poll_create(integer, text, text[]);

@@ -37,7 +37,7 @@
     if (!sb()) return; V.busy = true; V.err = ''; draw();
     try {
       var r = role();
-      if (r.manage) { V.list = (await rpc('iv_admin_list')) || []; if (!V.sid && V.list[0]) V.sid = V.list[0].id; if (V.sid) V.det = await rpc('iv_admin_detail', { p_session: V.sid }); }
+      if (r.manage) { V.list = (await rpc('iv_admin_list')) || []; var vis = visList(); if (!vis.some(function (x) { return x.id === V.sid; })) V.sid = vis[0] ? vis[0].id : 0; V.det = V.sid ? await rpc('iv_admin_detail', { p_session: V.sid }) : null; }
       if (r.evaluator) V.my = (await rpc('iv_my_eval')) || [];
       if (r.entrant) V.ent = (await rpc('iv_my_entry')) || [];
       if (r.candidate) V.mine = (await rpc('iv_my_results')) || [];
@@ -62,9 +62,11 @@
     el.innerHTML = tabs() + (V.err ? '<p class="pill bad">' + h(V.err) + '</p>' : '') + (V.msg ? '<p class="pill ' + (V.bad ? 'bad' : 'ok') + '">' + h(V.msg) + '</p>' : '') + (V.busy ? '<p class="sub">…</p>' : '') +
       (V.tab === 'manage' ? managePane() : V.tab === 'eval' ? evalPane() : V.tab === 'entry' ? entryPane() : minePane());
   }
+  function visList() { return (V.list || []).filter(function (x) { return V.arch ? x.status === 'closed' : x.status !== 'closed'; }); }
   function sessBar() {
-    return '<div class="card"><div class="form"><label style="grid-column:1/-1">' + h(T('المقابلة', 'Interview')) + '<select data-iv="sid">' +
-      (V.list.map(function (s) { return '<option value="' + s.id + '"' + (s.id === V.sid ? ' selected' : '') + '>' + h(s.title + (s.status === 'closed' ? ' — ' + T('مغلقة', 'closed') : '')) + '</option>'; }).join('') || '<option value="">—</option>') + '</select></label></div>' +
+    var nA = (V.list || []).filter(function (x) { return x.status !== 'closed'; }).length, nC = (V.list || []).length - nA;
+    return '<div class="card"><div class="tabs" style="margin-bottom:8px"><button class="btn sm' + (V.arch ? '' : ' pri') + '" data-act="iv-arch" data-a="0">' + h(T('المقابلات الحالية', 'Current') + ' (' + nA + ')') + '</button> <button class="btn sm' + (V.arch ? ' pri' : '') + '" data-act="iv-arch" data-a="1">🗄 ' + h(T('الأرشيف', 'Archive') + ' (' + nC + ')') + '</button></div><div class="form"><label style="grid-column:1/-1">' + h(V.arch ? T('مقابلة مؤرشفة', 'Archived interview') : T('المقابلة', 'Interview')) + '<select data-iv="sid">' +
+      (visList().map(function (s) { return '<option value="' + s.id + '"' + (s.id === V.sid ? ' selected' : '') + '>' + h(s.title + (s.status === 'closed' ? ' — ' + T('مغلقة', 'closed') : '')) + '</option>'; }).join('') || '<option value="">—</option>') + '</select></label></div>' +
       (V.det && fmtDT(V.det.session.iv_date, V.det.session.iv_time) ? '<div class="sub" style="margin:6px 0">' + h(fmtDT(V.det.session.iv_date, V.det.session.iv_time)) + '</div>' : '') +
       '<div class="tabs"><button class="btn sm pri" data-act="iv-new">+ ' + h(T('مقابلة جديدة', 'New interview')) + '</button>' +
       (V.det ? ' <button class="btn sm" data-act="iv-editform">' + h(T('إعدادات المعايير والأوزان', 'Criteria & weights')) + '</button> <button class="btn sm" data-act="iv-paper">⬇ ' + h(T('نماذج ورقية Excel', 'Paper forms (Excel)')) + '</button> <button class="btn sm" data-act="iv-toggle">' + h(V.det.session.status === 'open' ? T('إغلاق المقابلة', 'Close') : T('إعادة فتح', 'Reopen')) + '</button> <button class="btn sm bad" data-act="iv-del" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button>' : '') + '</div></div>';
@@ -72,7 +74,7 @@
   function critEditor() {
     var f = V.form, rows = V.crit, tot = rows.reduce(function (a, c) { return a + (num(c.weight) || 0); }, 0);
     return '<div class="card" style="border:2px solid var(--accent,#0b8a97)"><b>' + h(f.id ? T('تعديل المقابلة', 'Edit interview') : T('مقابلة جديدة', 'New interview')) + '</b><div class="form">' +
-      '<label style="grid-column:1/-1">' + h(T('العنوان (مثل: مقابلة وظيفة محاضر)', 'Title')) + '<input id="iv-title" maxlength="160" value="' + h(f.title || '') + '"></label>' +
+      (!f.id ? '<p class="sub" style="grid-column:1/-1;margin:0">' + h(f.fresh ? T('المعايير منقولة من آخر مقابلة وكلها قابلة للتعديل، أما اللجنة والمرشحون والمُدخلون فتبدأ فارغة.', 'Criteria copied from the last interview (editable); committee and candidates start empty.') : T('المعايير الافتراضية قابلة للتعديل، واللجنة والمرشحون فارغون.', 'Default criteria; committee and candidates start empty.')) + '</p>' : '') + '<label style="grid-column:1/-1">' + h(T('العنوان (مثل: مقابلة وظيفة محاضر)', 'Title')) + '<input id="iv-title" maxlength="160" value="' + h(f.title || '') + '"></label>' +
       '<label>' + h(T('تاريخ المقابلة', 'Interview date')) + '<input id="iv-date" type="date" value="' + h(f.iv_date || '') + '"></label><label>' + h(T('ساعة المقابلة', 'Time')) + '<input id="iv-time" type="time" value="' + h(String(f.iv_time || '').slice(0, 5)) + '"></label>' +
       '<label style="grid-column:1/-1">' + h(T('ملاحظات', 'Notes')) + '<textarea id="iv-notes" rows="2" maxlength="1000">' + h(f.notes || '') + '</textarea></label>' +
       '<label style="grid-column:1/-1">' + h(T('عرض الدرجة النهائية للمرشح', 'Show final grade to candidate')) + '<select id="iv-mode"><option value="auto"' + (f.release_mode === 'auto' ? ' selected' : '') + '>' + h(T('مباشرة بعد أن يُكمل كل أعضاء اللجنة تقييمهم', 'Right after all committee members finish')) + '</option><option value="admin"' + (f.release_mode !== 'auto' ? ' selected' : '') + '>' + h(T('مؤجَّلة حتى أوافق أنا (الإدارة) على كل مرشح', 'Postponed until admin approves each candidate')) + '</option></select></label></div>' +
@@ -234,7 +236,12 @@
   }
 
   /* ---------- أفعال ---------- */
-  function newForm() { V.form = { id: null, title: '', notes: '', release_mode: 'admin', iv_date: '', iv_time: '', iv_min: 0 }; V.crit = DEF.map(function (c) { return Object.assign({}, c); }); draw(); }
+  async function newForm() {
+    var src = null;
+    try { src = (curSess() && curSess().criteria) || null; if (!src && V.list && V.list[0]) { var d0 = await rpc('iv_admin_detail', { p_session: V.list[0].id }); src = d0 && d0.session && d0.session.criteria; } } catch (e) {}
+    V.form = { id: null, title: '', notes: '', release_mode: 'admin', iv_date: '', iv_time: '', iv_min: 0, fresh: !!src };
+    V.crit = (src && src.length ? src : DEF).map(function (c) { return JSON.parse(JSON.stringify(c)); }); draw();
+  }
   function curSess() { return V.det && V.det.session; }
   function readForm() {
     var title = val('iv-title').trim(); if (!title) { toast_(T('اكتب العنوان', 'Enter a title')); return null; }
@@ -260,6 +267,7 @@
     'iv-paper-me': function (el) { paperMe(Number(el.dataset.id)); },
     'iv-tab': function (el) { V.tab = el.dataset.t; draw(); },
     'iv-new': function () { newForm(); },
+    'iv-arch': function (el) { V.arch = el.dataset.a === '1'; V.form = null; V.crit = null; V.sid = 0; reloadAll(); },
     'iv-editform': function () { var s = curSess(); if (!s) return; V.form = { id: s.id, title: s.title, notes: s.notes, release_mode: s.release_mode, iv_date: s.iv_date, iv_time: s.iv_time, iv_min: s.iv_min }; V.crit = s.criteria.map(function (c) { return Object.assign({}, c); }); draw(); },
     'iv-cancel': function () { V.form = null; V.crit = null; draw(); },
     'iv-cadd': function (el) { var n = 1, tp = el && el.dataset.t === 'obj' ? 'obj' : 'com'; V.crit.forEach(function (c) { var m = /^x(\d+)$/.exec(c.id); if (m) n = Math.max(n, Number(m[1]) + 1); }); var nc = tp === 'obj' ? { id: 'x' + n, name: '', type: 'obj', weight: 5, calc: null, method: '' } : { id: 'x' + n, name: '', type: 'com', weight: 10, method: '' }, at = -1; V.crit.forEach(function (c, i) { if (c.type === tp) at = i; }); if (at < 0) at = tp === 'obj' ? -1 : V.crit.length - 1; V.crit.splice(at + 1, 0, nc); draw(); },
@@ -269,9 +277,9 @@
     'iv-cdef': function () { V.crit = DEF.map(function (c) { return Object.assign({}, c); }); draw(); },
     'iv-save': function () {
       var f = readForm(); if (!f) return;
-      run(async function () { var id = await rpc('iv_session_save', { p_id: V.form.id, p_title: f.title, p_notes: f.notes, p_criteria: f.crit, p_mode: f.mode, p_status: null, p_date: f.date, p_time: f.time, p_min: f.min }); V.sid = Number(id); V.form = null; V.crit = null; say(T('تم الحفظ', 'Saved')); await reloadAll(); });
+      run(async function () { var id = await rpc('iv_session_save', { p_id: V.form.id, p_title: f.title, p_notes: f.notes, p_criteria: f.crit, p_mode: f.mode, p_status: null, p_date: f.date, p_time: f.time, p_min: f.min }); V.arch = false; V.sid = Number(id); V.form = null; V.crit = null; say(T('تم الحفظ', 'Saved')); await reloadAll(); });
     },
-    'iv-toggle': function () { var s = curSess(); if (!s) return; run(async function () { await rpc('iv_session_save', { p_id: s.id, p_title: s.title, p_notes: s.notes, p_criteria: s.criteria, p_mode: s.release_mode, p_status: s.status === 'open' ? 'closed' : 'open' }); await reloadAll(); }); },
+    'iv-toggle': function () { var s = curSess(); if (!s) return; run(async function () { await rpc('iv_session_save', { p_id: s.id, p_title: s.title, p_notes: s.notes, p_criteria: s.criteria, p_mode: s.release_mode, p_status: s.status === 'open' ? 'closed' : 'open' }); if (s.status === 'open') { V.sid = 0; say(T('أُغلقت المقابلة ونُقلت إلى الأرشيف', 'Closed and archived')); } else { V.arch = false; say(T('أُعيد فتح المقابلة', 'Reopened')); } await reloadAll(); }); },
     'iv-del': function () { var s = curSess(); if (!s) return; run(async function () { await rpc('iv_session_delete', { p_id: s.id }); V.sid = 0; V.det = null; say(T('حُذفت المقابلة', 'Deleted')); await reloadAll(); }); },
     'iv-ensave': function () { var ids = Array.prototype.map.call(document.querySelectorAll('.iv-enc:checked'), function (x) { return x.value; }); run(async function () { await rpc('iv_set_entrants', { p_session: V.sid, p_users: ids }); say(T('حُفظ المُدخلون (' + ids.length + ')', 'Saved (' + ids.length + ')')); await reloadAll(); }); },
     'iv-entsave1': function (el) {

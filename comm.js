@@ -376,10 +376,12 @@
       if (!q || opts.length < 2) { toast_(T('اكتب السؤال وخيارين على الأقل', 'Write a question and at least two options')); return; }
       guard(async function () { await rpc('comm_poll_update', { p_id: Number(el.dataset.id), p_question: q, p_options: opts }); ST.polls.edit = null; await loadPolls(); toast_(T('تم الحفظ', 'Saved')); });
     },
-    'pl-vote': function (el) { guard(async function () { await rpc('comm_poll_vote', { p_poll: Number(el.dataset.p), p_opt: Number(el.dataset.o) }); await loadPolls(); toast_(T('تم تسجيل إجابتك', 'Answer recorded')); }); },
+    'pl-pick': function (el) { ST.polls.pick = ST.polls.pick || {}; ST.polls.pick[el.dataset.p] = Number(el.dataset.o); draw(); },
+    'pl-vote': function (el) { var pid = el.dataset.p, o = (ST.polls.pick || {})[pid]; if (o == null) { toast_(T('اختر إجابة أولاً', 'Pick an answer first')); return; } guard(async function () { await rpc('comm_poll_vote', { p_poll: Number(pid), p_opt: o }); delete ST.polls.pick[pid]; await loadPolls(); toast_(T('تم تسجيل إجابتك', 'Answer recorded')); }); },
     'pl-close': function (el) { guard(async function () { await rpc('comm_poll_close', { p_id: Number(el.dataset.id), p_closed: el.dataset.c === '1' }); await loadPolls(); }); },
     'pl-del': function (el) { guard(async function () { await rpc('comm_poll_delete', { p_id: Number(el.dataset.id) }); await loadPolls(); }); },
     'wk-add': function () { var n = window.prompt(T('اسم الموظف:', 'Name:')); if (!n || !n.trim()) return; guard(async function () { await rpc('comm_weekly_save', { p_id: null, p_name: n.trim(), p_cells: {}, p_notes: '', p_user: null }); await loadWeek(); }); },
+    'wk-imp-hint': function () { ST.week.note = T('الأعمدة: الاسم | السبت | الأحد | الاثنين | الثلاثاء | الأربعاء | الخميس | ملاحظات (الصف الأول عناوين). الموجود بنفس الاسم يُحدَّث والجديد يُضاف.', 'Columns: Name | Sat..Thu | Notes (header row). Same name is updated, new names added.'); draw(); },
     'wk-fill': function () { guard(async function () { var n = await rpc('comm_weekly_fill'); await loadWeek(); ST.week.note = T('أُضيف ' + n + ' موظف', n + ' added'); }); },
     'wk-del': function (el) { guard(async function () { await rpc('comm_weekly_delete', { p_id: Number(el.dataset.id) }); await loadWeek(); }); },
     'wk-clear': function () { guard(async function () { await rpc('comm_weekly_clear'); await loadWeek(); ST.week.note = T('تم مسح الجدول', 'Cleared'); }); },
@@ -434,6 +436,7 @@
   document.addEventListener('change', function (e) {
     var k = e.target.dataset && e.target.dataset.cm; if (!k) return;
     if (k === 'file') { ST.file = e.target.files[0] || null; draw(); }
+    else if (k === 'wkxlsx') { var f1 = e.target.files[0]; e.target.value = ''; importWeek(f1); }
     else if (k === 'xlsx') { var f0 = e.target.files[0]; e.target.value = ''; readSheet(f0); }
     else if (k === 'map') { ST.admin.sheet.map[e.target.dataset.k] = Number(e.target.value); draw(); }
     else if (k === 'sel') { ST.admin.sel[e.target.dataset.id] = e.target.checked; draw(); }
@@ -609,7 +612,7 @@
     }
     return '<div class="card"><h2>' + h(T('الاستبيانات', 'Polls')) + '</h2>' + form +
       (rows.map(function (p) {
-        var canVote = !!p.can_vote, showRes = p.counts != null, total = Number(p.total) || 0;
+        var canVote = !!p.can_vote && p.my_vote == null, showRes = p.counts != null, total = Number(p.total) || 0;
         var ord = (p.options || []).map(function (o, i) { return i; });
         if (showRes) ord.sort(function (a, b) { return (Number((p.counts || [])[b]) || 0) - (Number((p.counts || [])[a]) || 0) || a - b; });
         var top = showRes && total ? Number((p.counts || [])[ord[0]]) || 0 : -1;
@@ -619,11 +622,15 @@
           var bar = showRes ? '<div style="height:6px;border-radius:4px;background:rgba(127,127,127,.2);margin-top:4px"><div style="height:6px;border-radius:4px;background:var(--accent,#0b8a97);width:' + pc + '%"></div></div>' : '';
           var label = h(o) + (showRes ? ' — ' + n + ' (' + pc + '%)' : '') + (top > 0 && n === top ? ' 🏆' : '');
           var vn = (ST.polls.voters || {})[p.id + ':' + i]; var names = vn && vn.length ? '<div class="sub" style="margin-top:4px">' + vn.map(h).join('، ') + '</div>' : '';
-          return canVote ? '<button class="btn" style="display:block;width:100%;text-align:start;margin:4px 0' + (mine ? ';outline:2px solid var(--accent,#0b8a97)' : '') + '" data-act="pl-vote" data-p="' + p.id + '" data-o="' + i + '">' + (mine ? '✓ ' : '') + label + bar + names + '</button>' : '<div style="margin:6px 0">' + (mine ? '✓ ' : '') + label + bar + names + '</div>';
+          var picked = (ST.polls.pick || {})[p.id] === i;
+          return canVote ? '<button class="btn" style="display:block;width:100%;text-align:start;margin:4px 0' + (picked ? ';outline:2px solid var(--accent,#0b8a97);font-weight:bold' : '') + '" data-act="pl-pick" data-p="' + p.id + '" data-o="' + i + '">' + (picked ? '◉ ' : '○ ') + label + '</button>' : '<div style="margin:6px 0">' + (mine ? '✓ ' : '') + label + bar + names + '</div>';
         }).join('');
+        var hint = canVote ? '<p class="sub" style="margin:6px 0">' + h(T('اختر إجابة واحدة ثم اضغط «تأكيد الإجابة». لا يمكن التصويت أكثر من مرة ولا تغيير الإجابة بعد التأكيد.', 'Pick one answer, then confirm. You can only answer once and cannot change it afterwards.')) + '</p>' : '';
+        var confirmBtn = canVote ? '<button class="btn pri" data-act="pl-vote" data-p="' + p.id + '"' + ((ST.polls.pick || {})[p.id] == null ? ' disabled' : '') + '>' + h(T('تأكيد الإجابة', 'Confirm answer')) + '</button>' : '';
+        var done = !isAdmin() && p.my_vote != null ? '<p class="pill ok" style="margin:6px 0">' + h(T('✓ تمت إجابتك، شكراً', '✓ Answered, thank you')) + '</p>' : '';
         if (CAN('poll') && ST.polls.edit === p.id) return '<div class="card" style="margin:10px 0"><label>' + h(T('السؤال', 'Question')) + '<input id="pe-q" value="' + h(p.question) + '"></label><label>' + h(T('الخيارات: خيار في كل سطر (مع وجود أصوات لا يمكن تقليل العدد)', 'Options: one per line (cannot reduce if votes exist)')) + '<textarea id="pe-opts" class="cm-ta" style="direction:rtl;font-family:inherit">' + h((p.options || []).join('\n')) + '</textarea></label><div class="tabs"><button class="btn pri" data-act="pl-edit-save" data-id="' + p.id + '">' + h(T('حفظ', 'Save')) + '</button><button class="btn" data-act="pl-edit-cancel">' + h(T('إلغاء', 'Cancel')) + '</button></div></div>';
         return '<div class="card" style="margin:10px 0"><b>' + h(p.question) + '</b> ' + (p.closed ? '<span class="pill">' + h(T('مغلق', 'Closed')) + '</span>' : '') +
-          '<div class="sub">' + h(AUD[p.audience] ? AUD[p.audience][ar() ? 0 : 1] : (p.cohort_name || T('كل الطلبة', 'All students'))) + ((isStaff() && (!p.audience || isAdmin())) ? ' · ' + h(T('أجاب ', 'Answered ') + total + T(' من ', ' of ') + p.eligible) : '') + '</div>' + opts +
+          '<div class="sub">' + h(AUD[p.audience] ? AUD[p.audience][ar() ? 0 : 1] : (p.cohort_name || T('كل الطلبة', 'All students'))) + ((isStaff() && (!p.audience || isAdmin())) ? ' · ' + h(T('أجاب ', 'Answered ') + total + T(' من ', ' of ') + p.eligible) : '') + '</div>' + hint + opts + confirmBtn + done +
           (CAN('poll') ? '<div class="tabs"><button class="btn sm" data-act="pl-edit" data-id="' + p.id + '">' + h(T('تعديل', 'Edit')) + '</button> <button class="btn sm" data-act="pl-close" data-id="' + p.id + '" data-c="' + (p.closed ? 0 : 1) + '">' + h(p.closed ? T('إعادة فتح', 'Reopen') : T('إغلاق', 'Close')) + '</button> <button class="btn sm bad" data-act="pl-del" data-id="' + p.id + '" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button></div>' : '') + '</div>';
       }).join('') || '<div class="empty">' + h(T('لا استبيانات', 'No polls')) + '</div>') + '</div>';
   }
@@ -640,6 +647,47 @@
   function val(id) { var e = $c('#' + id); return e ? e.value : ''; }
   /* ---------- الجدول الأسبوعي للمحاضرين والموظفين ---------- */
   var DAYS = [['sat', 'السبت', 'Sat'], ['sun', 'الأحد', 'Sun'], ['mon', 'الاثنين', 'Mon'], ['tue', 'الثلاثاء', 'Tue'], ['wed', 'الأربعاء', 'Wed'], ['thu', 'الخميس', 'Thu']];
+  async function importWeek(file) {
+    if (!file) return;
+    await guard(async function () {
+      await loadXlsx();
+      var wb = window.XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      var data = window.XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', raw: false }).filter(function (r) { return r.some(function (c) { return String(c).trim(); }); });
+      if (!data.length) throw new Error(T('الملف فارغ', 'Empty file'));
+      var norm = function (x) { return String(x == null ? '' : x).replace(/[\u200b-\u200f\u202a-\u202e\ufeff]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').trim().toLowerCase(); };
+      var dayRe = { sat: /^(السبت|sat)/, sun: /^(الاحد|sun)/, mon: /^(الاثنين|الاتنين|mon)/, tue: /^(الثلاثاء|tue)/, wed: /^(الاربعاء|wed)/, thu: /^(الخميس|thu)/ };
+      var hi = -1, col = {};
+      for (var r = 0; r < Math.min(data.length, 6) && hi < 0; r++) {
+        var m = {}, cnt = 0;
+        data[r].forEach(function (c, j) { var n = norm(c); Object.keys(dayRe).forEach(function (k) { if (m[k] == null && dayRe[k].test(n)) { m[k] = j; cnt++; } }); });
+        if (cnt >= 2) { hi = r; col = m; }
+      }
+      var iName, iNotes = -1, start;
+      if (hi >= 0) {
+        var hd = data[hi].map(norm);
+        iName = hd.findIndex(function (x) { return /^(الاسم|اسم|الموظف|المحاضر|name)/.test(x); });
+        if (iName < 0) { var minD = Math.min.apply(null, Object.keys(col).map(function (k) { return col[k]; })); iName = minD > 1 ? 1 : 0; if (hd[0] === '#' || /^(م|الرقم|رقم|no\.?|#)$/.test(hd[0] || '')) iName = Math.max(iName, 1); }
+        iNotes = hd.findIndex(function (x) { return /^(ملاحظات|ملاحظه|notes)/.test(x); });
+        start = hi + 1;
+      } else {
+        var off = /^\d+$/.test(String(data[0][0]).trim()) ? 1 : 0; iName = off; start = 0;
+        ['sat', 'sun', 'mon', 'tue', 'wed', 'thu'].forEach(function (k, i) { col[k] = off + 1 + i; }); iNotes = off + 7;
+      }
+      var existing = {}; (ST.week.rows || []).forEach(function (x) { existing[norm(x.name)] = x; });
+      var added = 0, updated = 0, skipped = 0;
+      for (var i = start; i < data.length; i++) {
+        var row = data[i], name = String(row[iName] == null ? '' : row[iName]).trim();
+        if (!name || /^(الاسم|اسم|name)$/i.test(name)) { skipped++; continue; }
+        var cells = {}; Object.keys(col).forEach(function (k) { var v = row[col[k]]; cells[k] = String(v == null ? '' : v).trim(); });
+        var notes = iNotes >= 0 ? String(row[iNotes] == null ? '' : row[iNotes]).trim() : '';
+        var ex = existing[norm(name)];
+        var sid = await rpc('comm_weekly_save', { p_id: ex && ex.id > 0 ? ex.id : null, p_name: name, p_cells: ex && ex.cells ? Object.assign({}, ex.cells, cells) : cells, p_notes: iNotes >= 0 ? notes : (ex ? ex.notes || '' : ''), p_user: ex ? ex.user_id || null : null });
+        if (ex) updated++; else { added++; existing[norm(name)] = { id: Number(sid) || -1, cells: cells, notes: notes }; }
+      }
+      await loadWeek();
+      ST.week.note = T('تم الاستيراد: أُضيف ' + added + ' وحُدّث ' + updated + (skipped ? ' وتُجوهل ' + skipped : ''), 'Imported: ' + added + ' added, ' + updated + ' updated');
+    });
+  }
   async function loadWeek() { ST.week.rows = (await rpc('comm_weekly_list')) || []; }
   function weekHtml() {
     var adm = CAN('weekly'), rows = ST.week.rows || [];
@@ -653,7 +701,7 @@
     return '<div class="card"><h2>' + h(T('الجدول الأسبوعي للمحاضرين والموظفين', 'Weekly schedule: faculty & staff')) + '</h2>' +
       '<p class="sub">' + h(adm ? T('اكتب مكان عمل كل موظف في كل يوم (مثل: الكلية، مستشفى الشفاء، إجازة). يُحفظ التعديل تلقائياً عند الخروج من الخانة.', 'Type each person\'s workplace per day. Edits save automatically when you leave a cell.') : T('جدول أماكن العمل الأسبوعي.', 'Weekly workplace table.')) + '</p>' +
       (ST.week.note ? '<p class="pill ok">' + h(ST.week.note) + '</p>' : '') +
-      '<div class="tabs" style="margin:8px 0">' + (adm ? '<button class="btn pri" data-act="wk-add">+ ' + h(T('إضافة صف', 'Add row')) + '</button><button class="btn" data-act="wk-fill">' + h(T('إضافة كل الموظفين المسجلين', 'Add all registered staff')) + '</button>' : '') +
+      '<div class="tabs" style="margin:8px 0">' + (adm ? '<button class="btn pri" data-act="wk-add">+ ' + h(T('إضافة صف', 'Add row')) + '</button><button class="btn" data-act="wk-fill">' + h(T('إضافة كل الموظفين المسجلين', 'Add all registered staff')) + '</button><label class="btn" style="cursor:pointer">⬆ ' + h(T('استيراد من Excel', 'Import from Excel')) + '<input type="file" hidden accept=".xlsx,.xls,.csv" data-cm="wkxlsx"></label><button class="btn sm" data-act="wk-imp-hint">?</button>' : '') +
       '<button class="btn" data-act="wk-export">⬇ ' + h(T('تصدير Word', 'Export to Word')) + '</button>' + (adm && rows.length ? '<button class="btn sm bad" data-act="wk-clear" data-confirm="1" data-confirm-text="اضغط لتأكيد المسح">' + h(T('مسح الجدول', 'Clear table')) + '</button>' : '') + '</div>' +
       '<div style="overflow-x:auto"><table class="cm-wk" style="border-collapse:collapse;width:100%">' + head + (body || '<tr><td colspan="10" class="empty">' + h(T('لا بيانات. أضف صفاً أو أضف الموظفين المسجلين.', 'No rows yet.')) + '</td></tr>') + '</table></div></div>';
   }
