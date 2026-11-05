@@ -51,7 +51,7 @@
   async function boot() {
     try {
       if (!isAdmin()) { try { ST.admNames = {}; (await rpc('comm_admin_names') || []).forEach(function (x) { ST.admNames[String(x).trim()] = 1; }); ST.admIds = {}; (await rpc('comm_admin_ids') || []).forEach(function (x) { ST.admIds[x] = 1; }); } catch (e) {} }
-      ST.tk = []; if (isStaff() && !isAdmin()) { try { ST.tk = (await rpc('tk_my_status')) || []; } catch (e) { ST.tk = []; } }
+      ST.tkr = []; if (isStaff()) { try { ST.tkr = (await rpc('tk_my_rounds')) || []; } catch (e) { ST.tkr = []; } }
       ST.access = null; if (isStaff() && !isAdmin()) { try { ST.access = await rpc('comm_my_access'); } catch (e) { ST.access = { weekly: true, cohorts: true }; } }
       if (isStaff()) ST.cohorts = (await rpc('comm_list_cohorts')) || [];
       if (role() === 'student' && ctx().cohort_id) ST.cohort = ctx().cohort_id;
@@ -92,6 +92,7 @@
     if (ST.tab === 'sched') return loadSched();
     if (ST.tab === 'poll') return loadPolls();
     if (ST.tab === 'week') return loadWeek();
+    if (ST.tab === 'tk') return loadTk();
     if (ST.tab === 'staff') {
       var rows = await rpc('comm_channel_list', { p_channel: ST.chan, p_limit: 60 });
       ST.items = (rows || []).slice().reverse();
@@ -137,6 +138,7 @@
     t.push(['ann', (blocked('ann') ? '🔒 ' : '') + T('إعلانات الشعب', 'Cohort announcements'), blocked('ann') ? 0 : (ST.unread.ann || 0)]);
     t.push(['sched', (blocked('sched') ? '🔒 ' : '') + T('الجدول', 'Schedule'), 0]);
     t.push(['poll', T('استبيانات', 'Polls'), !isAdmin() ? unvoted() : 0]);
+    if (isStaff()) t.push(['tk', '🤝 ' + T('التكافل', 'Takaful'), tkTodo()]);
     if (isStaff()) t.push(['week', (blocked('week') ? '🔒 ' : '') + T('جدول الدوام', 'Weekly roster'), 0]);
     if (isAdmin() && admSubs().length) t.push(['admin', T('إدارة', 'Admin'), 0]);
     t.push(['me', T('حسابي', 'My account'), 0]);
@@ -146,7 +148,7 @@
     var root = $c('#cm-root'); if (!root) return;
     var body = '';
     if (blocked(ST.tab)) body = lockHtml(); else if (ST.tab === 'dm') body = dmHtml(); else if (ST.tab === 'staff') body = staffHtml(); else if (ST.tab === 'ann') body = annHtml();
-    else if (ST.tab === 'home') body = homeHtml(); else if (ST.tab === 'sched') body = schedHtml(); else if (ST.tab === 'poll') body = pollHtml(); else if (ST.tab === 'week') body = weekHtml();
+    else if (ST.tab === 'home') body = homeHtml(); else if (ST.tab === 'sched') body = schedHtml(); else if (ST.tab === 'poll') body = pollHtml(); else if (ST.tab === 'week') body = weekHtml(); else if (ST.tab === 'tk') body = tkHtml();
     else if (ST.tab === 'admin') body = adminHtml(); else body = meHtml();
     root.innerHTML = '<header class="top"><h1>' + h(T('التواصل', 'Communication')) + '</h1></header>' + tabs() +
       (ST.err ? '<p class="pill bad">' + h(ST.err) + '</p>' : '') + body;
@@ -213,23 +215,16 @@
       '<div class="cm-msgs">' + (ST.items.map(annMsg).join('') || '<div class="empty">' + h(T('لا إعلانات', 'No announcements')) + '</div>') + '</div>' + post + '</div>';
   }
 
-  function tkCard() {
-    var rows = ST.tk || []; if (!rows.length) return '';
-    return '<div class="card"><h2>🤝 ' + h(T('التكافل', 'Takaful')) + '</h2><div class="list">' + rows.map(function (r) {
-      var inn = r.kind === 'in', done = !!r.done;
-      return '<div class="row"><div class="main"><div class="t">' + h(r.title) + ' <span class="sub">' + h(r.round_date) + '</span></div><div class="sub">' + h(inn ? T('مساهمتك: ', 'Your contribution: ') : T('نصيبك: ', 'Your share: ') + '') + h(Number(r.amount).toLocaleString('en') + ' ' + ({ ILS: '₪', USD: '$', JOD: 'د.أ', EUR: '€' }[r.currency] || '')) + '</div></div><div class="act"><span class="pill ' + (done ? 'ok' : '') + '">' + h(done ? (inn ? T('تم استلامها', 'Received') : T('تم صرفه', 'Paid')) : (inn ? T('لم تُستلم بعد', 'Pending') : T('لم يُصرف بعد', 'Pending'))) + '</span></div></div>';
-    }).join('') + '</div></div>';
-  }
   function meHtml() {
     var c = ctx();
-    return tkCard() + '<div class="card"><h2>' + h(c.name || '') + '</h2><p class="sub">' + h((ROLE[c.role] || ['', ''])[ar() ? 0 : 1]) + (c.cohort_name ? ' · ' + h(c.cohort_name) : '') + '</p>' +
+    return '<div class="card"><h2>' + h(c.name || '') + '</h2><p class="sub">' + h((ROLE[c.role] || ['', ''])[ar() ? 0 : 1]) + (c.cohort_name ? ' · ' + h(c.cohort_name) : '') + '</p>' +
       '<div class="form"><label>' + h(T('كلمة مرور جديدة (8 أحرف على الأقل)', 'New password (min 8)')) + '<input id="cm-np" type="password" autocomplete="new-password"></label></div>' +
       '<div class="tabs"><button class="btn pri" data-act="cm-pw">' + h(T('تغيير كلمة المرور', 'Change password')) + '</button><button class="btn" data-act="push-enable">' + h(T('تفعيل إشعارات الرسائل على هذا الجهاز', 'Enable message notifications on this device')) + '</button><button class="btn" data-act="sign-out">' + h(T('تسجيل الخروج', 'Sign out')) + '</button></div></div>';
   }
 
   var SUBPERM = { create: 'create', requests: 'requests', pending: 'reset', students: 'students', dups: 'students', staff: 'staff', assign: 'staff', cohorts: 'cohorts', admins: 'main' };
   function admSubs() { return Object.keys(SUBPERM).filter(function (k) { return CAN(SUBPERM[k]); }).map(function (k) { return [k]; }); }
-  var PERM_LIST = [['create', 'إنشاء حسابات', 'Create accounts'], ['requests', 'طلبات التسجيل', 'Sign-up requests'], ['students', 'الطلبة والشعب والتكرار', 'Students, cohorts, duplicates'], ['staff', 'الموظفون والأكاديميون', 'Staff & academics'], ['cohorts', 'إدارة الشعب', 'Manage cohorts'], ['reset', 'إعادة كلمات المرور', 'Reset passwords'], ['delete', 'حذف الحسابات', 'Delete accounts'], ['ann', 'الإعلانات والقنوات', 'Announcements & channels'], ['sched', 'جدول المحاضرات', 'Schedule'], ['poll', 'الاستبيانات', 'Polls'], ['weekly', 'جدول الدوام', 'Weekly roster'], ['logs', 'السجلات', 'Logs'], ['wipe', 'مسح الرسائل', 'Wipe messages'], ['proj', 'المشاريع الخارجية', 'External projects'], ['book', 'حجز المحاضرات', 'Lecture booking'], ['iv', 'المقابلات', 'Interviews'], ['p_dash', 'منظّم الأعمال: لوحة التحكم', 'Planner: Dashboard'], ['p_cal', 'منظّم الأعمال: التقويم', 'Planner: Calendar'], ['p_appts', 'منظّم الأعمال: المواعيد', 'Planner: Appointments'], ['p_follow', 'منظّم الأعمال: متابعاتي اليومية', 'Planner: Daily follow-ups'], ['p_reports', 'منظّم الأعمال: التقارير والإنجازات', 'Planner: Reports']];
+  var PERM_LIST = [['create', 'إنشاء حسابات', 'Create accounts'], ['requests', 'طلبات التسجيل', 'Sign-up requests'], ['students', 'الطلبة والشعب والتكرار', 'Students, cohorts, duplicates'], ['staff', 'الموظفون والأكاديميون', 'Staff & academics'], ['cohorts', 'إدارة الشعب', 'Manage cohorts'], ['reset', 'إعادة كلمات المرور', 'Reset passwords'], ['delete', 'حذف الحسابات', 'Delete accounts'], ['ann', 'الإعلانات والقنوات', 'Announcements & channels'], ['sched', 'جدول المحاضرات', 'Schedule'], ['poll', 'الاستبيانات', 'Polls'], ['weekly', 'جدول الدوام', 'Weekly roster'], ['logs', 'السجلات', 'Logs'], ['wipe', 'مسح الرسائل', 'Wipe messages'], ['proj', 'المشاريع الخارجية', 'External projects'], ['book', 'حجز المحاضرات', 'Lecture booking'], ['tk', 'التكافل (إدارة الدورات والمبالغ)', 'Takaful management'], ['iv', 'المقابلات', 'Interviews'], ['p_dash', 'منظّم الأعمال: لوحة التحكم', 'Planner: Dashboard'], ['p_cal', 'منظّم الأعمال: التقويم', 'Planner: Calendar'], ['p_appts', 'منظّم الأعمال: المواعيد', 'Planner: Appointments'], ['p_follow', 'منظّم الأعمال: متابعاتي اليومية', 'Planner: Daily follow-ups'], ['p_reports', 'منظّم الأعمال: التقارير والإنجازات', 'Planner: Reports']];
   function normQ(t) { return String(t || '').toLowerCase().replace(/[\u064B-\u0652\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim(); }
   function staffTools(A) {
     var found = A.found ? '<div class="list" style="margin-top:6px">' + (A.found.map(function (x) {
@@ -389,6 +384,11 @@
       if (!q || opts.length < 2) { toast_(T('اكتب السؤال وخيارين على الأقل', 'Write a question and at least two options')); return; }
       guard(async function () { await rpc('comm_poll_update', { p_id: Number(el.dataset.id), p_question: q, p_options: opts }); ST.polls.edit = null; await loadPolls(); toast_(T('تم الحفظ', 'Saved')); });
     },
+    'tk-pledge': function (el) {
+      var id = Number(el.dataset.id), v = Number(val('tkp-' + id)); if (!(v > 0)) { toast_(T('أدخل مبلغاً صحيحاً', 'Enter a valid amount')); return; }
+      guard(async function () { await rpc('tk_pledge', { p_round: id, p_amount: v }); await loadTk(); toast_(T('شكراً لك، سُجّل تبرعك', 'Recorded')); });
+    },
+    'tk-confirm': function (el) { var id = Number(el.dataset.id); guard(async function () { await rpc('tk_confirm_receipt', { p_round: id }); await loadTk(); toast_(T('سُجّل تأكيد الاستلام', 'Recorded')); }); },
     'pl-pick': function (el) { ST.polls.pick = ST.polls.pick || {}; ST.polls.pick[el.dataset.p] = Number(el.dataset.o); draw(); },
     'pl-xlsx': function (el) {
       var p = (ST.polls.rows || []).filter(function (x) { return String(x.id) === el.dataset.id; })[0]; if (!p) return;
@@ -731,6 +731,34 @@
     });
   }
   async function loadAcc() { ST.admin.acc = {}; try { ((await rpc('comm_staff_access_list')) || []).forEach(function (x) { ST.admin.acc[x.user_id] = x; }); } catch (e) { ST.admin.accErr = true; } }
+  async function loadTk() { ST.tkr = (await rpc('tk_my_rounds')) || []; }
+  function tkTodo() { return (ST.tkr || []).filter(function (r) { return (r.accepting && r.my_pledge == null) || (r.published && r.out_amount != null && !r.out_confirmed); }).length; }
+  function tkMoney(n, c) { return (Math.round(Number(n) * 100) / 100).toLocaleString('en', { maximumFractionDigits: 2 }) + ' ' + ({ ILS: '₪', USD: '$', JOD: 'د.أ', EUR: '€' }[c] || ''); }
+  function tkHtml() {
+    var rows = ST.tkr || [], out = '';
+    rows.forEach(function (r) {
+      var cur = r.currency, body = '', hasOut = r.published && r.out_amount != null;
+      if (r.accepting) {
+        var mine = r.my_pledge != null;
+        body += '<div class="card" style="margin:8px 0"><b>' + h(T('المساهمة في التكافل', 'Contribute')) + '</b>';
+        if (!mine) body += '<p class="sub">' + h(T('يمكنك المساهمة بما تيسّر. أدخل المبلغ الذي تريد التبرع به ثم اضغط «تأكيد التبرع».', 'Enter the amount you wish to donate.')) + '</p>';
+        else body += '<p style="line-height:1.9">' + h(T('جزاك الله خيراً، شكراً لك على مساهمتك الكريمة بمبلغ ', 'Thank you for your generous contribution of ') + tkMoney(r.my_pledge, cur) + T('. نسأل الله أن يجعله في ميزان حسناتك.', '.')) + '</p>' +
+          (r.my_pledge_done ? '<p class="pill ok">' + h(T('✓ استلمت الإدارة مساهمتك، بارك الله فيك', '✓ Your contribution was received')) + '</p>' : '<p class="pill warn">' + h(T('نرجو إرسال المبلغ إلى الحساب التالي، وسيُسجَّل استلامه عند وصوله:', 'Please send the amount to the account below:')) + '</p>');
+        if (!r.my_pledge_done && r.pay_info) body += '<div class="card" style="margin:6px 0;white-space:pre-wrap;font-weight:600;direction:ltr;text-align:start">' + h(r.pay_info) + '</div>';
+        body += '<p class="sub">' + h(T('إجمالي المبلغ المتعهَّد به من المساهمين في هذه الدورة حتى اللحظة: ', 'Total pledged so far in this round: ')) + '<b>' + h(tkMoney(r.total_pledged, cur)) + '</b></p>';
+        if (!r.my_pledge_done) body += '<div class="form"><label>' + h(mine ? T('تعديل المبلغ', 'Change amount') : T('مبلغ التبرع', 'Amount')) + '<input id="tkp-' + r.round_id + '" type="number" step="0.01" min="1" inputmode="decimal" value="' + h(mine ? r.my_pledge : '') + '"></label><div style="align-self:end"><button class="btn pri" data-act="tk-pledge" data-id="' + r.round_id + '"' + (ST.busy ? ' disabled' : '') + '>' + h(mine ? T('تحديث المبلغ', 'Update') : T('تأكيد التبرع', 'Confirm donation')) + '</button></div></div>';
+        body += '</div>';
+      }
+      if (hasOut) {
+        body += '<div class="card" style="margin:8px 0"><b>' + h(T('نصيبك من التكافل', 'Your share')) + '</b>' +
+          '<p style="line-height:1.9">' + h(T('خُصِّص لك مبلغ ', 'An amount was allocated to you: ') + tkMoney(r.out_amount, cur) + T('، جعله الله عوناً لك.', '')) + '</p>' +
+          '<p class="sub">' + h(T('إجمالي المبلغ المتبرَّع به في هذه الدورة: ', 'Total donated this round: ')) + '<b>' + h(tkMoney(r.total_pledged, cur)) + '</b></p>' +
+          (r.out_confirmed ? '<p class="pill ok">' + h(T('✓ لقد استلمتَ مبلغاً وقدره ', '✓ You received ') + tkMoney(r.out_amount, cur)) + '</p>' : '<button class="btn pri" data-act="tk-confirm" data-id="' + r.round_id + '" data-confirm="1" data-confirm-text="' + h(T('اضغط مرة ثانية لتأكيد أنك استلمت المبلغ', 'Press again to confirm')) + '"' + (ST.busy ? ' disabled' : '') + '>✓ ' + h(T('أؤكد استلامي للمبلغ', 'I confirm I received it')) + '</button>') + '</div>';
+      }
+      if (body) out += '<div class="card"><h2>' + h(r.title) + ' <span class="sub">' + h(r.round_date) + '</span></h2>' + body + '</div>';
+    });
+    return out || '<div class="card"><h2>🤝 ' + h(T('التكافل', 'Takaful')) + '</h2><div class="empty">' + h(T('لا توجد دورة تكافل مفتوحة لك حالياً.', 'No open Takaful round right now.')) + '</div></div>';
+  }
   async function loadWeek() { ST.week.rows = (await rpc('comm_weekly_list')) || []; }
   function weekHtml() {
     var adm = CAN('weekly'), rows = ST.week.rows || [];

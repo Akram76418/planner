@@ -6,16 +6,18 @@
   function ar() { return PA() ? PA().lang() === 'ar' : true; }
   function T(a, e) { return ar() ? a : e; }
   function h(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-  function isMain() { return !!(window.CAN && window.CAN('main')); }
+  function isMain() { return !!(window.CAN && window.CAN('tk')); }
+  function hasProj() { return !!(window.CAN && window.CAN('proj')); }
   function $q(s) { return document.querySelector(s); }
   function val(id) { var e = $q('#' + id); return e ? e.value : ''; }
   function num(n) { return Number(n) || 0; }
   function today() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   var CUR = { ILS: '₪', USD: '$', JOD: 'د.أ', EUR: '€' };
   function money(n, c) { return (Math.round(num(n) * 100) / 100).toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' ' + (CUR[c] || CUR.ILS); }
-  var K = { on: false, rounds: [], items: [], emps: [], sel: null, form: false, loaded: false, busy: false, err: '', ok: '' };
+  var K = { pay: '', on: false, rounds: [], items: [], emps: [], sel: null, form: false, loaded: false, busy: false, err: '', ok: '' };
 
-  window.takafulOn = function () { return K.on && isMain(); };
+  window.takafulOn = function () { return isMain() && (K.on || !hasProj()); };
+  window.takafulEnsure = function () { if (!K.loaded && !K.busy) load(); };
   function redraw() { if (typeof window.projDraw === 'function') window.projDraw(); }
   async function load() {
     if (!isMain() || !sb()) return;
@@ -24,6 +26,7 @@
       var r = await sb().from('tk_rounds').select('*').order('round_date', { ascending: false }).order('id', { ascending: false }).limit(500); if (r.error) throw r.error;
       var i = await sb().from('tk_items').select('*').order('id', { ascending: true }).limit(20000); if (i.error) throw i.error;
       K.rounds = r.data || []; K.items = i.data || [];
+      try { var st = await sb().from('tk_settings').select('*').limit(1); if (!st.error && st.data && st.data[0]) K.pay = st.data[0].pay_info || ''; } catch (e3) {}
       var e = await sb().from('external_projects').select('id,full_name,employee_number,has_project').order('full_name', { ascending: true }).limit(2000);
       K.emps = e.error ? [] : (e.data || []);
       K.loaded = true;
@@ -46,7 +49,7 @@
   }
   function itemRow(x, c) {
     var inn = x.kind === 'in';
-    return '<div class="row"><div class="main"><div class="t">' + h(x.person) + (x.done ? ' <span class="pill ok">' + h(inn ? T('مستلَم', 'Received') : T('مصروف', 'Paid')) + '</span>' : ' <span class="pill">' + h(inn ? T('لم يُستلم', 'Pending') : T('لم يُصرف', 'Pending')) + '</span>') + '</div></div>' +
+    return '<div class="row"><div class="main"><div class="t">' + h(x.person) + (x.done ? ' <span class="pill ok">' + h(inn ? T('مستلَم', 'Received') : T('مصروف', 'Paid')) + '</span>' : ' <span class="pill">' + h(inn ? T('لم يُستلم', 'Pending') : T('لم يُصرف', 'Pending')) + '</span>') + (x.src === 'self' ? ' <span class="pill">' + h(T('تعهّد ذاتي', 'Self-pledged')) + '</span>' : '') + (!inn && x.recv_confirmed ? ' <span class="pill ok">' + h(T('أكّد الاستلام', 'Confirmed receipt')) + '</span>' : '') + '</div></div>' +
       '<div class="act"><input type="number" step="0.01" min="0" inputmode="decimal" style="width:110px" data-tk="amt" data-id="' + x.id + '" value="' + h(x.amount) + '" title="' + h(T('المبلغ', 'Amount')) + '"> <label class="ck"><input type="checkbox" data-tk="done" data-id="' + x.id + '"' + (x.done ? ' checked' : '') + '> ' + h(inn ? T('استُلم', 'Received') : T('صُرف', 'Paid')) + '</label> ' +
       '<button class="btn sm bad" data-act="tk-del" data-id="' + x.id + '" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button></div></div>';
   }
@@ -62,9 +65,9 @@
   function detail(r) {
     var its = K.items.filter(function (x) { return x.round_id === r.id; }), ins = its.filter(function (x) { return x.kind === 'in'; }), outs = its.filter(function (x) { return x.kind === 'out'; });
     return summary(r) +
-      '<div class="tabs"><button class="btn sm' + (r.show_status ? ' pri' : '') + '" data-act="tk-show" data-id="' + r.id + '">' + h(r.show_status ? '👁 ' + T('الحالة ظاهرة للمعنيين (اضغط للإخفاء)', 'Status visible (click to hide)') : '🙈 ' + T('إظهار الحالة للمعنيين', 'Show status to members')) + '</button> ' +
+      '<div class="tabs"><button class="btn sm' + (r.accepting ? ' pri' : '') + '" data-act="tk-accept" data-id="' + r.id + '">' + h(r.accepting ? '📣 ' + T('باب التبرع مفتوح للموظفين (اضغط للإغلاق)', 'Pledging open (click to close)') : '🔒 ' + T('فتح باب التبرع للموظفين', 'Open pledging to staff')) + '</button> <button class="btn sm' + (r.show_status ? ' pri' : '') + '" data-act="tk-show" data-id="' + r.id + '">' + h(r.show_status ? '👁 ' + T('التوزيع منشور للمستفيدين (اضغط للإخفاء)', 'Distribution published (click to hide)') : '🙈 ' + T('نشر التوزيع للمستفيدين', 'Publish distribution to beneficiaries')) + '</button> ' +
       '<button class="btn sm" data-act="tk-lock" data-id="' + r.id + '">' + h(r.closed ? T('إعادة فتح الدورة', 'Reopen') : T('إغلاق الدورة', 'Close round')) + '</button> <button class="btn sm" data-act="tk-xlsx" data-id="' + r.id + '">⬇ Excel</button> <button class="btn sm bad" data-act="tk-delround" data-id="' + r.id + '" data-confirm="1">' + h(T('حذف الدورة', 'Delete round')) + '</button></div>' +
-      '<p class="sub">' + h(T('عند إظهار الحالة يرى كل معنيّ مبلغه وحالته هو فقط (ويُربط بالرقم الوظيفي)، ولا يرى أي شيء عن غيره.', 'When visible, each person sees only their own amount and status.')) + '</p>' +
+      '<p class="sub">' + h(T('عند فتح باب التبرع يظهر زر «التكافل» للموظفين فيتعهّد كل واحد بمبلغه ويرى رسالة الشكر وبيانات التحويل. وعند نشر التوزيع يرى كل مستفيد نصيبه الذي حددته أنت وإجمالي المتبرَّع به ويؤكد استلامه، ولا يرى أحد بيانات غيره.', 'Open pledging so staff can pledge from the Takaful button; publish the distribution so beneficiaries see their share and confirm receipt.')) + '</p>' +
       '<h3>' + h(T('المساهمون (موظفو المشاريع)', 'Contributors')) + ' <span class="pill">' + ins.length + '</span></h3><div class="list">' + (ins.map(function (x) { return itemRow(x, r.currency); }).join('') || '<div class="empty">—</div>') + '</div>' + (r.closed ? '' : addBox(r, 'in')) +
       '<h3>' + h(T('المستفيدون (زملاء بلا مشروع)', 'Beneficiaries')) + ' <span class="pill">' + outs.length + '</span></h3><div class="list">' + (outs.map(function (x) { return itemRow(x, r.currency); }).join('') || '<div class="empty">—</div>') + '</div>' + (r.closed ? '' : addBox(r, 'out'));
   }
@@ -80,9 +83,10 @@
       '<label>' + h(T('التاريخ', 'Date')) + '<input id="tkf-date" type="date" value="' + today() + '"></label><label>' + h(T('العملة', 'Currency')) + '<select id="tkf-cur">' + Object.keys(CUR).map(function (k) { return '<option value="' + k + '">' + CUR[k] + ' ' + k + '</option>'; }).join('') + '</select></label>' +
       '<label style="grid-column:1/-1">' + h(T('ملاحظة', 'Note')) + '<input id="tkf-note"></label></div><div class="tabs"><button class="btn pri" data-act="tk-save"' + (K.busy ? ' disabled' : '') + '>' + h(T('حفظ', 'Save')) + '</button><button class="btn" data-act="tk-cancel">' + h(T('إلغاء', 'Cancel')) + '</button></div></div>' : '';
     return '<header class="top"><h1>🤝 ' + h(T('التكافل', 'Takaful')) + '</h1></header>' +
-      '<p class="sub">' + h(T('تدوين داخلي فقط لتجنب الأخطاء، ولا يتعامل مع أي أموال. يراه المدير الرئيسي وحده، ولا يرى المعنيّ شيئاً إلا بزر «إظهار الحالة».', 'Internal record only. Visible to the main admin; members see status only if you enable it.')) + '</p>' +
+      '<p class="sub">' + h(T('تدوين داخلي فقط لتجنب الأخطاء، والتطبيق لا يحوّل أموالاً. المال يُحوَّل خارج التطبيق وتدوّن أنت استلامه وصرفه هنا.', 'Internal record only; the app does not move money.')) + '</p>' +
       (K.err ? '<p class="pill bad">' + h(K.err) + '</p>' : '') + (K.ok ? '<p class="pill ok">' + h(K.ok) + '</p>' : '') +
-      '<div class="tabs" style="margin:8px 0"><button class="btn" data-act="tk-back">← ' + h(T('المشاريع', 'Projects')) + '</button><button class="btn pri" data-act="tk-new">+ ' + h(T('دورة جديدة', 'New round')) + '</button></div>' + form +
+      '<div class="card" style="margin:8px 0"><b>' + h(T('بيانات استلام التبرعات (تظهر للمتبرع)', 'Where donors send money')) + '</b><label>' + h(T('رقم جوال باي أو الآيبان وأي تعليمات', 'Jawwal Pay number or IBAN and instructions')) + '<textarea id="tk-pay" class="cm-ta" maxlength="600" style="direction:rtl;font-family:inherit">' + h(K.pay) + '</textarea></label><div class="tabs"><button class="btn sm pri" data-act="tk-paysave">' + h(T('حفظ', 'Save')) + '</button></div></div>' +
+      '<div class="tabs" style="margin:8px 0">' + (hasProj() ? '<button class="btn" data-act="tk-back">← ' + h(T('المشاريع', 'Projects')) + '</button>' : '') + '<button class="btn pri" data-act="tk-new">+ ' + h(T('دورة جديدة', 'New round')) + '</button></div>' + form +
       (K.busy && !K.loaded ? '<div class="empty">…</div>' : (K.rounds.map(roundCard).join('') || '<div class="card"><div class="empty">' + h(T('لا دورات بعد. أنشئ أول دورة.', 'No rounds yet.')) + '</div></div>'));
   };
 
@@ -91,7 +95,7 @@
     return new Promise(function (res, rej) { var sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; sc.onload = res; sc.onerror = function () { rej(new Error(T('تعذّر تحميل مكتبة Excel (تحقق من الاتصال)', 'Could not load Excel library'))); }; document.head.appendChild(sc); });
   }
   var ACTS = {
-    'tk-open': function () { K.on = true; K.sel = null; redraw(); if (!K.loaded) load(); else load(); },
+    'tk-open': function () { K.on = true; K.sel = null; redraw(); load(); },
     'tk-back': function () { K.on = false; redraw(); },
     'tk-new': function () { K.form = true; redraw(); },
     'tk-cancel': function () { K.form = false; redraw(); },
@@ -99,8 +103,10 @@
       var title = val('tkf-title').trim(); if (!title) { K.err = T('اكتب عنوان الدورة', 'Enter a title'); redraw(); return; }
       guard(async function () { var r = await sb().from('tk_rounds').insert({ title: title, round_date: val('tkf-date') || today(), currency: val('tkf-cur') || 'ILS', note: val('tkf-note').trim() || null }).select(); if (r.error) throw r.error; K.form = false; await load(); if (K.rounds[0]) K.sel = K.rounds[0].id; });
     },
+    'tk-paysave': function () { var v = val('tk-pay').trim() || null; guard(async function () { var r = await sb().from('tk_settings').upsert({ id: 1, pay_info: v }); if (r.error) throw r.error; K.pay = v || ''; K.ok = T('حُفظت بيانات الاستلام', 'Saved'); }); },
+    'tk-accept': function (el) { var id = Number(el.dataset.id), r = K.rounds.filter(function (x) { return x.id === id; })[0]; if (!r) return; var nv = !r.accepting; if (nv && !K.pay.trim()) { K.err = T('أدخل أولاً بيانات استلام التبرعات (جوال باي أو الآيبان) واحفظها', 'Enter payment details first'); redraw(); return; } guard(async function () { var u = await sb().from('tk_rounds').update({ accepting: nv }).eq('id', id); if (u.error) throw u.error; r.accepting = nv; K.ok = nv ? T('فُتح باب التبرع، وسيظهر زر «التكافل» للموظفين', 'Pledging is open') : T('أُغلق باب التبرع', 'Pledging closed'); }); },
     'tk-sel': function (el) { var id = Number(el.dataset.id); K.sel = K.sel === id ? null : id; redraw(); },
-    'tk-show': function (el) { var id = Number(el.dataset.id), r = K.rounds.filter(function (x) { return x.id === id; })[0]; if (!r) return; var nv = !r.show_status; guard(async function () { var u = await sb().from('tk_rounds').update({ show_status: nv }).eq('id', id); if (u.error) throw u.error; r.show_status = nv; K.ok = r.show_status ? T('أصبحت الحالة ظاهرة للمعنيين (كلٌّ يرى حالته فقط)', 'Status is now visible to members') : T('أُخفيت الحالة عن المعنيين', 'Status hidden'); }); },
+    'tk-show': function (el) { var id = Number(el.dataset.id), r = K.rounds.filter(function (x) { return x.id === id; })[0]; if (!r) return; var nv = !r.show_status; guard(async function () { var u = await sb().from('tk_rounds').update({ show_status: nv }).eq('id', id); if (u.error) throw u.error; r.show_status = nv; K.ok = r.show_status ? T('نُشر التوزيع: يرى كل مستفيد نصيبه ويؤكد استلامه', 'Distribution published') : T('أُخفي التوزيع عن المستفيدين', 'Hidden'); }); },
     'tk-lock': function (el) { var id = Number(el.dataset.id), r = K.rounds.filter(function (x) { return x.id === id; })[0]; if (!r) return; var nc = !r.closed; guard(async function () { var u = await sb().from('tk_rounds').update({ closed: nc }).eq('id', id); if (u.error) throw u.error; r.closed = nc; }); },
     'tk-delround': function (el) { var id = Number(el.dataset.id); guard(async function () { var d = await sb().from('tk_rounds').delete().eq('id', id); if (d.error) throw d.error; K.sel = null; K.rounds = K.rounds.filter(function (x) { return x.id !== id; }); K.items = K.items.filter(function (x) { return x.round_id !== id; }); }); },
     'tk-add': function (el) {
