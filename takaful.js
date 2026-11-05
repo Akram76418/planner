@@ -17,6 +17,7 @@
   var K = { pay: '', on: false, rounds: [], items: [], emps: [], sel: null, form: false, loaded: false, busy: false, err: '', ok: '' };
 
   window.takafulOn = function () { return isMain() && (K.on || !hasProj()); };
+  window.takafulGo = function () { K.on = true; K.sel = null; };
   window.takafulEnsure = function () { if (!K.loaded && !K.busy) load(); };
   function redraw() { if (typeof window.projDraw === 'function') window.projDraw(); }
   async function load() {

@@ -384,6 +384,7 @@
       if (!q || opts.length < 2) { toast_(T('اكتب السؤال وخيارين على الأقل', 'Write a question and at least two options')); return; }
       guard(async function () { await rpc('comm_poll_update', { p_id: Number(el.dataset.id), p_question: q, p_options: opts }); ST.polls.edit = null; await loadPolls(); toast_(T('تم الحفظ', 'Saved')); });
     },
+    'tk-go': function () { if (window.takafulGo) window.takafulGo(); var n = document.querySelector('#side [data-v=proj]'); if (n) n.click(); },
     'tk-pledge': function (el) {
       var id = Number(el.dataset.id), v = Number(val('tkp-' + id)); if (!(v > 0)) { toast_(T('أدخل مبلغاً صحيحاً', 'Enter a valid amount')); return; }
       guard(async function () { await rpc('tk_pledge', { p_round: id, p_amount: v }); await loadTk(); toast_(T('شكراً لك، سُجّل تبرعك', 'Recorded')); });
@@ -735,7 +736,7 @@
   function tkTodo() { return (ST.tkr || []).filter(function (r) { return (r.accepting && r.my_pledge == null) || (r.published && r.out_amount != null && !r.out_confirmed); }).length; }
   function tkMoney(n, c) { return (Math.round(Number(n) * 100) / 100).toLocaleString('en', { maximumFractionDigits: 2 }) + ' ' + ({ ILS: '₪', USD: '$', JOD: 'د.أ', EUR: '€' }[c] || ''); }
   function tkHtml() {
-    var rows = ST.tkr || [], out = '';
+    var rows = ST.tkr || [], out = CAN('tk') ? '<div class="card"><b>' + h(T('إدارة التكافل', 'Takaful management')) + '</b><p class="sub">' + h(T('لإنشاء دورة جديدة وفتح باب التبرع وتسجيل المبالغ وتحديد بيانات التحويل.', 'Create rounds, open pledging, record amounts and set payment details.')) + '</p><button class="btn pri" data-act="tk-go">🤝 ' + h(T('فتح صفحة إدارة التكافل', 'Open Takaful management')) + '</button></div>' : '';
     rows.forEach(function (r) {
       var cur = r.currency, body = '', hasOut = r.published && r.out_amount != null;
       if (r.accepting) {
@@ -757,7 +758,7 @@
       }
       if (body) out += '<div class="card"><h2>' + h(r.title) + ' <span class="sub">' + h(r.round_date) + '</span></h2>' + body + '</div>';
     });
-    return out || '<div class="card"><h2>🤝 ' + h(T('التكافل', 'Takaful')) + '</h2><div class="empty">' + h(T('لا توجد دورة تكافل مفتوحة لك حالياً.', 'No open Takaful round right now.')) + '</div></div>';
+    return out && rows.some(function (r) { return r.accepting || (r.published && r.out_amount != null); }) ? out : out + '<div class="card"><h2>🤝 ' + h(T('التكافل', 'Takaful')) + '</h2><div class="empty">' + h(T('لا توجد دورة تكافل مفتوحة لك حالياً.', 'No open Takaful round right now.')) + '</div></div>';
   }
   async function loadWeek() { ST.week.rows = (await rpc('comm_weekly_list')) || []; }
   function weekHtml() {
