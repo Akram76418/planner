@@ -51,6 +51,7 @@
   async function boot() {
     try {
       if (!isAdmin()) { try { ST.admNames = {}; (await rpc('comm_admin_names') || []).forEach(function (x) { ST.admNames[String(x).trim()] = 1; }); ST.admIds = {}; (await rpc('comm_admin_ids') || []).forEach(function (x) { ST.admIds[x] = 1; }); } catch (e) {} }
+      ST.tk = []; if (isStaff() && !isAdmin()) { try { ST.tk = (await rpc('tk_my_status')) || []; } catch (e) { ST.tk = []; } }
       ST.access = null; if (isStaff() && !isAdmin()) { try { ST.access = await rpc('comm_my_access'); } catch (e) { ST.access = { weekly: true, cohorts: true }; } }
       if (isStaff()) ST.cohorts = (await rpc('comm_list_cohorts')) || [];
       if (role() === 'student' && ctx().cohort_id) ST.cohort = ctx().cohort_id;
@@ -212,9 +213,16 @@
       '<div class="cm-msgs">' + (ST.items.map(annMsg).join('') || '<div class="empty">' + h(T('لا إعلانات', 'No announcements')) + '</div>') + '</div>' + post + '</div>';
   }
 
+  function tkCard() {
+    var rows = ST.tk || []; if (!rows.length) return '';
+    return '<div class="card"><h2>🤝 ' + h(T('التكافل', 'Takaful')) + '</h2><div class="list">' + rows.map(function (r) {
+      var inn = r.kind === 'in', done = !!r.done;
+      return '<div class="row"><div class="main"><div class="t">' + h(r.title) + ' <span class="sub">' + h(r.round_date) + '</span></div><div class="sub">' + h(inn ? T('مساهمتك: ', 'Your contribution: ') : T('نصيبك: ', 'Your share: ') + '') + h(Number(r.amount).toLocaleString('en') + ' ' + ({ ILS: '₪', USD: '$', JOD: 'د.أ', EUR: '€' }[r.currency] || '')) + '</div></div><div class="act"><span class="pill ' + (done ? 'ok' : '') + '">' + h(done ? (inn ? T('تم استلامها', 'Received') : T('تم صرفه', 'Paid')) : (inn ? T('لم تُستلم بعد', 'Pending') : T('لم يُصرف بعد', 'Pending'))) + '</span></div></div>';
+    }).join('') + '</div></div>';
+  }
   function meHtml() {
     var c = ctx();
-    return '<div class="card"><h2>' + h(c.name || '') + '</h2><p class="sub">' + h((ROLE[c.role] || ['', ''])[ar() ? 0 : 1]) + (c.cohort_name ? ' · ' + h(c.cohort_name) : '') + '</p>' +
+    return tkCard() + '<div class="card"><h2>' + h(c.name || '') + '</h2><p class="sub">' + h((ROLE[c.role] || ['', ''])[ar() ? 0 : 1]) + (c.cohort_name ? ' · ' + h(c.cohort_name) : '') + '</p>' +
       '<div class="form"><label>' + h(T('كلمة مرور جديدة (8 أحرف على الأقل)', 'New password (min 8)')) + '<input id="cm-np" type="password" autocomplete="new-password"></label></div>' +
       '<div class="tabs"><button class="btn pri" data-act="cm-pw">' + h(T('تغيير كلمة المرور', 'Change password')) + '</button><button class="btn" data-act="push-enable">' + h(T('تفعيل إشعارات الرسائل على هذا الجهاز', 'Enable message notifications on this device')) + '</button><button class="btn" data-act="sign-out">' + h(T('تسجيل الخروج', 'Sign out')) + '</button></div></div>';
   }

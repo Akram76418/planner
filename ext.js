@@ -36,6 +36,7 @@
     '.ex-f{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}.ex-f label{display:flex;flex-direction:column;gap:4px;font-size:13px}.ex-late{color:var(--bad,#c0392b);font-weight:600}';
   document.head.appendChild(css);
 
+  window.projDraw = function () { draw(); };
   window.projView = function () { return '<div id="ex-root"></div>'; };
   window.projMount = function () { draw(); if (!EX.loaded) { EX.loaded = true; load(); } };
 
@@ -120,11 +121,13 @@
   function draw() {
     var root = $x('#ex-root'); if (!root) return;
     if (!isAdmin()) { root.innerHTML = '<div class="card"><div class="empty">' + h(T('هذه الصفحة للإدارة فقط', 'Admin only')) + '</div></div>'; return; }
+    if (window.takafulOn && window.takafulOn()) { root.innerHTML = window.takafulHtml(); return; }
     var body;
     if (EX.edit) body = formHtml();
     else if (EX.imp) body = importHtml();
     else {
       body = statsHtml() + '<div class="card"><div class="tabs" style="margin-bottom:10px"><button class="btn pri" data-act="ex-new">+ ' + h(T('إضافة موظف', 'Add staff')) + '</button>' +
+        (window.CAN && window.CAN('main') ? '<button class="btn" data-act="tk-open">🤝 ' + h(T('التكافل', 'Takaful')) + '</button>' : '') +
         '<label class="btn" style="cursor:pointer">⬆ ' + h(T('استيراد Excel / CSV', 'Import Excel / CSV')) + '<input type="file" hidden accept=".xlsx,.xls,.csv" data-ex="file"></label>' +
         '<button class="btn" data-act="ex-xlsx">⬇ ' + h(T('تصدير المعروض Excel', 'Export shown (Excel)')) + '</button><button class="btn" data-act="ex-csv">⬇ CSV</button><button class="btn" data-act="ex-xlsx-all">⬇ ' + h(T('كل تصنيف في ورقة', 'One sheet per category')) + '</button><button class="btn sm" data-act="ex-tpl">' + h(T('نموذج فارغ', 'Blank template')) + '</button>' +
         '<label class="ck"><input id="ex-withid" type="checkbox"> ' + h(T('تضمين رقم الهوية في التصدير', 'Include national ID in export')) + '</label></div>' +
