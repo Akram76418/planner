@@ -390,6 +390,18 @@
       guard(async function () { await rpc('comm_poll_update', { p_id: Number(el.dataset.id), p_question: q, p_options: opts }); ST.polls.edit = null; await loadPolls(); toast_(T('تم الحفظ', 'Saved')); });
     },
     'pl-pick': function (el) { ST.polls.pick = ST.polls.pick || {}; ST.polls.pick[el.dataset.p] = Number(el.dataset.o); draw(); },
+    'pl-xlsx': function (el) {
+      var p = (ST.polls.rows || []).filter(function (x) { return String(x.id) === el.dataset.id; })[0]; if (!p) return;
+      guard(async function () {
+        await loadXlsx();
+        var tot = Number(p.total) || 0, names = !!(ST.polls.voters && Object.keys(ST.polls.voters).length);
+        var aoa = [[T('السؤال', 'Question'), p.question], [T('الموجَّه إليه', 'Audience'), AUD[p.audience] ? AUD[p.audience][ar() ? 0 : 1] : (p.cohort_name || T('كل الطلبة', 'All students'))], [T('الحالة', 'Status'), p.closed ? T('مغلق', 'Closed') : T('مفتوح', 'Open')], [T('عدد المجيبين', 'Answered'), tot], [], [T('الخيار', 'Option'), T('العدد', 'Count'), T('النسبة', '%')].concat(names ? [T('الأسماء', 'Names')] : [])];
+        (p.options || []).forEach(function (o, i) { var n = Number((p.counts || [])[i]) || 0; aoa.push([o, n, tot ? Math.round(n * 100 / tot) + '%' : '0%'].concat(names ? [((ST.polls.voters || {})[p.id + ':' + i] || []).join('، ')] : [])); });
+        if (names) { aoa.push([], [T('الاسم', 'Name'), T('الخيار', 'Option')]); (p.options || []).forEach(function (o, i) { ((ST.polls.voters || {})[p.id + ':' + i] || []).forEach(function (nm) { aoa.push([nm, o]); }); }); }
+        var wb = window.XLSX.utils.book_new(); var ws = window.XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = [{ wch: 36 }, { wch: 10 }, { wch: 10 }, { wch: 60 }]; wb.Workbook = { Views: [{ RTL: true }] };
+        window.XLSX.utils.book_append_sheet(wb, ws, T('النتائج', 'Results')); window.XLSX.writeFile(wb, 'poll-' + p.id + '-' + new Date().toISOString().slice(0, 10) + '.xlsx');
+      });
+    },
     'pl-vote': function (el) { var pid = el.dataset.p, o = (ST.polls.pick || {})[pid]; if (o == null) { toast_(T('اختر إجابة أولاً', 'Pick an answer first')); return; } guard(async function () { await rpc('comm_poll_vote', { p_poll: Number(pid), p_opt: o }); delete ST.polls.pick[pid]; await loadPolls(); toast_(T('تم تسجيل إجابتك', 'Answer recorded')); }); },
     'pl-close': function (el) { guard(async function () { await rpc('comm_poll_close', { p_id: Number(el.dataset.id), p_closed: el.dataset.c === '1' }); await loadPolls(); }); },
     'pl-del': function (el) { guard(async function () { await rpc('comm_poll_delete', { p_id: Number(el.dataset.id) }); await loadPolls(); }); },
@@ -643,9 +655,9 @@
         var confirmBtn = canVote ? '<button class="btn pri" data-act="pl-vote" data-p="' + p.id + '"' + ((ST.polls.pick || {})[p.id] == null ? ' disabled' : '') + '>' + h(T('تأكيد الإجابة', 'Confirm answer')) + '</button>' : '';
         var done = !isAdmin() && p.my_vote != null ? '<p class="pill ok" style="margin:6px 0">' + h(T('✓ تمت إجابتك، شكراً', '✓ Answered, thank you')) + '</p>' : '';
         if (CAN('poll') && ST.polls.edit === p.id) return '<div class="card" style="margin:10px 0"><label>' + h(T('السؤال', 'Question')) + '<input id="pe-q" value="' + h(p.question) + '"></label><label>' + h(T('الخيارات: خيار في كل سطر (مع وجود أصوات لا يمكن تقليل العدد)', 'Options: one per line (cannot reduce if votes exist)')) + '<textarea id="pe-opts" class="cm-ta" style="direction:rtl;font-family:inherit">' + h((p.options || []).join('\n')) + '</textarea></label><div class="tabs"><button class="btn pri" data-act="pl-edit-save" data-id="' + p.id + '">' + h(T('حفظ', 'Save')) + '</button><button class="btn" data-act="pl-edit-cancel">' + h(T('إلغاء', 'Cancel')) + '</button></div></div>';
-        return '<div class="card" style="margin:10px 0"><b>' + h(p.question) + '</b> ' + (p.closed ? '<span class="pill">' + h(T('مغلق', 'Closed')) + '</span>' : '') +
+        return '<div class="card" style="margin:10px 0"><b>' + h(p.question) + '</b> ' + (p.closed ? '<span class="pill">' + h(isAdmin() ? T('مغلق: مخفي عن الجميع، يراه الإدارة فقط', 'Closed: hidden from everyone') : T('مغلق', 'Closed')) + '</span>' : '') +
           '<div class="sub">' + h(AUD[p.audience] ? AUD[p.audience][ar() ? 0 : 1] : (p.cohort_name || T('كل الطلبة', 'All students'))) + ((isStaff() && (!p.audience || isAdmin())) ? ' · ' + h(T('أجاب ', 'Answered ') + total + T(' من ', ' of ') + p.eligible) : '') + '</div>' + hint + opts + confirmBtn + done +
-          (CAN('poll') ? '<div class="tabs"><button class="btn sm" data-act="pl-edit" data-id="' + p.id + '">' + h(T('تعديل', 'Edit')) + '</button> <button class="btn sm" data-act="pl-close" data-id="' + p.id + '" data-c="' + (p.closed ? 0 : 1) + '">' + h(p.closed ? T('إعادة فتح', 'Reopen') : T('إغلاق', 'Close')) + '</button> <button class="btn sm bad" data-act="pl-del" data-id="' + p.id + '" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button></div>' : '') + '</div>';
+          (CAN('poll') ? '<div class="tabs"><button class="btn sm" data-act="pl-edit" data-id="' + p.id + '">' + h(T('تعديل', 'Edit')) + '</button> <button class="btn sm" data-act="pl-close" data-id="' + p.id + '" data-c="' + (p.closed ? 0 : 1) + '">' + h(p.closed ? T('إعادة فتح وإظهار', 'Reopen') : T('إغلاق وإخفاء عن الجميع', 'Close & hide')) + '</button> <button class="btn sm" data-act="pl-xlsx" data-id="' + p.id + '">⬇ ' + h(T('تصدير Excel', 'Export Excel')) + '</button> <button class="btn sm bad" data-act="pl-del" data-id="' + p.id + '" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button></div>' : '') + '</div>';
       }).join('') || '<div class="empty">' + h(T('لا استبيانات', 'No polls')) + '</div>') + '</div>';
   }
 

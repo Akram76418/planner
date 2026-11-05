@@ -110,9 +110,9 @@ begin
         (p.audience is null and r = 'student' and (p.cohort_id is null or p.cohort_id = myc))
         or (p.audience is not null and public.comm_poll_aud_ok(p.audience, auth.uid())))
     from comm_polls p left join comm_cohorts c on c.id = p.cohort_id
-    where r = 'admin'
+    where (r = 'admin' or not p.closed) and (r = 'admin'
        or (p.audience is null and ((r in ('professor','staff') and public.comm_has_access('cohorts')) or (r = 'student' and (p.cohort_id is null or p.cohort_id = myc))))
-       or (p.audience is not null and public.comm_poll_aud_ok(p.audience, auth.uid()))
+       or (p.audience is not null and public.comm_poll_aud_ok(p.audience, auth.uid())))
     order by p.closed, p.id desc limit 100;
 end $$;
 
