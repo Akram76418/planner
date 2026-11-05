@@ -30,6 +30,33 @@
   window.ivView = function () { return '<div id="iv-root"></div>'; };
   window.ivMount = function () { if (!V.tab) V.tab = role().manage ? 'manage' : role().evaluator ? 'eval' : role().entrant ? 'entry' : 'mine'; draw(); if (!V.loaded) load(); };
   function say(m, bad) { V.msg = m || ''; V.bad = !!bad; }
+  async function importCands(file) {
+    if (!file || !V.sid || !V.det) return;
+    run(async function () {
+      await loadXlsx();
+      var wb = window.XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      var data = window.XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', raw: false }).filter(function (r) { return r.some(function (c) { return String(c).trim(); }); });
+      if (!data.length) throw new Error(T('الملف فارغ', 'Empty file'));
+      var nm = function (x) { return String(x == null ? '' : x).replace(/[\u200b-\u200f\u202a-\u202e\ufeff]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, ' ').trim().toLowerCase(); };
+      var col = -1, start = 0;
+      for (var r = 0; r < Math.min(data.length, 3) && col < 0; r++) data[r].forEach(function (c, j) { if (col < 0 && /^(الاسم|اسم|الاسم الكامل|name|full ?name|المرشح)$/.test(nm(c))) { col = j; start = r + 1; } });
+      if (col < 0) { col = data.every(function (r) { return /^\d+$/.test(String(r[0]).trim()); }) && data[0].length > 1 ? 1 : 0; }
+      var have = {}; V.det.candidates.forEach(function (c) { have[nm(c.name)] = 1; });
+      var staffBy = {}; (V.staff || []).forEach(function (p) { staffBy[nm(p.full_name)] = p.id; });
+      var added = 0, linked = 0, dup = 0, conflict = 0;
+      for (var i = start; i < data.length; i++) {
+        var name = String(data[i][col] == null ? '' : data[i][col]).replace(/\s+/g, ' ').trim();
+        if (!name) continue;
+        if (have[nm(name)]) { dup++; continue; }
+        have[nm(name)] = 1;
+        var uid = staffBy[nm(name)] || null;
+        try { await rpc('iv_cand_add', { p_session: V.sid, p_user: uid, p_name: name }); added++; if (uid) linked++; }
+        catch (e) { if (uid && /evaluator|entrant/i.test(e.message || '')) { conflict++; } else throw e; }
+      }
+      say(T('تم الاستيراد: أُضيف ' + added + (linked ? ' (منهم ' + linked + ' مربوط بحساب)' : '') + (dup ? '، وتُجوهل ' + dup + ' مكرر' : '') + (conflict ? '، وتعذّر ' + conflict + ' لأنه مقيّم أو مُدخل بيانات في هذه المقابلة' : ''), 'Imported ' + added));
+      await reloadAll();
+    });
+  }
   function run(fn) { V.busy = true; V.err = ''; return Promise.resolve().then(fn).catch(function (e) { V.err = (e && e.message) || String(e); }).then(function () { V.busy = false; draw(); }); }
   async function rpc(n, a) { var r = await sb().rpc(n, a || {}); if (r.error) throw new Error(r.error.message); return r.data; }
 
@@ -104,7 +131,7 @@
       '</div><button class="btn sm pri" data-act="iv-ensave" style="margin-top:6px">' + h(T('حفظ المُدخلين', 'Save entrants')) + '</button></div>';
     var avail = V.staff.filter(function (p) { return candIds.indexOf(p.id) < 0 && evIds.indexOf(p.id) < 0 && enIds.indexOf(p.id) < 0; });
     out += '<div class="card"><b>🧑‍💼 ' + h(T('المرشحون', 'Candidates')) + '</b> <span class="pill">' + d.candidates.length + '</span><div class="form"><label>' + h(T('إضافة مرشح من الموظفين', 'Add from staff')) + '<select id="iv-cadd"><option value="">—</option>' + avail.map(function (p) { return '<option value="' + p.id + '">' + h(p.full_name) + '</option>'; }).join('') + '</select></label>' +
-      '<label>' + h(T('أو اسم يدوي (بلا حساب)', 'Or a manual name')) + '<input id="iv-cname" maxlength="120"></label></div><button class="btn sm pri" data-act="iv-cand">+ ' + h(T('إضافة', 'Add')) + '</button>' +
+      '<label>' + h(T('أو مرشح من خارج الكلية (اسم يدوي)', 'Or an external candidate (manual name)')) + '<input id="iv-cname" maxlength="120"></label></div><div class="tabs"><button class="btn sm pri" data-act="iv-cand">+ ' + h(T('إضافة', 'Add')) + '</button><label class="btn sm" style="cursor:pointer">⬆ ' + h(T('استيراد مرشحين من Excel', 'Import candidates (Excel)')) + '<input type="file" hidden accept=".xlsx,.xls,.csv" data-iv="candxlsx"></label></div><p class="sub">' + h(T('الاستيراد: عمود «الاسم» (أو أول عمود). لا يُكرَّر اسم موجود، ومن يطابق اسم موظف بحساب يُربط بحسابه فيرى نتيجته.', 'Import: a Name column (or the first column). Existing names are skipped; names matching a staff account are linked to it.')) + '</p>' +
       (Math.round(tot * 100) !== 10000 ? '<p class="pill warn">' + h(T('مجموع الأوزان ' + fmt(tot) + ' (تُحوَّل النتيجة إلى نسبة من 100)', 'Weights total ' + fmt(tot))) + '</p>' : '') + '</div>';
     var ranked = d.candidates.slice().sort(function (a, b) { return (Number(b.calc && b.calc.final) || -1) - (Number(a.calc && a.calc.final) || -1); });
     if (ranked.length) out += '<div class="card"><b>🏆 ' + h(T('الترتيب', 'Ranking')) + '</b> <button class="btn sm" data-act="iv-export">⬇ ' + h(T('تصدير النتائج Excel', 'Export results (Excel)')) + '</button><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><tbody>' + ranked.map(function (c, i) { return '<tr><td>' + (i + 1) + '</td><td>' + h(c.name) + '</td><td><b>' + fmt(c.calc && c.calc.final) + '</b></td><td>' + (c.calc && c.calc.complete ? '✔' : '…') + '</td></tr>'; }).join('') + '</tbody></table></div></div>';
@@ -312,6 +339,7 @@
   };
   document.addEventListener('change', function (e) {
     var t = e.target, k = t && t.dataset && t.dataset.iv;
+    if (k === 'candxlsx') { var f0 = t.files && t.files[0]; t.value = ''; importCands(f0); return; }
     if (k === 'sid') { V.sid = Number(t.value) || 0; V.form = null; run(async function () { V.det = V.sid ? await rpc('iv_admin_detail', { p_session: V.sid }) : null; }); }
   });
   document.addEventListener('change', function (e) { var t = e.target, d = t && t.dataset; if (d && d.ivc && /:(type|calc)$/.test(d.ivc)) { var p = d.ivc.split(':'), c = V.crit && V.crit[Number(p[0])]; if (c) { c[p[1]] = p[1] === 'calc' ? (t.value || null) : t.value; if (p[1] === 'type' && t.value === 'com') c.calc = null; if (p[1] === 'calc' && c.calc === 'levels' && !(c.levels && c.levels.length)) c.levels = [{ label: 'لا', points: 0 }, { label: 'نعم', points: num(c.weight) || 1 }]; draw(); } } });

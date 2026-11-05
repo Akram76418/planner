@@ -52,8 +52,9 @@
   }
   function addBox(r, kind) {
     var used = {}; K.items.forEach(function (x) { if (x.round_id === r.id && x.kind === kind) used[(x.emp || '') + '|' + x.person] = 1; });
-    var opts = K.emps.filter(function (e) { return (kind === 'in' ? !!e.has_project : !e.has_project) && !used[(e.employee_number || '') + '|' + e.full_name]; });
-    return '<div class="form" style="margin-top:8px"><label>' + h(kind === 'in' ? T('موظف على مشروع', 'Employee with a project') : T('زميل بلا مشروع', 'Colleague without a project')) + '<select id="tk-p-' + kind + '"><option value="">—</option>' + opts.map(function (e) { return '<option value="' + e.id + '">' + h(e.full_name) + '</option>'; }).join('') + '</select></label>' +
+    var free = function (e) { return !used[(e.employee_number || '') + '|' + e.full_name]; }, wp = K.emps.filter(function (e) { return !!e.has_project && free(e); }), np = K.emps.filter(function (e) { return !e.has_project && free(e); });
+    var optH = function (l) { return l.map(function (e) { return '<option value="' + e.id + '">' + h(e.full_name) + '</option>'; }).join(''); };
+    return '<div class="form" style="margin-top:8px"><label>' + h(kind === 'in' ? T('موظف (على مشروع أو بلا مشروع)', 'Employee (with or without a project)') : T('زميل بلا مشروع', 'Colleague without a project')) + '<select id="tk-p-' + kind + '"><option value="">—</option>' + (kind === 'in' ? '<optgroup label="' + h(T('على مشروع', 'With a project')) + '">' + optH(wp) + '</optgroup><optgroup label="' + h(T('بلا مشروع', 'Without a project')) + '">' + optH(np) + '</optgroup>' : optH(np)) + '</select></label>' +
       '<label>' + h(T('أو اسم آخر', 'Or other name')) + '<input id="tk-n-' + kind + '"></label>' +
       '<label>' + h(T('المبلغ', 'Amount')) + '<input id="tk-a-' + kind + '" type="number" step="0.01" min="0" inputmode="decimal"></label>' +
       '<div style="align-self:end"><button class="btn pri" data-act="tk-add" data-r="' + r.id + '" data-k="' + kind + '">+ ' + h(T('إضافة', 'Add')) + '</button> <button class="btn sm" data-act="tk-addall" data-r="' + r.id + '" data-k="' + kind + '">' + h(kind === 'in' ? T('إضافة كل أصحاب المشاريع', 'Add all with projects') : T('إضافة كل من بلا مشروع', 'Add all without projects')) + '</button></div></div>';
