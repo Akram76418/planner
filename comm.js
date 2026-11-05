@@ -732,9 +732,15 @@
     });
   }
   async function loadAcc() { ST.admin.acc = {}; try { ((await rpc('comm_staff_access_list')) || []).forEach(function (x) { ST.admin.acc[x.user_id] = x; }); } catch (e) { ST.admin.accErr = true; } }
-  async function loadTk() { ST.tkr = (await rpc('tk_my_rounds')) || []; }
-  function tkTodo() { return (ST.tkr || []).filter(function (r) { return (r.accepting && r.my_pledge == null) || (r.published && r.out_amount != null && !r.out_confirmed); }).length; }
+  async function loadTk() { ST.tkr = (await rpc('tk_my_rounds')) || []; tkSeen(tkList().join(',')); }
+  function tkList() { var l = []; (ST.tkr || []).forEach(function (r) { if (r.accepting && r.my_pledge == null) l.push('p' + r.round_id); if (r.published && r.out_amount != null && !r.out_confirmed) l.push('c' + r.round_id); }); return l; }
+  function tkSeen(v) { try { if (v === undefined) return localStorage.getItem('tk_seen_' + (ctx().id || '')) || ''; localStorage.setItem('tk_seen_' + (ctx().id || ''), v); } catch (e) { return ''; } return ''; }
+  function tkTodo() { var l = tkList(); return l.length && tkSeen() !== l.join(',') ? l.length : 0; }
   function tkMoney(n, c) { return (Math.round(Number(n) * 100) / 100).toLocaleString('en', { maximumFractionDigits: 2 }) + ' ' + ({ ILS: '₪', USD: '$', JOD: 'د.أ', EUR: '€' }[c] || ''); }
+  function tkTotals(r, cur) {
+    return '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0"><div class="card" style="flex:1;min-width:150px;padding:8px 12px"><div class="sub">' + h(T('إجمالي المبلغ المتعهَّد به حتى اللحظة', 'Total pledged so far')) + '</div><b>' + h(tkMoney(r.total_pledged, cur)) + '</b></div>' +
+      '<div class="card" style="flex:1;min-width:150px;padding:8px 12px"><div class="sub">' + h(T('إجمالي المدفوعات الفعلية (المستلَمة)', 'Total actually paid (received)')) + '</div><b>' + h(tkMoney(r.total_received, cur)) + '</b></div></div>';
+  }
   function tkHtml() {
     var rows = ST.tkr || [], out = CAN('tk') ? '<div class="card"><b>' + h(T('إدارة التكافل', 'Takaful management')) + '</b><p class="sub">' + h(T('لإنشاء دورة جديدة وفتح باب التبرع وتسجيل المبالغ وتحديد بيانات التحويل.', 'Create rounds, open pledging, record amounts and set payment details.')) + '</p><button class="btn pri" data-act="tk-go">🤝 ' + h(T('فتح صفحة إدارة التكافل', 'Open Takaful management')) + '</button></div>' : '';
     rows.forEach(function (r) {
@@ -746,14 +752,14 @@
         else body += '<p style="line-height:1.9">' + h(T('جزاك الله خيراً، شكراً لك على مساهمتك الكريمة بمبلغ ', 'Thank you for your generous contribution of ') + tkMoney(r.my_pledge, cur) + T('. نسأل الله أن يجعله في ميزان حسناتك.', '.')) + '</p>' +
           (r.my_pledge_done ? '<p class="pill ok">' + h(T('✓ استلمت الإدارة مساهمتك، بارك الله فيك', '✓ Your contribution was received')) + '</p>' : '<p class="pill warn">' + h(T('نرجو إرسال المبلغ إلى الحساب التالي، وسيُسجَّل استلامه عند وصوله:', 'Please send the amount to the account below:')) + '</p>');
         if (!r.my_pledge_done && r.pay_info) body += '<div class="card" style="margin:6px 0;white-space:pre-wrap;font-weight:600;direction:ltr;text-align:start">' + h(r.pay_info) + '</div>';
-        body += '<p class="sub">' + h(T('إجمالي المبلغ المتعهَّد به من المساهمين في هذه الدورة حتى اللحظة: ', 'Total pledged so far in this round: ')) + '<b>' + h(tkMoney(r.total_pledged, cur)) + '</b></p>';
+        body += tkTotals(r, cur);
         if (!r.my_pledge_done) body += '<div class="form"><label>' + h(mine ? T('تعديل المبلغ', 'Change amount') : T('مبلغ التبرع', 'Amount')) + '<input id="tkp-' + r.round_id + '" type="number" step="0.01" min="1" inputmode="decimal" value="' + h(mine ? r.my_pledge : '') + '"></label><div style="align-self:end"><button class="btn pri" data-act="tk-pledge" data-id="' + r.round_id + '"' + (ST.busy ? ' disabled' : '') + '>' + h(mine ? T('تحديث المبلغ', 'Update') : T('تأكيد التبرع', 'Confirm donation')) + '</button></div></div>';
         body += '</div>';
       }
       if (hasOut) {
         body += '<div class="card" style="margin:8px 0"><b>' + h(T('نصيبك من التكافل', 'Your share')) + '</b>' +
           '<p style="line-height:1.9">' + h(T('خُصِّص لك مبلغ ', 'An amount was allocated to you: ') + tkMoney(r.out_amount, cur) + T('، جعله الله عوناً لك.', '')) + '</p>' +
-          '<p class="sub">' + h(T('إجمالي المبلغ المتبرَّع به في هذه الدورة: ', 'Total donated this round: ')) + '<b>' + h(tkMoney(r.total_pledged, cur)) + '</b></p>' +
+          tkTotals(r, cur) +
           (r.out_confirmed ? '<p class="pill ok">' + h(T('✓ لقد استلمتَ مبلغاً وقدره ', '✓ You received ') + tkMoney(r.out_amount, cur)) + '</p>' : '<button class="btn pri" data-act="tk-confirm" data-id="' + r.round_id + '" data-confirm="1" data-confirm-text="' + h(T('اضغط مرة ثانية لتأكيد أنك استلمت المبلغ', 'Press again to confirm')) + '"' + (ST.busy ? ' disabled' : '') + '>✓ ' + h(T('أؤكد استلامي للمبلغ', 'I confirm I received it')) + '</button>') + '</div>';
       }
       if (body) out += '<div class="card"><h2>' + h(r.title) + ' <span class="sub">' + h(r.round_date) + '</span></h2>' + body + '</div>';

@@ -69,7 +69,7 @@ drop function if exists public.tk_my_status();
 drop function if exists public.tk_my_rounds();
 create or replace function public.tk_my_rounds()
 returns table(round_id bigint, title text, round_date date, currency text, accepting boolean, published boolean,
-              total_pledged numeric, my_pledge numeric, my_pledge_done boolean, pay_info text,
+              total_pledged numeric, total_received numeric, my_pledge numeric, my_pledge_done boolean, pay_info text,
               out_amount numeric, out_done boolean, out_confirmed boolean)
 language plpgsql stable security definer set search_path = public set row_security = off as $$
 declare me text := public.tk_my_emp();
@@ -78,6 +78,7 @@ begin
   return query
     select r.id, r.title, r.round_date, r.currency, r.accepting, r.show_status,
       (select coalesce(sum(i.amount), 0) from tk_items i where i.round_id = r.id and i.kind = 'in'),
+      (select coalesce(sum(i.amount), 0) from tk_items i where i.round_id = r.id and i.kind = 'in' and i.done),
       (select i.amount from tk_items i where i.round_id = r.id and i.kind = 'in' and (i.uid = auth.uid() or (me is not null and trim(i.emp) = me)) order by i.id limit 1),
       (select i.done from tk_items i where i.round_id = r.id and i.kind = 'in' and (i.uid = auth.uid() or (me is not null and trim(i.emp) = me)) order by i.id limit 1),
       case when r.accepting then (select s.pay_info from tk_settings s where s.id = 1) else null end,
