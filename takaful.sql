@@ -30,6 +30,7 @@ alter table public.tk_items add column if not exists src text not null default '
 alter table public.tk_items add column if not exists pledged_at timestamptz;
 alter table public.tk_items add column if not exists recv_confirmed boolean not null default false;   -- أكّد المستفيد استلامه
 alter table public.tk_items add column if not exists recv_at timestamptz;
+alter table public.tk_items add column if not exists ext text check (ext is null or ext in ('donation','course'));   -- مساهمة خارجية: تبرع / رسوم دورة تدريبية
 create index if not exists tk_items_round on public.tk_items (round_id, kind);
 create index if not exists tk_items_uid on public.tk_items (uid);
 
