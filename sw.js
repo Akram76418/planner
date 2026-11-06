@@ -1,31 +1,42 @@
-/* Service worker: app shell offline + Web Push display. Bump VERSION when files change. */
-const VERSION = 'planner-v68';
+/* Service worker: يعمل التطبيق دون إنترنت، ويتحدّث تلقائياً عند توفر الاتصال. ارفع VERSION عند تغيير أي ملف. */
+const VERSION = 'planner-v69';
+const CDN_CACHE = 'planner-cdn';          // مكتبات الخارج والخطوط: لا تُحذف عند تحديث النسخة حتى يعمل التطبيق دون نت دائماً
 const SHELL = ['./', './index.html', './config.js', './sync.js', './comm.js', './ext.js', './logs.js', './ledger.js', './takaful.js', './booking.js', './iv.js', './logo.png', './manifest.json', './icon-192.png', './icon-512.png'];
+const CDN_PRE = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js', 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Readex+Pro:wght@500;600&display=swap'];
 const CDN = ['https://cdn.jsdelivr.net/', 'https://fonts.googleapis.com/', 'https://fonts.gstatic.com/'];
+const NET_WAIT = 4000;                    // ننتظر الشبكة 4 ثوانٍ كحد أقصى ثم نعرض النسخة المحفوظة
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VERSION).then(c => Promise.all(SHELL.map(u => c.add(u).catch(() => {})))).then(() => self.skipWaiting()));
+  e.waitUntil(Promise.all([
+    caches.open(VERSION).then(c => Promise.all(SHELL.map(u => fetch(u, { cache: 'reload' }).then(r => { if (r.ok) return c.put(u, r); }).catch(() => {})))),
+    caches.open(CDN_CACHE).then(c => Promise.all(CDN_PRE.map(u => c.match(u).then(h => h || fetch(u).then(r => { if (r.ok) return c.put(u, r); }).catch(() => {}))))),
+  ]).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VERSION && k !== CDN_CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
+self.addEventListener('message', e => { if (e.data === 'skipWaiting') self.skipWaiting(); });
+
+function withTimeout(p, ms) { return new Promise((res, rej) => { const t = setTimeout(() => rej(new Error('timeout')), ms); p.then(v => { clearTimeout(t); res(v); }, er => { clearTimeout(t); rej(er); }); }); }
+
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   const sameOrigin = url.origin === location.origin;
   const cdn = CDN.some(p => req.url.startsWith(p));
-  if (sameOrigin && url.pathname.endsWith('/book.html')) return;   // student portal: always live
-  if (!sameOrigin && !cdn) return;                 // Supabase API calls always go to the network
-  if (cdn) {                                       // cache-first for pinned CDN files and fonts
-    e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(r => { const cp = r.clone(); caches.open(VERSION).then(c => c.put(req, cp)); return r; })));
+  if (sameOrigin && url.pathname.endsWith('/book.html')) return;   // صفحة الطلبة: دائماً مباشرة
+  if (!sameOrigin && !cdn) return;                                  // طلبات Supabase تذهب للشبكة دائماً
+  if (cdn) {                                                        // ملفات الخارج: من الذاكرة أولاً (نسخها مثبّتة بالإصدار)
+    e.respondWith(caches.open(CDN_CACHE).then(c => c.match(req).then(hit => hit || fetch(req).then(r => { if (r.ok || r.type === 'opaque') c.put(req, r.clone()); return r; }))));
     return;
   }
-  e.respondWith(                                   // stale-while-revalidate for the app shell
-    caches.match(req, { ignoreSearch: true }).then(hit => {
-      const net = fetch(req).then(r => { if (r.ok) { const cp = r.clone(); caches.open(VERSION).then(c => c.put(req, cp)); } return r; }).catch(() => hit || caches.match('./index.html'));
-      return hit || net;
-    })
+  // ملفات التطبيق: الشبكة أولاً (تحديث فوري عند وجود نت) ثم النسخة المحفوظة دون نت
+  e.respondWith(
+    withTimeout(fetch(req, { cache: 'no-cache' }), NET_WAIT).then(r => {
+      if (r.ok) { const cp = r.clone(); caches.open(VERSION).then(c => c.put(req, cp)); }
+      return r;
+    }).catch(() => caches.open(VERSION).then(c => c.match(req, { ignoreSearch: true })).then(hit => hit || caches.match(req, { ignoreSearch: true })).then(hit => hit || (req.mode === 'navigate' ? caches.match('./index.html') : Response.error())))
   );
 });
 self.addEventListener('push', e => {

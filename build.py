@@ -11,7 +11,11 @@ pre = ('<!doctype html>\n<html lang="ar" dir="rtl"><head><meta charset="utf-8">'
 libs = ('<script src="config.js"></script>\n'
         '<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>\n'
         '<script src="sync.js"></script>\n<script src="comm.js"></script>\n<script src="ext.js"></script>\n<script src="logs.js"></script>\n<script src="ledger.js"></script>\n<script src="takaful.js"></script>\n<script src="booking.js"></script>\n<script src="iv.js"></script>\n')
-reg = ("<script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}</script>\n")
+reg = ("<script>(function(){if(!('serviceWorker' in navigator))return;var had=!!navigator.serviceWorker.controller,done=false;"
+       "function busy(){var m=document.getElementById('modal'),a=document.activeElement;return (m&&m.classList.contains('on'))||(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&a.value);}"
+       "function go(){if(done)return;if(busy()){setTimeout(go,15000);return}done=true;location.reload()}"
+       "navigator.serviceWorker.addEventListener('controllerchange',function(){if(had)go();had=true});"
+       "window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(r){var chk=function(){try{r.update()}catch(e){}};chk();setInterval(chk,600000);document.addEventListener('visibilitychange',function(){if(!document.hidden)chk()});window.addEventListener('online',chk)}).catch(function(){})})})();</script>\n")
 open('index.html', 'w', encoding='utf-8').write(pre + head_part + libs + app_script + reg + '</body></html>\n')
 open('artifact.html', 'w', encoding='utf-8').write(src)
 print('built index.html, artifact.html')

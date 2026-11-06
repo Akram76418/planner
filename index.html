@@ -925,5 +925,5 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();ACT['m
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkReminders()});
 })();
 </script>
-<script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}</script>
+<script>(function(){if(!('serviceWorker' in navigator))return;var had=!!navigator.serviceWorker.controller,done=false;function busy(){var m=document.getElementById('modal'),a=document.activeElement;return (m&&m.classList.contains('on'))||(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&a.value);}function go(){if(done)return;if(busy()){setTimeout(go,15000);return}done=true;location.reload()}navigator.serviceWorker.addEventListener('controllerchange',function(){if(had)go();had=true});window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(r){var chk=function(){try{r.update()}catch(e){}};chk();setInterval(chk,600000);document.addEventListener('visibilitychange',function(){if(!document.hidden)chk()});window.addEventListener('online',chk)}).catch(function(){})})})();</script>
 </body></html>
