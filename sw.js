@@ -1,5 +1,5 @@
 /* Service worker: يعمل التطبيق دون إنترنت، ويتحدّث تلقائياً عند توفر الاتصال. ارفع VERSION عند تغيير أي ملف. */
-const VERSION = 'planner-v69';
+const VERSION = 'planner-v70';
 const CDN_CACHE = 'planner-cdn';          // مكتبات الخارج والخطوط: لا تُحذف عند تحديث النسخة حتى يعمل التطبيق دون نت دائماً
 const SHELL = ['./', './index.html', './config.js', './sync.js', './comm.js', './ext.js', './logs.js', './ledger.js', './takaful.js', './booking.js', './iv.js', './logo.png', './manifest.json', './icon-192.png', './icon-512.png'];
 const CDN_PRE = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js', 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Readex+Pro:wght@500;600&display=swap'];
@@ -26,6 +26,7 @@ self.addEventListener('fetch', e => {
   const sameOrigin = url.origin === location.origin;
   const cdn = CDN.some(p => req.url.startsWith(p));
   if (sameOrigin && url.pathname.endsWith('/book.html')) return;   // صفحة الطلبة: دائماً مباشرة
+  if (sameOrigin && url.pathname.endsWith('/give.html')) return;   // صفحة فاعل الخير: دائماً مباشرة
   if (!sameOrigin && !cdn) return;                                  // طلبات Supabase تذهب للشبكة دائماً
   if (cdn) {                                                        // ملفات الخارج: من الذاكرة أولاً (نسخها مثبّتة بالإصدار)
     e.respondWith(caches.open(CDN_CACHE).then(c => c.match(req).then(hit => hit || fetch(req).then(r => { if (r.ok || r.type === 'opaque') c.put(req, r.clone()); return r; }))));
