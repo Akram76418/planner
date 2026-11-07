@@ -18,6 +18,7 @@ button{font:inherit;padding:12px 16px;border-radius:10px;border:1px solid var(--
 .sub{color:var(--sub);font-size:14px}.pay{white-space:pre-wrap;background:var(--bg);border:1px dashed var(--ac);border-radius:10px;padding:12px;margin:8px 0;direction:auto;font-weight:600}
 .msg{padding:10px 12px;border-radius:10px;margin:10px 0}.err{background:rgba(179,38,30,.12);color:var(--bad)}.good{background:rgba(18,128,92,.12);color:var(--ok)}
 .hp{position:absolute;inset-inline-start:-9999px;width:1px;height:1px;overflow:hidden}
+.tot{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}.tot>div{background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:10px;text-align:center}.tot span{display:block;font-size:12px}.tot b{font-size:18px;color:var(--ok)}
 .ref{font-size:22px;font-weight:700;text-align:center;direction:ltr}
 </style></head><body>
 <header><h1>🤝 التكافل</h1></header>
@@ -29,6 +30,7 @@ button{font:inherit;padding:12px 16px;border-radius:10px;border:1px solid var(--
 var C=window.PLANNER_CONFIG,sb=null,S={info:null,done:null,msg:'',bad:false,busy:false,t0:Date.now()};
 var ERR={closed:'باب المساهمة مغلق حالياً.',amount:'أدخل مبلغاً صحيحاً (من 1 إلى 100000).',rate:'أرسلت عدة مرات خلال وقت قصير. حاول لاحقاً بعد ساعة.',busy:'الصفحة مشغولة حالياً، حاول بعد قليل.'};
 function h(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function tot(r){var c=CUR[r.currency]||'';function f(n){return (Math.round(Number(n||0)*100)/100).toLocaleString('en')+' '+c}return '<div class="tot"><div><span class="sub">إجمالي المبلغ المتعهَّد به حتى اللحظة</span><b>'+f(r.total_pledged)+'</b></div><div><span class="sub">إجمالي المدفوعات الفعلية (المستلَمة)</span><b>'+f(r.total_received)+'</b></div></div>'}
 function $(i){return document.getElementById(i)}
 var CUR={ILS:'₪',USD:'$',JOD:'د.أ',EUR:'€'};
 async function init(){
@@ -43,13 +45,13 @@ function draw(){
   if(S.done){
     html+='<div class="card"><b>جزاك الله خيراً 🤲</b><p>شكراً لمساهمتك. سُجّل تعهّدك بمبلغ <b>'+h(S.done.amt)+' '+h(S.done.cur)+'</b>، وسيُعتمد بعد وصول المبلغ إلى الجهة المسؤولة.</p>'+
       (S.done.ref?'<div class="sub">رقم مرجع تعهّدك (اذكره مع التحويل):</div><div class="ref">#'+h(S.done.ref)+'</div>':'')+
-      (i.pay_info?'<p><b>بيانات التحويل:</b></p><div class="pay">'+h(i.pay_info)+'</div>':'')+'</div>';
+      (S.done.r?tot(S.done.r):'')+(i.pay_info?'<p><b>بيانات التحويل:</b></p><div class="pay">'+h(i.pay_info)+'</div>':'')+'</div>';
     el.innerHTML=html;return
   }
   if(!i.rounds.length){el.innerHTML='<div class="card">باب المساهمة غير مفتوح حالياً. شكراً لاهتمامك.</div>';return}
   html+='<div id="mg"></div><div class="card"><b>ساهم في التكافل</b><p class="sub">اكتب المبلغ الذي تود التبرع به، وسيظهر لك بعدها رقم الحساب وطريقة التحويل. لا يُحتسب تعهّدك إلا بعد وصول المبلغ واعتماده من الإدارة.</p>'+
     (i.rounds.length>1?'<label>الدورة</label><select id="rd">'+i.rounds.map(function(r){return'<option value="'+r.id+'">'+h(r.title)+'</option>'}).join('')+'</select>':'<input type="hidden" id="rd" value="'+i.rounds[0].id+'">')+
-    '<label>الاسم (اختياري)</label><input id="nm" maxlength="80" autocomplete="name" placeholder="يمكنك ترك الاسم فارغاً">'+
+    '<div id="tt">'+tot(i.rounds[0])+'</div><label>الاسم (اختياري)</label><input id="nm" maxlength="80" autocomplete="name" placeholder="يمكنك ترك الاسم فارغاً">'+
     '<label>المبلغ ('+h(CUR[i.rounds[0].currency]||'')+') *</label><input id="am" type="number" min="1" max="100000" step="0.01" inputmode="decimal">'+
     '<label>النوع</label><select id="kd"><option value="donation">تبرع</option><option value="course">رسوم دورة تدريبية</option></select>'+
     '<label>ملاحظة (اختياري)</label><input id="nt" maxlength="200">'+
@@ -57,6 +59,7 @@ function draw(){
     '<button id="go"'+(S.busy?' disabled':'')+'>تعهّد بالمساهمة</button></div>';
   el.innerHTML=html;
   $('go').onclick=send;
+  if($('rd').tagName==='SELECT')$('rd').onchange=function(){var r=i.rounds.filter(function(x){return x.id===Number($('rd').value)})[0];if(r)$('tt').innerHTML=tot(r)};
 }
 function note(m){S.msg=m;S.bad=true;var e=$('mg');if(e)e.innerHTML=m?'<div class="msg err">'+h(m)+'</div>':'';else draw()}
 async function send(){
@@ -67,7 +70,7 @@ async function send(){
   S.busy=true;$('go').disabled=true;
   try{var r=await sb.rpc('tk_pub_pledge',args);if(r.error)throw r.error;var d=r.data||{};
     if(!d.ok){note(ERR[d.err]||'حدث خطأ.')}
-    else{S.done={amt:am,cur:CUR[r0.currency]||r0.currency,ref:d.ref};note('');draw();return}
+    else{S.done={amt:am,cur:CUR[r0.currency]||r0.currency,ref:d.ref,r:r0};note('');draw();return}
   }catch(e){note('تعذّر الإرسال، تحقق من الاتصال وأعد المحاولة.')}
   S.busy=false;var g=$('go');if(g)g.disabled=false;
 }

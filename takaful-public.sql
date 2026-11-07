@@ -24,12 +24,14 @@ create policy "tk pending admin" on public.tk_pending for select to authenticate
 grant select on public.tk_pending to authenticated;
 
 -- ───── جهة العموم ─────
--- الدورات المفتوحة للتبرع العام (+ بيانات التحويل). لا تُظهر أي أرقام أو أسماء.
+-- الدورات المفتوحة للتبرع العام (+ بيانات التحويل + إجمالي المتعهَّد به والمستلَم فقط، دون أي أسماء).
 create or replace function public.tk_pub_info() returns jsonb
 language sql stable security definer set search_path = public set row_security = off as $$
   select jsonb_build_object(
     'pay_info', (select s.pay_info from tk_settings s where s.id = 1),
-    'rounds', coalesce((select jsonb_agg(jsonb_build_object('id', r.id, 'title', r.title, 'currency', r.currency) order by r.round_date desc, r.id desc)
+    'rounds', coalesce((select jsonb_agg(jsonb_build_object('id', r.id, 'title', r.title, 'currency', r.currency,
+        'total_pledged', (select coalesce(sum(i.amount), 0) from tk_items i where i.round_id = r.id and i.kind = 'in'),
+        'total_received', (select coalesce(sum(i.amount), 0) from tk_items i where i.round_id = r.id and i.kind = 'in' and i.done)) order by r.round_date desc, r.id desc)
                         from tk_rounds r where r.ext_open and not r.closed), '[]'::jsonb))
 $$;
 
