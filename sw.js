@@ -1,5 +1,5 @@
 /* Service worker: يعمل التطبيق دون إنترنت، ويتحدّث تلقائياً عند توفر الاتصال. ارفع VERSION عند تغيير أي ملف. */
-const VERSION = 'planner-v70';
+const VERSION = 'planner-v71';
 const CDN_CACHE = 'planner-cdn';          // مكتبات الخارج والخطوط: لا تُحذف عند تحديث النسخة حتى يعمل التطبيق دون نت دائماً
 const SHELL = ['./', './index.html', './config.js', './sync.js', './comm.js', './ext.js', './logs.js', './ledger.js', './takaful.js', './booking.js', './iv.js', './logo.png', './manifest.json', './icon-192.png', './icon-512.png'];
 const CDN_PRE = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js', 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Readex+Pro:wght@500;600&display=swap'];

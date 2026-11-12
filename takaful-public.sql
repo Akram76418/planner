@@ -43,7 +43,8 @@ declare hdr jsonb; ip text; ih text; nm text := nullif(trim(coalesce(p_name, '')
 begin
   if coalesce(p_hp, '') <> '' then return jsonb_build_object('ok', true, 'ref', 0); end if;          -- روبوت: نتجاهل بصمت
   begin hdr := coalesce(nullif(current_setting('request.headers', true), ''), '{}')::jsonb; exception when others then hdr := '{}'::jsonb; end;
-  ip := coalesce(nullif(trim(split_part(coalesce(hdr->>'x-forwarded-for', hdr->>'cf-connecting-ip', ''), ',', 1)), ''), 'unknown');
+  ip := coalesce(nullif(trim(hdr->>'cf-connecting-ip'), ''), nullif(trim(hdr->>'x-real-ip'), ''),
+                 nullif(trim((string_to_array(coalesce(hdr->>'x-forwarded-for', ''), ','))[array_length(string_to_array(coalesce(hdr->>'x-forwarded-for', ''), ','), 1)]), ''), 'unknown');   -- لا نثق بأول عنوان لأن الزائر قد ينتحله
   ih := md5(ip || ':tk');
   if not exists (select 1 from tk_rounds r where r.id = p_round and r.ext_open and not r.closed) then return jsonb_build_object('ok', false, 'err', 'closed'); end if;
   if p_amount is null or p_amount < 1 or p_amount > 100000 then return jsonb_build_object('ok', false, 'err', 'amount'); end if;

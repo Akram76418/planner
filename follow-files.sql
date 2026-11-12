@@ -1,7 +1,7 @@
--- ملفات PDF المرفقة بـ «متابعاتي اليومية»: حاوية خاصة، كل مستخدم يصل إلى مجلده فقط (المسار: <user_id>/<follow_id>/<file>.pdf).
+-- ملفات PDF وWord وExcel المرفقة بـ «متابعاتي اليومية»: حاوية خاصة، كل مستخدم يصل إلى مجلده فقط (المسار: <user_id>/<follow_id>/<file>.<ext>).
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('follow-files', 'follow-files', false, 10485760, array['application/pdf'])
-on conflict (id) do update set public = false, file_size_limit = 10485760, allowed_mime_types = array['application/pdf'];
+values ('follow-files', 'follow-files', false, 10485760, array['application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','text/csv'])
+on conflict (id) do update set public = false, file_size_limit = 10485760, allowed_mime_types = array['application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','text/csv'];
 
 drop policy if exists "follow files select" on storage.objects;
 drop policy if exists "follow files insert" on storage.objects;

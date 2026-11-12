@@ -182,7 +182,7 @@ const clamp=(n,a,b)=>Math.min(b,Math.max(a,n));
 
 /* ---------- i18n ---------- */
 const TX={
-ar:{app:'منظّم أعمالي اليومية',appEn:'My Daily Planner',dash:'لوحة التحكم',cal:'التقويم',appts:'المواعيد',follow:'متابعاتي اليومية',tasks:'المهام',reports:'التقارير والإنجازات',settings:'الإعدادات',comm:'التواصل',proj:'المشاريع الخارجية',logs:'السجلات',followEnded:'انتهت المدة المخصصة لهذه المتابعة',pdfFiles:'ملفات PDF مرفقة',pdfHint:'اختياري — حتى 10 ميغابايت للملف، ويلزم اتصال بالإنترنت للرفع.',pdfNeedLogin:'سجّل الدخول لإرفاق الملفات.',pdfOffline:'رفع الملفات يحتاج اتصالاً بالإنترنت.',pdfOnly:'يُسمح بملفات PDF فقط.',pdfBig:'الملف أكبر من 10 ميغابايت.',pdfOpenErr:'تعذّر فتح الملف.',ledger:'دفتر الدفعات',book:'حجز المحاضرات',iv:'المقابلات',signout:'خروج / تبديل الحساب',
+ar:{app:'منظّم أعمالي اليومية',appEn:'My Daily Planner',dash:'لوحة التحكم',cal:'التقويم',appts:'المواعيد',follow:'متابعاتي اليومية',tasks:'المهام',reports:'التقارير والإنجازات',settings:'الإعدادات',comm:'التواصل',proj:'المشاريع الخارجية',logs:'السجلات',followEnded:'انتهت المدة المخصصة لهذه المتابعة',pdfFiles:'ملفات مرفقة (PDF / Word / Excel)',pdfHint:'اختياري — حتى 10 ميغابايت للملف، ويلزم اتصال بالإنترنت للرفع.',pdfNeedLogin:'سجّل الدخول لإرفاق الملفات.',pdfOffline:'رفع الملفات يحتاج اتصالاً بالإنترنت.',pdfOnly:'الأنواع المسموحة: PDF وWord وExcel (pdf, doc, docx, xls, xlsx, csv).',pdfBig:'الملف أكبر من 10 ميغابايت.',pdfOpenErr:'تعذّر فتح الملف.',ledger:'دفتر الدفعات',book:'حجز المحاضرات',iv:'المقابلات',signout:'خروج / تبديل الحساب',
 new:'إضافة جديدة',newAppt:'موعد / اجتماع',newTask:'مهمة',newFollow:'متابعة يومية',save:'حفظ',cancel:'إلغاء',close:'إغلاق',edit:'تعديل',del:'حذف',delOk:'تأكيد الحذف',details:'التفاصيل',
 title:'العنوان',date:'التاريخ',start:'البداية',end:'النهاية',place:'المكان',people:'المشاركون',type:'النوع',prio:'الأولوية',status:'الحالة',optional:'اختياري',
 t_meeting:'اجتماع',t_admin:'عمل إداري',t_teaching:'تدريس',t_research:'بحث علمي',t_personal:'موعد شخصي',t_project:'متابعة مشروع',t_custom:'نوع مخصص',customType:'اسم النوع المخصص',
@@ -223,7 +223,7 @@ sumNoData:'لا توجد بيانات مسجلة في هذه الفترة.',
 nextOpen:'إجراءات اجتماعات غير منفذة',
 timeErr:'وقت النهاية يجب أن يكون بعد البداية',titleErr:'العنوان مطلوب',dateErr:'التاريخ مطلوب',
 wd:['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت']},
-en:{app:'My Daily Planner',appEn:'منظّم أعمالي اليومية',dash:'Dashboard',cal:'Calendar',appts:'Appointments',follow:'Daily Focus',tasks:'Tasks',reports:'Reports & Achievements',settings:'Settings',comm:'Messages',proj:'External projects',logs:'Logs',followEnded:'The time set for this follow-up has ended',pdfFiles:'Attached PDF files',pdfHint:'Optional — up to 10 MB each; an internet connection is needed to upload.',pdfNeedLogin:'Sign in to attach files.',pdfOffline:'Uploading files needs an internet connection.',pdfOnly:'PDF files only.',pdfBig:'File is larger than 10 MB.',pdfOpenErr:'Could not open the file.',ledger:'Payments ledger',book:'Lecture booking',iv:'Interviews',signout:'Sign out / switch account',
+en:{app:'My Daily Planner',appEn:'منظّم أعمالي اليومية',dash:'Dashboard',cal:'Calendar',appts:'Appointments',follow:'Daily Focus',tasks:'Tasks',reports:'Reports & Achievements',settings:'Settings',comm:'Messages',proj:'External projects',logs:'Logs',followEnded:'The time set for this follow-up has ended',pdfFiles:'Attached files (PDF / Word / Excel)',pdfHint:'Optional — up to 10 MB each; an internet connection is needed to upload.',pdfNeedLogin:'Sign in to attach files.',pdfOffline:'Uploading files needs an internet connection.',pdfOnly:'Allowed: PDF, Word, Excel (pdf, doc, docx, xls, xlsx, csv).',pdfBig:'File is larger than 10 MB.',pdfOpenErr:'Could not open the file.',ledger:'Payments ledger',book:'Lecture booking',iv:'Interviews',signout:'Sign out / switch account',
 new:'Add new',newAppt:'Appointment / meeting',newTask:'Task',newFollow:'Follow-up',save:'Save',cancel:'Cancel',close:'Close',edit:'Edit',del:'Delete',delOk:'Confirm delete',details:'Details',
 title:'Title',date:'Date',start:'Start',end:'End',place:'Location',people:'Participants',type:'Type',prio:'Priority',status:'Status',optional:'optional',
 t_meeting:'Meeting',t_admin:'Admin work',t_teaching:'Teaching',t_research:'Research',t_personal:'Personal',t_project:'Project follow-up',t_custom:'Custom type',customType:'Custom type name',
@@ -547,8 +547,8 @@ function followForm(f){
    <label>${t('nextFollow')}<input id="f-next" type="date" value="${esc(f.next||today())}"></label>
    <label>${t('progress')} <b id="f-pv">${esc(f.progress||0)}%</b><input id="f-prog" type="range" min="0" max="100" step="5" value="${esc(f.progress||0)}" oninput="document.getElementById('f-pv').textContent=this.value+'%'"></label>
    <div class="full"><b>${t('pdfFiles')}</b>
-    ${(f.files||[]).map(x=>`<div class="ck pdfrow" style="justify-content:space-between"><a href="#" data-act="pdf-open" data-p="${esc(x.path)}">📄 ${esc(x.name)}</a><button type="button" class="btn sm bad" data-act="pdf-mark" data-p="${esc(x.path)}">${t('del')}</button></div>`).join('')}
-    <input id="f-pdf" type="file" accept="application/pdf,.pdf" multiple style="margin-top:6px"><div class="sub" style="font-size:12px">${t('pdfHint')}</div></div>
+    ${(f.files||[]).map(x=>`<div class="ck pdfrow" style="justify-content:space-between"><a href="#" data-act="pdf-open" data-p="${esc(x.path)}" data-n="${esc(x.name)}">${fileIc(x.name)} ${esc(x.name)}</a><button type="button" class="btn sm bad" data-act="pdf-mark" data-p="${esc(x.path)}">${t('del')}</button></div>`).join('')}
+    <input id="f-pdf" type="file" accept="${FILE_ACCEPT}" multiple style="margin-top:6px"><div class="sub" style="font-size:12px">${t('pdfHint')}</div></div>
    <label>${t('linkType')}<select id="f-lt">${opts(['none','person','org','project'],f.linkType||'none',v=>t('l_'+v))}</select></label>
    <label>${t('linkName')}<input id="f-ln" value="${esc(f.linkName||'')}"></label>
    <label class="ck full"><input id="f-pin" type="checkbox"${f.pinned?' checked':''}>${t('pin')}</label>
@@ -556,6 +556,10 @@ function followForm(f){
   <footer><button class="btn" data-act="close">${t('cancel')}</button><button class="btn pri" data-act="save-follow" data-id="${esc(f.id||'')}">${t('save')}</button></footer></div>`);
 }
 const PDF_MAX=10*1024*1024;
+const FILE_TYPES={pdf:'application/pdf',doc:'application/msword',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',xls:'application/vnd.ms-excel',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',csv:'text/csv'};
+const FILE_ACCEPT=Object.keys(FILE_TYPES).map(e=>'.'+e).join(',');
+function fileExt(n){const m=/\.([A-Za-z0-9]{2,5})$/.exec(n||'');return m?m[1].toLowerCase():''}
+function fileIc(n){const e=fileExt(n);return e==='pdf'?'📄':(e==='doc'||e==='docx')?'📝':(e==='xls'||e==='xlsx'||e==='csv')?'📊':'📎'}
 function pdfSb(){return window.PLANNER_AUTH&&window.PLANNER_AUTH.sb&&window.PLANNER_AUTH.sb()}
 async function saveFollow(id){
   const title=val('f-title');const err=m=>{const e=$('#a-err');e.textContent=m;e.hidden=false};
@@ -571,13 +575,13 @@ async function saveFollow(id){
     if(!c||!me){err(t('pdfNeedLogin'));return}
     if(!navigator.onLine){err(t('pdfOffline'));return}
     for(const f of picked){
-      if(!(f.type==='application/pdf'||/\.pdf$/i.test(f.name))){err(f.name+' — '+t('pdfOnly'));return}
+      if(!FILE_TYPES[fileExt(f.name)]){err(f.name+' — '+t('pdfOnly'));return}
       if(f.size>PDF_MAX){err(f.name+' — '+t('pdfBig'));return}
     }
     const btn=document.querySelector('[data-act="save-follow"]');if(btn){btn.disabled=true;btn.textContent='…'}
     for(const f of picked){
-      const path=me.id+'/'+fid+'/'+uid()+'.pdf';
-      const r=await c.storage.from('follow-files').upload(path,f,{contentType:'application/pdf'});
+      const ex=fileExt(f.name);const path=me.id+'/'+fid+'/'+uid()+'.'+ex;
+      const r=await c.storage.from('follow-files').upload(path,f,{contentType:FILE_TYPES[ex]});
       if(r.error){if(btn){btn.disabled=false;btn.textContent=t('save')}err(f.name+' — '+r.error.message);for(const a of added)c.storage.from('follow-files').remove([a.path]);return}
       added.push({path,name:f.name.slice(0,120),size:f.size});
     }
@@ -620,7 +624,7 @@ function followCmp(a,b){const x=followRank(a),y=followRank(b);for(let i=0;i<x.le
 function followRow(f,compact){
   const d=today(),late=f.status!=='done'&&((f.next&&f.next<d)||(f.due&&f.due<d));
   const lt=f.linkType&&f.linkType!=='none'?(f.linkName||t('l_'+f.linkType)):'';
-  const pdfs=(f.files||[]).map(x=>`<a class="pill" href="#" data-act="pdf-open" data-p="${esc(x.path)}">📄 ${esc(x.name)}</a>`).join(' ');
+  const pdfs=(f.files||[]).map(x=>`<a class="pill" href="#" data-act="pdf-open" data-p="${esc(x.path)}" data-n="${esc(x.name)}">${fileIc(x.name)} ${esc(x.name)}</a>`).join(' ');
   return `<div class="row"><div class="main"><div class="t">${f.pinned?'📌 ':''}${esc(f.title)}</div>
   <div class="m"><span class="pill ${f.status==='done'?'ok':late?'bad':''}">${late&&f.status!=='done'?t('late'):t('f_'+f.status)}</span>${prioPill(f.prio)}${f.next?`<span>${t('nextFollow')}: ${esc(fmtD(f.next,{day:'numeric',month:'short'}))}</span>`:''}${lt?`<span>↔ ${esc(lt)}</span>`:''}</div>
   ${pdfs?`<div class="m">${pdfs}</div>`:''}
@@ -856,7 +860,7 @@ const ACT={
  'edit-follow'(el){followForm(S.follows.find(f=>f.id===el.dataset.id))},
  'save-follow'(el){saveFollow(el.dataset.id)},
  'pdf-mark'(el){const p=el.dataset.p;(UI.pdfRm=UI.pdfRm||[]).push(p);const r=el.closest('.pdfrow');if(r)r.style.display='none'},
- 'pdf-open'(el,ev){if(ev&&ev.preventDefault)ev.preventDefault();const c=pdfSb();if(!c)return;const w=window.open('','_blank');c.storage.from('follow-files').createSignedUrl(el.dataset.p,300).then(r=>{if(r.error||!r.data){if(w)w.close();toast(t('pdfOpenErr'));return}if(w)w.location.href=r.data.signedUrl;else location.href=r.data.signedUrl})},
+ 'pdf-open'(el,ev){if(ev&&ev.preventDefault)ev.preventDefault();const c=pdfSb();if(!c)return;const w=window.open('','_blank');const nm=el.dataset.n||'',isPdf=fileExt(nm)==='pdf'||/\.pdf$/i.test(el.dataset.p);c.storage.from('follow-files').createSignedUrl(el.dataset.p,300,isPdf?undefined:{download:nm||true}).then(r=>{if(r.error||!r.data){if(w)w.close();toast(t('pdfOpenErr'));return}if(w)w.location.href=r.data.signedUrl;else location.href=r.data.signedUrl})},
  'del-follow'(el){const fo=S.follows.find(f=>f.id===el.dataset.id);if(fo&&(fo.files||[]).length&&pdfSb())pdfSb().storage.from('follow-files').remove(fo.files.map(x=>x.path)).catch(()=>{});S.follows=S.follows.filter(f=>f.id!==el.dataset.id);save('follows');toast(t('deleted'));render()},
  'follow-pin'(el){const f=S.follows.find(x=>x.id===el.dataset.id);f.pinned=!f.pinned;save('follows');render()},
  'follow-plus1'(el){const f=S.follows.find(x=>x.id===el.dataset.id);f.next=addDays(today(),1);f.lastUpdate=nowISO();(f.log=f.log||[]).push({at:nowISO(),text:t('plus1'),progress:f.progress});save('follows');render()},
