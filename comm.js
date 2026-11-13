@@ -118,7 +118,7 @@
     if (f.size > 20 * 1048576) throw new Error(T('الحجم الأقصى 20 ميغابايت', 'Max file size is 20 MB'));
     var path = prefix + '/' + me() + '/' + safeName(f.name);
     var r = await sb().storage.from('comm-files').upload(path, f, { contentType: f.type || 'application/octet-stream' });
-    if (r.error) throw new Error(r.error.message);
+    if (r.error) throw new Error(T('تعذّر رفع الملف: ', 'File upload failed: ') + (r.error.message || r.error.error || r.error.statusCode || ''));
     return { file_path: path, file_name: f.name.slice(0, 200), file_type: f.type || '', file_size: f.size };
   }
   async function openFile(path) {
@@ -151,7 +151,7 @@
     else if (ST.tab === 'home') body = homeHtml(); else if (ST.tab === 'sched') body = schedHtml(); else if (ST.tab === 'poll') body = pollHtml(); else if (ST.tab === 'week') body = weekHtml(); else if (ST.tab === 'tk') body = tkHtml();
     else if (ST.tab === 'admin') body = adminHtml(); else body = meHtml();
     root.innerHTML = '<header class="top"><h1>' + h(T('التواصل', 'Communication')) + '</h1></header>' + tabs() +
-      (ST.err ? '<p class="pill bad">' + h(ST.err) + '</p>' : '') + body;
+      (ST.err && body.indexOf('cm-comp') < 0 ? '<p class="pill bad">' + h(ST.err) + '</p>' : '') + body;
     var box = root.querySelector('.cm-msgs'); if (box) box.scrollTop = ST.tab === 'ann' ? 0 : box.scrollHeight;
     var ta = root.querySelector('#cm-text'); if (ta) ta.value = ST.draft;
     if (isAdmin()) {
@@ -162,9 +162,9 @@
   function softDraw() { var a = document.activeElement; if (a && (a.id === 'cm-text' || a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT')) return; draw(); }
 
   function composer(ph) {
-    return '<div class="cm-comp"><textarea id="cm-text" placeholder="' + h(ph) + '" data-cm="draft"></textarea>' +
+    return (ST.err ? '<p class="pill bad" id="cm-err" style="display:block;margin-top:8px">⚠ ' + h(ST.err) + '</p>' : '') + '<div class="cm-comp"><textarea id="cm-text" placeholder="' + h(ph) + '" data-cm="draft"></textarea>' +
       '<label class="btn" style="cursor:pointer">📎<input id="cm-file" type="file" hidden data-cm="file"></label>' +
-      '<button class="btn pri" data-act="cm-send"' + (ST.busy ? ' disabled' : '') + '>' + h(T('إرسال', 'Send')) + '</button></div>' +
+      '<button class="btn pri" data-act="cm-send"' + (ST.busy ? ' disabled' : '') + '>' + h(ST.busy && ST.file ? T('جارٍ الرفع…', 'Uploading…') : T('إرسال', 'Send')) + '</button></div>' +
       (ST.file ? '<div class="cm-file">📎 ' + h(ST.file.name) + ' (' + size(ST.file.size) + ') <button class="btn sm" data-act="cm-unfile">✕</button></div>' : '');
   }
   /* أسماء المدراء تظهر لغير المدراء باسم «PCN» */
@@ -461,7 +461,7 @@
   });
   document.addEventListener('change', function (e) {
     var k = e.target.dataset && e.target.dataset.cm; if (!k) return;
-    if (k === 'file') { ST.file = e.target.files[0] || null; draw(); }
+    if (k === 'file') { ST.file = e.target.files[0] || null; e.target.value = ''; ST.err = ''; draw(); }
     else if (k === 'wkxlsx') { var f1 = e.target.files[0]; e.target.value = ''; importWeek(f1); }
     else if (k === 'xlsx') { var f0 = e.target.files[0]; e.target.value = ''; readSheet(f0); }
     else if (k === 'map') { ST.admin.sheet.map[e.target.dataset.k] = Number(e.target.value); draw(); }
@@ -500,7 +500,13 @@
       if (ST.tab === 'dm' && ST.conv) {
         var up = f ? await upload('dm/' + ST.conv.id, f) : null;
         var id = await rpc('send_communication_message', { target_conversation_id: ST.conv.id, message_subject: '', message_body: body || (up ? up.file_name : '') });
-        if (up) await rpc('comm_dm_attach', { p_message: id, p_path: up.file_path, p_name: up.file_name, p_type: up.file_type, p_size: up.file_size });
+        if (up) {
+          var mid = id; if (mid && typeof mid === 'object') { mid = Array.isArray(mid) ? mid[0] : mid; mid = mid && typeof mid === 'object' ? (mid.id || mid.message_id || mid.send_communication_message) : mid; }
+          try {
+            if (mid != null && mid !== '') await rpc('comm_dm_attach', { p_message: mid, p_path: up.file_path, p_name: up.file_name, p_type: up.file_type, p_size: up.file_size });
+            else await rpc('comm_dm_attach_last', { p_conv: ST.conv.id, p_path: up.file_path, p_name: up.file_name, p_type: up.file_type, p_size: up.file_size });
+          } catch (ea) { ST.draft = ''; ST.file = null; try { await loadMsgs(true); await loadDm(); } catch (e9) {} throw new Error(T('أُرسلت الرسالة لكن تعذّر إرفاق الملف: ', 'Message sent but the file could not be attached: ') + ea.message); }
+        }
         ST.draft = ''; ST.file = null; await loadMsgs(true); await loadDm();
       } else if (ST.tab === 'staff') {
         var u2 = f ? await upload('ch/' + ST.chan, f) : null;
