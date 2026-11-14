@@ -126,6 +126,16 @@
     if (r.error) return toast_(r.error.message);
     window.open(r.data.signedUrl, '_blank', 'noopener');
   }
+  /* مُلتقط الملفات ثابت خارج الواجهة المُعاد رسمها: التحديث الدوري كان يحذف خانة الملف أثناء فتح نافذة الاختيار فيضيع الملف */
+  function picker() {
+    var P = document.getElementById('cm-picker');
+    if (!P) {
+      P = document.createElement('input'); P.type = 'file'; P.id = 'cm-picker'; P.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0';
+      P.addEventListener('change', function () { var f = P.files && P.files[0]; if (f) { ST.file = f; ST.err = ''; draw(); } P.value = ''; });
+      document.body.appendChild(P);
+    }
+    return P;
+  }
   function fileChip(m) { return m.file_path ? '<div><button class="btn sm" data-act="cm-file" data-p="' + h(m.file_path) + '">📎 ' + h(m.file_name || 'file') + ' · ' + size(m.file_size) + '</button></div>' : ''; }
 
   /* ---------- drawing ---------- */
@@ -163,7 +173,7 @@
 
   function composer(ph) {
     return (ST.err ? '<p class="pill bad" id="cm-err" style="display:block;margin-top:8px">⚠ ' + h(ST.err) + '</p>' : '') + '<div class="cm-comp"><textarea id="cm-text" placeholder="' + h(ph) + '" data-cm="draft"></textarea>' +
-      '<label class="btn" style="cursor:pointer">📎<input id="cm-file" type="file" hidden data-cm="file"></label>' +
+      '<button type="button" class="btn" data-act="cm-pick" title="' + h(T('إرفاق ملف', 'Attach file')) + '">📎</button>' +
       '<button class="btn pri" data-act="cm-send"' + (ST.busy ? ' disabled' : '') + '>' + h(ST.busy && ST.file ? T('جارٍ الرفع…', 'Uploading…') : T('إرسال', 'Send')) + '</button></div>' +
       (ST.file ? '<div class="cm-file">📎 ' + h(ST.file.name) + ' (' + size(ST.file.size) + ') <button class="btn sm" data-act="cm-unfile">✕</button></div>' : '');
   }
@@ -330,6 +340,7 @@
     'cm-open': function (el) { var c = ST.convs.filter(function (x) { return x.id === el.dataset.id; })[0]; if (!c) return; guard(async function () { ST.conv = { id: c.id, name: dn(c.counterpart_name, c.counterpart_id || c.other_user_id || c.counterpart_user_id || c.participant_id) }; await loadMsgs(); await loadDm(); await loadUnread(); }); },
     'cm-back': function () { ST.conv = null; draw(); },
     'cm-file': function (el) { openFile(el.dataset.p); },
+    'cm-pick': function () { picker().click(); },
     'cm-unfile': function () { ST.file = null; draw(); },
     'cm-send': function () { send(); },
     'cm-sub': function (el) { ST.admin.sub = el.dataset.s; draw(); guard(loadTab); },
