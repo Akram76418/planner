@@ -98,7 +98,7 @@
       ST.items = (rows || []).slice().reverse();
       await sb().from('comm_reads').upsert({ user_id: me(), scope: 'ch:' + ST.chan, last_read_at: new Date().toISOString() });
     } else if (ST.tab === 'ann' && ST.cohort) {
-      ST.items = (await rpc('comm_ann_list', { p_cohort: ST.cohort })) || [];
+      ST.items = annSort((await rpc('comm_ann_list', { p_cohort: ST.cohort })) || []);
       await sb().from('comm_reads').upsert({ user_id: me(), scope: 'ann', last_read_at: new Date().toISOString() });
       if (!isAdmin()) { try { await rpc('comm_ann_mark_read', { p_cohort: ST.cohort }); } catch (e) {} }
     } else if (ST.tab === 'admin') {
@@ -220,9 +220,9 @@
     if (isStaff()) sel = '<label>' + h(T('الشعبة', 'Cohort')) + ' <select id="cm-coh" data-cm="coh">' + ST.cohorts.filter(function (c) { return c.is_active; }).map(function (c) { return '<option value="' + c.id + '"' + (c.id === ST.cohort ? ' selected' : '') + '>' + h(c.name) + '</option>'; }).join('') + '</select></label>';
     else if (!ST.cohort) return '<div class="card"><div class="empty">' + h(T('لم تُسنَد إلى شعبة بعد. تواصل مع الإدارة.', 'You are not assigned to a cohort yet. Contact the administration.')) + '</div></div>';
     else sel = '<b>' + h(ctx().cohort_name || '') + '</b>';
-    var post = CAN('ann') ? '<div style="margin-top:10px"><label class="ck" style="margin-bottom:6px"><input type="checkbox" data-cm="annall"' + (ST.annAll ? ' checked' : '') + '> ' + h(T('إرسال إلى جميع الشعب دفعة واحدة', 'Send to all cohorts at once')) + '</label><input id="cm-title" placeholder="' + h(T('عنوان الإعلان (اختياري)', 'Title (optional)')) + '" data-cm="title" style="width:100%;margin-bottom:6px">' + composer(T('نص الإعلان…', 'Announcement…')) + '</div>' : '';
+    var post = CAN('ann') ? '<div style="margin:10px 0;padding-bottom:10px;border-bottom:1px solid var(--bd)">' + annPick() + '<input id="cm-title" placeholder="' + h(T('عنوان الإعلان (اختياري)', 'Title (optional)')) + '" data-cm="title" style="width:100%;margin:6px 0">' + composer(T('نص الإعلان…', 'Announcement…')) + '</div>' : '';
     return '<div class="card">' + sel + '<p class="sub">' + h(T('الإعلانات من الإدارة فقط، ولا يمكن الرد عليها.', 'Announcements come from the administration only; replies are not possible.')) + '</p>' +
-      '<div class="cm-msgs">' + (ST.items.map(annMsg).join('') || '<div class="empty">' + h(T('لا إعلانات', 'No announcements')) + '</div>') + '</div>' + post + '</div>';
+      post + '<div class="cm-msgs">' + (ST.items.map(annMsg).join('') || '<div class="empty">' + h(T('لا إعلانات', 'No announcements')) + '</div>') + '</div></div>';
   }
 
   function meHtml() {
@@ -368,6 +368,13 @@
     'cm-exp-staff-xlsx': function () { guard(async function () { var a = staffAoa(); await loadXlsx(); var wb = window.XLSX.utils.book_new(); window.XLSX.utils.book_append_sheet(wb, window.XLSX.utils.aoa_to_sheet(a), 'Staff'); var out = window.XLSX.write(wb, { bookType: 'xlsx', type: 'array' }); saveFile('staff-' + new Date().toISOString().slice(0, 10) + '.xlsx', new Blob([out], { type: 'application/octet-stream' })); }); },
     'cm-exp-staff-csv': function () { var a = staffAoa(); var csv = '\ufeff' + a.map(function (r) { return r.map(function (c) { c = String(c == null ? '' : c); return /[",\n\r]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c; }).join(','); }).join('\r\n'); saveFile('staff-' + new Date().toISOString().slice(0, 10) + '.csv', new Blob([csv], { type: 'text/csv;charset=utf-8' })); },
     'cm-assign-prof': function (el) { var ids = Array.prototype.map.call(document.querySelectorAll('.ap-c-' + el.dataset.id + ':checked'), function (x) { return x.value; }); assignProf(Number(el.dataset.id), ids); },
+    'cm-ann-tgt': function (el) {
+      var act = ST.cohorts.filter(function (c) { return c.is_active; }), t = annTargets(), sel = {};
+      if (el.dataset.id === 'all') { var all = act.every(function (c) { return t.indexOf(c.id) >= 0; }); act.forEach(function (c) { sel[c.id] = !all; }); }
+      else { t.forEach(function (i) { sel[i] = true; }); var id = Number(el.dataset.id); sel[id] = !sel[id]; }
+      ST.annSel = sel; draw();
+    },
+    'cm-ann-del': function (el) { var id = Number(el.dataset.id); guard(async function () { var r = await sb().from('comm_announcements').delete().eq('id', id); if (r.error) throw r.error; await loadTab(); }); },
     'cm-pin': function (el) { guard(async function () { await rpc('comm_ann_pin', { p_id: Number(el.dataset.id), p_pinned: el.dataset.p === '1' }); await loadTab(); }); },
     'sc-new': function () { ST.sched.form = { kind: 'lecture' }; draw(); },
     'sc-cancel': function () { ST.sched.form = null; draw(); },
@@ -495,9 +502,8 @@
       if (!(v.name || '').trim()) { toast_(T('الاسم مطلوب', 'Name is required')); return; }
       rpc('comm_weekly_save', { p_id: Number(wid), p_name: v.name, p_cells: v.cells, p_notes: v.notes, p_user: row.user_id || null }).then(function () { row.name = v.name; row.cells = v.cells; row.notes = v.notes; toast_(T('تم الحفظ', 'Saved')); }, function (er) { toast_((er && er.message) || 'error'); });
     }
-    else if (k === 'annall') { ST.annAll = e.target.checked; draw(); }
     else if (k === 'chan') { ST.chan = e.target.value; guard(loadTab); }
-    else if (k === 'coh') { ST.cohort = Number(e.target.value); guard(loadTab); }
+    else if (k === 'coh') { ST.cohort = Number(e.target.value); ST.annSel = null; guard(loadTab); }
     else if (k === 'assign') guard(async function () { await rpc('comm_assign_cohort', { p_user: e.target.dataset.id, p_cohort: e.target.value ? Number(e.target.value) : null }); toast_('OK'); });
     else if (k === 'cat') guard(async function () { await rpc('comm_set_staff_category', { p_user: e.target.dataset.id, p_category: e.target.value || null }); toast_('OK'); });
   });
@@ -525,8 +531,8 @@
         if (r.error) throw r.error;
         ST.draft = ''; ST.file = null; await loadTab();
       } else if (ST.tab === 'ann' && CAN('ann') && ST.cohort) {
-        var tgt = ST.annAll ? ST.cohorts.filter(function (c) { return c.is_active; }).map(function (c) { return c.id; }) : [ST.cohort];
-        if (ST.annAll && !window.confirm(T('سيُرسل الإعلان إلى جميع الشعب (' + tgt.length + ' شعبة). متابعة؟', 'This will be sent to all cohorts (' + tgt.length + '). Continue?'))) { ST.busy = false; return draw(); }
+        var tgt = annTargets(); if (!tgt.length) throw new Error(T('اختر شعبة واحدة على الأقل', 'Select at least one cohort'));
+        if (tgt.length > 1 && !window.confirm(T('سيُرسل الإعلان إلى ' + tgt.length + ' شعبة. متابعة؟', 'This will be sent to ' + tgt.length + ' cohorts. Continue?'))) { ST.busy = false; return draw(); }
         var rows3 = [];
         for (var ci = 0; ci < tgt.length; ci++) {
           var u3 = f ? await upload('ann/' + tgt[ci], f) : null;
@@ -534,7 +540,7 @@
         }
         var r2 = await sb().from('comm_announcements').insert(rows3);
         if (r2.error) throw r2.error;
-        ST.annAll = false;
+        ST.annSel = null;
         ST.draft = ''; ST.title = ''; ST.file = null; await loadTab();
       }
     });
@@ -679,12 +685,21 @@
       }).join('') || '<div class="empty">' + h(T('لا استبيانات', 'No polls')) + '</div>') + '</div>';
   }
 
+  function annSort(a) { return a.slice().sort(function (x, y) { return (y.pinned ? 1 : 0) - (x.pinned ? 1 : 0) || (new Date(y.created_at) - new Date(x.created_at)) || (Number(y.id) - Number(x.id)); }); }
+  function annTargets() { var a = ST.annSel ? Object.keys(ST.annSel).filter(function (k) { return ST.annSel[k]; }).map(Number) : [ST.cohort]; return a; }
+  function annPick() {
+    var act = ST.cohorts.filter(function (c) { return c.is_active; }), t = annTargets(), all = act.length > 0 && act.every(function (c) { return t.indexOf(c.id) >= 0; });
+    return '<div class="sub" style="margin:6px 0 4px">' + h(T('الشعب المستهدفة بالإعلان (اضغط للتحديد):', 'Target cohorts (tap to select):')) + '</div><div class="tabs" style="flex-wrap:wrap">' +
+      '<button type="button" class="btn sm' + (all ? ' pri' : '') + '" data-act="cm-ann-tgt" data-id="all">' + (all ? '✔ ' : '') + h(T('الجميع', 'All')) + '</button>' +
+      act.map(function (c) { var on = t.indexOf(c.id) >= 0; return '<button type="button" class="btn sm' + (on ? ' pri' : '') + '" data-act="cm-ann-tgt" data-id="' + c.id + '">' + (on ? '✔ ' : '') + h(c.name) + '</button>'; }).join('') + '</div>' +
+      '<div class="sub">' + h(T('المحدد: ' + t.length + ' شعبة', 'Selected: ' + t.length)) + '</div>';
+  }
   function annMsg(m) {
     var base = msgHtml(m, false, true), extra = '';
     if (m.pinned) extra += '<div><span class="pill warn">📌 ' + h(T('مثبّت', 'Pinned')) + '</span></div>';
     if (CAN('ann') && m.id) {
       var coh = ST.cohorts.filter(function (c) { return c.id === ST.cohort; })[0], mem = coh ? Number(coh.members) : 0;
-      extra += '<div class="sub">👁 ' + h(T('اطّلع ' + (m.readers || 0) + ' من ' + mem, 'Seen by ' + (m.readers || 0) + ' of ' + mem)) + ' · <button class="btn sm" data-act="cm-pin" data-id="' + m.id + '" data-p="' + (m.pinned ? 0 : 1) + '">' + h(m.pinned ? T('إلغاء التثبيت', 'Unpin') : T('📌 تثبيت', '📌 Pin')) + '</button></div>';
+      extra += '<div class="sub">👁 ' + h(T('اطّلع ' + (m.readers || 0) + ' من ' + mem, 'Seen by ' + (m.readers || 0) + ' of ' + mem)) + ' · <button class="btn sm" data-act="cm-pin" data-id="' + m.id + '" data-p="' + (m.pinned ? 0 : 1) + '">' + h(m.pinned ? T('إلغاء التثبيت', 'Unpin') : T('📌 تثبيت', '📌 Pin')) + '</button> <button class="btn sm bad" data-act="cm-ann-del" data-id="' + m.id + '" data-confirm="1">🗑 ' + h(T('حذف', 'Delete')) + '</button></div>';
     }
     return base.slice(0, -6) + extra + '</div>';
   }
