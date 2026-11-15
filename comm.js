@@ -51,7 +51,6 @@
   async function boot() {
     try {
       if (!isAdmin()) { try { ST.admNames = {}; (await rpc('comm_admin_names') || []).forEach(function (x) { ST.admNames[String(x).trim()] = 1; }); ST.admIds = {}; (await rpc('comm_admin_ids') || []).forEach(function (x) { ST.admIds[x] = 1; }); } catch (e) {} }
-      if (window.EXAMS && window.EXAMS.visible() && role() === 'student') { try { await window.EXAMS.load(); } catch (e) {} }
       ST.tkr = []; if (isStaff()) { try { ST.tkr = (await rpc('tk_my_rounds')) || []; } catch (e) { ST.tkr = []; } }
       ST.access = null; if (isStaff() && !isAdmin()) { try { ST.access = await rpc('comm_my_access'); } catch (e) { ST.access = { weekly: true, cohorts: true }; } }
       if (isStaff()) ST.cohorts = (await rpc('comm_list_cohorts')) || [];
@@ -94,7 +93,6 @@
     if (ST.tab === 'poll') return loadPolls();
     if (ST.tab === 'week') return loadWeek();
     if (ST.tab === 'tk') return loadTk();
-    if (ST.tab === 'ex') return window.EXAMS && window.EXAMS.load();
     if (ST.tab === 'staff') {
       var rows = await rpc('comm_channel_list', { p_channel: ST.chan, p_limit: 60 });
       ST.items = (rows || []).slice().reverse();
@@ -151,7 +149,6 @@
     t.push(['sched', (blocked('sched') ? '🔒 ' : '') + T('الجدول', 'Schedule'), 0]);
     t.push(['poll', T('استبيانات', 'Polls'), !isAdmin() ? unvoted() : 0]);
     if (isStaff()) t.push(['tk', '🤝 ' + T('التكافل', 'Takaful'), tkTodo()]);
-    if (window.EXAMS && window.EXAMS.visible()) t.push(['ex', '📝 ' + T('الاختبارات', 'Exams'), window.EXAMS.badge()]);
     if (isStaff()) t.push(['week', (blocked('week') ? '🔒 ' : '') + T('جدول الدوام', 'Weekly roster'), 0]);
     if (isAdmin() && admSubs().length) t.push(['admin', T('إدارة', 'Admin'), 0]);
     t.push(['me', T('حسابي', 'My account'), 0]);
@@ -161,7 +158,7 @@
     var root = $c('#cm-root'); if (!root) return;
     var body = '';
     if (blocked(ST.tab)) body = lockHtml(); else if (ST.tab === 'dm') body = dmHtml(); else if (ST.tab === 'staff') body = staffHtml(); else if (ST.tab === 'ann') body = annHtml();
-    else if (ST.tab === 'home') body = homeHtml(); else if (ST.tab === 'sched') body = schedHtml(); else if (ST.tab === 'poll') body = pollHtml(); else if (ST.tab === 'week') body = weekHtml(); else if (ST.tab === 'tk') body = tkHtml(); else if (ST.tab === 'ex') body = window.EXAMS ? window.EXAMS.html() : '';
+    else if (ST.tab === 'home') body = homeHtml(); else if (ST.tab === 'sched') body = schedHtml(); else if (ST.tab === 'poll') body = pollHtml(); else if (ST.tab === 'week') body = weekHtml(); else if (ST.tab === 'tk') body = tkHtml();
     else if (ST.tab === 'admin') body = adminHtml(); else body = meHtml();
     root.innerHTML = '<header class="top"><h1>' + h(T('التواصل', 'Communication')) + '</h1></header>' + tabs() +
       (ST.err && body.indexOf('cm-comp') < 0 ? '<p class="pill bad">' + h(ST.err) + '</p>' : '') + body;
@@ -372,7 +369,7 @@
     'cm-exp-staff-csv': function () { var a = staffAoa(); var csv = '\ufeff' + a.map(function (r) { return r.map(function (c) { c = String(c == null ? '' : c); return /[",\n\r]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c; }).join(','); }).join('\r\n'); saveFile('staff-' + new Date().toISOString().slice(0, 10) + '.csv', new Blob([csv], { type: 'text/csv;charset=utf-8' })); },
     'cm-assign-prof': function (el) { var ids = Array.prototype.map.call(document.querySelectorAll('.ap-c-' + el.dataset.id + ':checked'), function (x) { return x.value; }); assignProf(Number(el.dataset.id), ids); },
     'cm-ann-tgt': function (el) {
-      var act = ST.cohorts.filter(function (c) { return c.is_active; }), t = annTargets(), sel = {};
+      var act = ST.cohorts.filter(function (c) { return c.is_active && !c.is_external; }), t = annTargets(), sel = {};
       if (el.dataset.id === 'all') { var all = act.every(function (c) { return t.indexOf(c.id) >= 0; }); act.forEach(function (c) { sel[c.id] = !all; }); }
       else { t.forEach(function (i) { sel[i] = true; }); var id = Number(el.dataset.id); sel[id] = !sel[id]; }
       ST.annSel = sel; draw();
@@ -692,7 +689,7 @@
   function annSort(a) { return a.slice().sort(function (x, y) { return (y.pinned ? 1 : 0) - (x.pinned ? 1 : 0) || (new Date(y.created_at) - new Date(x.created_at)) || (Number(y.id) - Number(x.id)); }); }
   function annTargets() { var a = ST.annSel ? Object.keys(ST.annSel).filter(function (k) { return ST.annSel[k]; }).map(Number) : [ST.cohort]; return a; }
   function annPick() {
-    var act = ST.cohorts.filter(function (c) { return c.is_active; }), t = annTargets(), all = act.length > 0 && act.every(function (c) { return t.indexOf(c.id) >= 0; });
+    var act = ST.cohorts.filter(function (c) { return c.is_active && !c.is_external; }), t = annTargets(), all = act.length > 0 && act.every(function (c) { return t.indexOf(c.id) >= 0; });
     return '<div class="sub" style="margin:6px 0 4px">' + h(T('الشعب المستهدفة بالإعلان (اضغط للتحديد):', 'Target cohorts (tap to select):')) + '</div><div class="tabs" style="flex-wrap:wrap">' +
       '<button type="button" class="btn sm' + (all ? ' pri' : '') + '" data-act="cm-ann-tgt" data-id="all">' + (all ? '✔ ' : '') + h(T('الجميع', 'All')) + '</button>' +
       act.map(function (c) { var on = t.indexOf(c.id) >= 0; return '<button type="button" class="btn sm' + (on ? ' pri' : '') + '" data-act="cm-ann-tgt" data-id="' + c.id + '">' + (on ? '✔ ' : '') + h(c.name) + '</button>'; }).join('') + '</div>' +

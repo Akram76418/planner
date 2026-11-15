@@ -40,6 +40,7 @@
       if (r.error) throw new Error(r.error.message);
       X.list = r.data || [];
       try { X.usage = await rpc('ex_ai_usage'); } catch (e) { X.usage = null; }
+      if (role() === 'admin') { try { X.ext = (await rpc('ex_external_cohorts')) || []; } catch (e) { X.ext = null; } }
       if (role() === 'admin') { var sr = await db().from('ex_settings').select('*').eq('id', 1).maybeSingle(); X.settings = sr.data || null; }
       if (!X.cohorts) { try { X.cohorts = (await rpc('comm_list_cohorts')) || []; } catch (e) { X.cohorts = []; } }
     }
@@ -47,7 +48,10 @@
   }
   function badge() { return student() ? (X.list || []).filter(function (e) { return e.state === 'open' || e.state === 'in_progress'; }).length : 0; }
   function back() { stopTick(); X.view = 'list'; X.run = null; X.res = null; X.ed = null; X.rv = null; X.msg = ''; }
-  function redraw() { api().draw(); armTick(); }
+  function root() { return $q('#xm-root'); }
+  function redraw() { var r = root(); if (r) { r.innerHTML = html(); armTick(); } }
+  window.exView = function () { return '<div id="xm-root"></div>'; };
+  window.exMount = function () { redraw(); if (!X.loaded && !X.busy) go(load); };
   async function go(fn) { X.busy = true; X.err = ''; try { await fn(); } catch (e) { X.err = (e && e.message) || String(e); } X.busy = false; redraw(); }
 
   /* ───────── العرض ───────── */
@@ -166,7 +170,7 @@
         '<button class="btn sm" data-act="xm-pub" data-id="' + e.id + '">' + h(e.published ? T('إلغاء النشر', 'Unpublish') : T('نشر', 'Publish')) + '</button><button class="btn sm" data-act="xm-rel" data-id="' + e.id + '">' + h(e.released ? T('إخفاء النتائج', 'Hide results') : T('إطلاق النتائج للطلبة', 'Release results')) + '</button>' +
         '<button class="btn sm bad" data-act="xm-del" data-id="' + e.id + '" data-confirm="1" data-confirm-text="' + h(T('اضغط لتأكيد الحذف النهائي', 'Click to confirm')) + '">' + h(T('حذف', 'Delete')) + '</button></div></div>';
     }).join('');
-    return '<div class="card"><h2>' + h(T('الاختبارات', 'Exams')) + '</h2>' + usage + settingsHtml() + '<button class="btn pri" data-act="xm-new">+ ' + h(T('اختبار جديد', 'New exam')) + '</button><div class="list" style="margin-top:8px">' + (rows || '<div class="empty">' + h(T('لا اختبارات بعد', 'No exams yet')) + '</div>') + '</div>' +
+    return '<div class="card"><h2>' + h(T('الاختبارات', 'Exams')) + '</h2>' + usage + settingsHtml() + externalHtml() + '<button class="btn pri" data-act="xm-new">+ ' + h(T('اختبار جديد', 'New exam')) + '</button> <button class="btn" data-act="xm-tpl">⬇ ' + h(T('قالب استيراد الأسئلة (Excel)', 'Question import template (Excel)')) + '</button><div class="list" style="margin-top:8px">' + (rows || '<div class="empty">' + h(T('لا اختبارات بعد', 'No exams yet')) + '</div>') + '</div>' +
       '<p class="sub">' + h(T('الطلبة الخارجيون: أنشئ لهم حسابات من «إدارة ← إنشاء حسابات» برفع Excel (الرقم الجامعي والاسم) إلى شعبة خارجية، وكلمتهم الافتراضية 12345678، ثم اختر هذه الشعبة في الاختبار.', 'External students: create accounts via Admin → Create accounts with an Excel upload into an "external" cohort (default password 12345678), then pick that cohort in the exam.')) + '</p></div>';
   }
   function settingsHtml() {
@@ -178,6 +182,16 @@
       '<label>' + h(T('حد الاستدعاءات لكل طالب في الساعة', 'Per-student calls per hour')) + '<input id="st-hr" inputmode="numeric" value="' + h(st.per_student_hour == null ? 60 : st.per_student_hour) + '"></label></div>' +
       '<p class="sub">' + h(T('المفتاح لا يُدخل هنا أبداً: يُضبط من الخادم عبر supabase secrets (LLM_API_KEY). لا يُرسل للمزوّد اسم الطالب ولا رقمه.', 'Never enter the key here: set it server-side via supabase secrets (LLM_API_KEY). No student name or number is sent to the provider.')) + '</p>' +
       '<button class="btn sm pri" data-act="xm-setsave">' + h(T('حفظ الإعدادات', 'Save settings')) + '</button></details>';
+  }
+  function externalHtml() {
+    var L = X.ext; if (!L || role() !== 'admin') return '';
+    var rows = L.map(function (c) {
+      return '<div class="row"><div class="main"><div class="t">' + h(c.name) + ' <span class="sub">(' + c.members + ')</span> ' + (c.is_external ? '<span class="pill ok">' + h(T('خارجية: معزولة عن بيانات الكلية', 'External: isolated')) + '</span>' : '') + '</div></div><div class="act" style="display:flex;gap:4px;flex-wrap:wrap">' +
+        '<button class="btn sm" data-act="xm-extset" data-id="' + c.id + '" data-on="' + (c.is_external ? 0 : 1) + '">' + h(c.is_external ? T('إلغاء كونها خارجية', 'Unmark external') : T('اجعلها شعبة خارجية', 'Mark as external')) + '</button>' +
+        (c.is_external && c.members > 0 ? '<button class="btn sm bad" data-act="xm-extdel" data-id="' + c.id + '" data-n="' + h(c.name) + '">' + h(T('حذف حسابات هذه الشعبة', 'Delete this cohort\'s accounts')) + '</button>' : '') + '</div></div>';
+    }).join('');
+    return '<details style="margin:8px 0"><summary class="sub">🌐 ' + h(T('الطلبة الخارجيون (من جامعة أخرى): عزلهم عن بيانات الكلية', 'External students (other university): isolate from college data')) + '</summary>' +
+      '<p class="sub">' + h(T('الشعبة المعلَّمة «خارجية» لا يظهر أعضاؤها في قوائم الطلبة ولا البحث ولا التكرار ولا استبيانات الطلبة، ولا يراسلون أحداً ولا يراسلهم أحد. يرون الاختبارات المنشورة لشعبتهم فقط. احذف حساباتهم بعد انتهاء الاختبار.', 'Members of an external cohort are hidden from student lists, search, duplicates and student polls, and cannot message or be messaged. They only see exams published to their cohort. Delete their accounts after the exam.')) + '</p><div class="list">' + (rows || '<div class="empty">—</div>') + '</div></details>';
   }
   function cohNames(ids) { var m = {}; (X.cohorts || []).forEach(function (c) { m[c.id] = c.name; }); return (ids || []).map(function (i) { return m[i] || i; }).join('، ') || '—'; }
 
@@ -218,7 +232,7 @@
       '<label>' + h(T('عرض النتيجة للطالب', 'Result visibility')) + '<select id="xm-fm"><option value="after_release"' + (e.feedback_mode !== 'immediate' ? ' selected' : '') + '>' + h(T('بعد أن أطلقها أنا (موصى به)', 'After I release it (recommended)')) + '</option><option value="immediate"' + (e.feedback_mode === 'immediate' ? ' selected' : '') + '>' + h(T('فور التسليم', 'Right after submitting')) + '</option></select></label></div>' +
       '<label>' + h(T('الوصف (اختياري)', 'Description (optional)')) + '<textarea id="xm-desc" rows="2" style="width:100%">' + h(e.description || '') + '</textarea></label>' +
       '<div class="sub" style="margin-top:8px">' + h(T('الشعب المستهدفة', 'Target cohorts')) + '</div>' + coh +
-      '<h3 style="margin-top:14px">' + h(T('الأسئلة', 'Questions')) + '</h3><p class="sub"><label class="btn sm" style="cursor:pointer">⬆ ' + h(T('استيراد الأسئلة دفعة واحدة من Excel / CSV', 'Import all questions from Excel / CSV')) + '<input type="file" hidden accept=".xlsx,.xls,.csv" data-xm="qimport"></label> ' + h(T('صف لكل سؤال (حمّل القالب من مدير النظام). تُضاف الأسئلة إلى المحرّر للمراجعة قبل الحفظ.', 'One row per question (get the template). Questions are added to the editor for review before saving.')) + '</p>' + qs + '<div class="tabs"><button class="btn" data-act="xm-qadd">+ ' + h(T('سؤال', 'Question')) + '</button><button class="btn pri" data-act="xm-save"' + (X.busy ? ' disabled' : '') + '>' + h(T('حفظ الاختبار', 'Save exam')) + '</button></div></div>';
+      '<h3 style="margin-top:14px">' + h(T('الأسئلة', 'Questions')) + '</h3><p class="sub"><label class="btn sm" style="cursor:pointer">⬆ ' + h(T('استيراد الأسئلة دفعة واحدة من Excel / CSV', 'Import all questions from Excel / CSV')) + '<input type="file" hidden accept=".xlsx,.xls,.csv" data-xm="qimport"></label> <button class="btn sm" data-act="xm-tpl">⬇ ' + h(T('القالب', 'Template')) + '</button> <button class="btn sm" data-act="xm-qexp">⬇ ' + h(T('تصدير أسئلة هذا الاختبار', 'Export this exam\'s questions')) + '</button><br>' + h(T('صف لكل سؤال. تُضاف الأسئلة إلى المحرّر للمراجعة قبل الحفظ.', 'One row per question. Questions are added to the editor for review before saving.')) + '</p>' + qs + '<div class="tabs"><button class="btn" data-act="xm-qadd">+ ' + h(T('سؤال', 'Question')) + '</button><button class="btn pri" data-act="xm-save"' + (X.busy ? ' disabled' : '') + '>' + h(T('حفظ الاختبار', 'Save exam')) + '</button></div></div>';
   }
   function collect() {
     var E = X.ed; if (!E || X.view !== 'edit') return;
@@ -295,6 +309,37 @@
       else if (/(المده|duration|total)/.test(k)) { var d = num(v, NaN); if (!isNaN(d) && d >= 1 && d <= 1440) e.duration_min = Math.floor(d); }
       else if (/(كل سؤال|per question|per-question)/.test(k)) { var p = num(v, NaN); if (!isNaN(p) && p >= 10 && p <= 7200) e.per_question_sec = Math.floor(p); }
     });
+  }
+  var QH = ['السؤال', 'أ', 'ب', 'ج', 'د', 'هـ', 'و', 'الإجابة الصحيحة', 'التصنيف', 'زمن السؤال (ثانية)', 'معيار التبرير', 'المفاهيم ومرادفاتها'];
+  function xlsxBook(qrows, erows, withHelp) {
+    var X_ = window.XLSX, wb = X_.utils.book_new(), w1 = X_.utils.aoa_to_sheet([QH].concat(qrows));
+    w1['!cols'] = [46, 18, 18, 18, 18, 18, 18, 16, 14, 14, 40, 50].map(function (w) { return { wch: w }; });
+    X_.utils.book_append_sheet(wb, w1, 'الأسئلة');
+    X_.utils.book_append_sheet(wb, X_.utils.aoa_to_sheet(erows), 'الاختبار');
+    if (withHelp) X_.utils.book_append_sheet(wb, X_.utils.aoa_to_sheet([
+      ['صف واحد لكل سؤال. لا تغيّر عناوين الأعمدة.'], ['الخيارات: من 2 إلى 6 (أ إلى هـ…)، ويمكن ترك الزائد فارغاً.'],
+      ['الإجابة الصحيحة: حرف الخيار (ب أو B). لأكثر من إجابة افصل بفاصلة: A,C (يصبح متعدد الإجابات بدرجة جزئية).'],
+      ['زمن السؤال والتصنيف ومعيار التبرير: اختيارية. الزمن بين 10 و7200 ثانية.'],
+      ['المفاهيم: سطر لكل مفهوم داخل الخلية (Alt+Enter) بصيغة: المفهوم = مرادف1، مرادف2 (عربي وإنجليزي). بها يصحّح النظام التبريرات تلقائياً.'],
+      ['ورقة «الاختبار» اختيارية (العنوان والوصف والمدة وزمن السؤال)، والقيمة الفارغة تُتجاهل.'], ['احذف صفّي المثالين قبل الاستخدام.']]), 'تعليمات');
+    wb.Workbook = { Views: [{ RTL: true }] };
+    return wb;
+  }
+  async function exportTemplate() {
+    await loadXlsx();
+    var wb = xlsxBook([
+      ['أي دواء يستخدم للسيطرة على النزف بعد الولادة؟', 'خافض ضغط', 'أوكسيتوسين', 'مضاد حيوي', '', '', '', 'ب', 'التوليد', 60, 'الأوكسيتوسين يسبب انقباض الرحم فيقلل النزف بعد الولادة.', 'انقباض الرحم = انقباضات الرحم، تقلص الرحم، uterine contraction\nوقف النزف = النزف بعد الولادة، postpartum bleeding، PPH'],
+      ['Select ALL correct signs of preeclampsia', 'High blood pressure', 'Proteinuria', 'Low-grade fever', 'Headache', '', '', 'A,B,D', 'Obstetrics', '', 'Hypertension with protein in urine and neurological symptoms.', 'hypertension = high blood pressure، ارتفاع الضغط\nproteinuria = بروتين في البول']
+    ], [['العنوان', 'اختبار الوحدة الأولى'], ['الوصف', 'اختياري'], ['المدة الكلية بالدقائق', 30], ['زمن كل سؤال بالثواني', 60]], true);
+    window.XLSX.writeFile(wb, 'Exam_Import_Template.xlsx');
+  }
+  async function exportQuestions() {
+    collect(); var E = X.ed; if (!E || !E.qs.length) throw new Error(T('لا أسئلة للتصدير', 'No questions to export'));
+    await loadXlsx();
+    var big = E.qs.filter(function (q) { return q.options.length > 6; }).length; if (big) throw new Error(T('يوجد ' + big + ' سؤال فيه أكثر من 6 خيارات ولا يدعمها ملف Excel', big + ' question(s) have more than 6 options, which the Excel format does not support'));
+    var rows = E.qs.map(function (q) { var o = q.options.slice(0, 6); while (o.length < 6) o.push(''); return [q.stem].concat(o, [q.correct.map(function (i) { return LET(i); }).join(','), q.category, q.time_sec, q.key, q.concepts]); });
+    var e = E.exam;
+    window.XLSX.writeFile(xlsxBook(rows, [['العنوان', e.title || ''], ['الوصف', e.description || ''], ['المدة الكلية بالدقائق', e.duration_min || ''], ['زمن كل سؤال بالثواني', e.per_question_sec || '']], false), 'exam-questions.xlsx');
   }
   async function importFile(file) {
     if (!file || !X.ed) return;
@@ -445,6 +490,22 @@
       if (url && !/^https:\/\//.test(url)) throw new Error(T('الرابط يجب أن يبدأ بـ https://', 'URL must start with https://'));
       var r = await db().from('ex_settings').update({ llm_url: url, llm_model: (($q('#st-model') || {}).value || '').trim(), daily_call_limit: Math.floor(d), per_student_hour: Math.floor(hr) }).eq('id', 1);
       if (r.error) throw new Error(r.error.message); await load(); X.msg = T('حُفظت الإعدادات', 'Settings saved');
+    }); },
+    'xm-tpl': function () { go(exportTemplate); },
+    'xm-qexp': function () { go(exportQuestions); },
+    'xm-extset': function (el) { go(async function () { await rpc('ex_set_external', { p_cohort: Number(el.dataset.id), p_on: el.dataset.on === '1' }); await load(); }); },
+    'xm-extdel': function (el) { go(async function () {
+      var id = Number(el.dataset.id), m = (await rpc('comm_list_students', { p_cohort: id, p_search: '', p_unassigned: false })) || [], ids = m.map(function (x) { return x.id; });
+      if (!ids.length) { X.msg = T('لا أعضاء', 'No members'); return; }
+      var w = window.prompt(T('سيُحذف ' + ids.length + ' حساب في «' + el.dataset.n + '» نهائياً مع محاولاتهم ونتائجهم.\n\nصدّر النتائج أولاً إن أردت الاحتفاظ بها.\nللتأكيد اكتب كلمة: حذف', 'This permanently deletes ' + ids.length + ' accounts in "' + el.dataset.n + '" with their attempts and results.\nExport results first if you need them.\nType: delete'));
+      if (!w || ['حذف', 'delete'].indexOf(w.trim().toLowerCase()) < 0) return;
+      var del = 0, errs = [];
+      for (var i = 0; i < ids.length; i += 100) {
+        var r = await db().functions.invoke((window.PLANNER_CONFIG || {}).ADMIN_FN || 'admin-accounts', { body: { action: 'delete', ids: ids.slice(i, i + 100) } });
+        if (r.error || (r.data && r.data.error)) throw new Error((r.data && r.data.error) || (r.error && r.error.message) || 'delete failed');
+        (r.data.results || []).forEach(function (x) { if (x.status === 'deleted') del++; else if (x.status === 'error') errs.push(x.message); });
+      }
+      X.msg = T('تم حذف ' + del + ' حساب' + (errs.length ? ' · تعذّر ' + errs.length + ': ' + errs[0] : ''), 'Deleted ' + del + (errs.length ? ' · failed ' + errs.length : '')); await load();
     }); },
     'xm-csv': function () { exportCsv(); },
     'xm-xl': function () { go(exportXlsx); }
