@@ -354,15 +354,19 @@
     if (!file || !X.ed) return;
     collect(); X.err = ''; X.msg = '';
     try {
-      await loadXlsx();
-      var wb = window.XLSX.read(await file.arrayBuffer(), { type: 'array' }), names = wb.SheetNames;
-      var qn = names.filter(function (n) { return /^(الاسئله|الأسئلة|questions)$/i.test(nk(n)) || /^(الاسئله|questions)$/i.test(n); })[0] || names[0];
-      var en = names.filter(function (n) { return /^(الاختبار|exam|settings|الاعدادات)$/i.test(nk(n)); })[0];
-      var res = parseAoa(window.XLSX.utils.sheet_to_json(wb.Sheets[qn], { header: 1, defval: '', raw: false }));
+      var res, en, wb;
+      if (/\.(csv|txt|tsv)$/i.test(file.name) && window.parseCsvText) res = parseAoa(window.parseCsvText(await file.arrayBuffer()));
+      else {
+        await loadXlsx();
+        wb = window.XLSX.read(await file.arrayBuffer(), { type: 'array' });
+        var names = wb.SheetNames, qn = names.filter(function (n) { return /^(الاسئله|الأسئلة|questions)$/i.test(nk(n)) || /^(الاسئله|questions)$/i.test(n); })[0] || names[0];
+        en = names.filter(function (n) { return /^(الاختبار|exam|settings|الاعدادات)$/i.test(nk(n)); })[0];
+        res = parseAoa(window.XLSX.utils.sheet_to_json(wb.Sheets[qn], { header: 1, defval: '', raw: false }));
+      }
       if (res.errors.length) { X.err = res.errors.slice(0, 8).join(' | ') + (res.errors.length > 8 ? ' …(+' + (res.errors.length - 8) + ')' : '') + T(' — لم يُستورد شيء، صحّح الملف وأعد المحاولة.', ' — nothing imported; fix the file and retry.'); return redraw(); }
       var E = X.ed; if (E.qs.length === 1 && !E.qs[0].id && !E.qs[0].stem.trim()) E.qs = [];
       E.qs = E.qs.concat(res.qs);
-      if (en) applyExamSheet(window.XLSX.utils.sheet_to_json(wb.Sheets[en], { header: 1, defval: '', raw: false }), E.exam);
+      if (en && wb) applyExamSheet(window.XLSX.utils.sheet_to_json(wb.Sheets[en], { header: 1, defval: '', raw: false }), E.exam);
       X.msg = T('أُضيف ' + res.qs.length + ' سؤالاً. راجعها ثم اضغط «حفظ الاختبار» (لم يُحفظ شيء بعد).', res.qs.length + ' questions added. Review them, then press Save (nothing is saved yet).');
     } catch (e) { X.err = (e && e.message) || String(e); }
     redraw();
@@ -458,7 +462,7 @@
     var esc = function (v) { v = String(v == null ? '' : v); if (/^[=+\-@]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; };
     saveBlob('exam-' + X.rv.exam.id + '.csv', new Blob(['﻿' + [k.map(esc).join(',')].concat(rows.map(function (r) { return k.map(function (c) { return esc(r[c]); }).join(','); })).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
   }
-  function loadXlsx() { if (window.XLSX) return Promise.resolve(); return new Promise(function (res, rej) { var s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload = res; s.onerror = function () { rej(new Error(T('تعذّر تحميل مكتبة Excel، استخدم CSV', 'Could not load Excel library; use CSV'))); }; document.head.appendChild(s); }); }
+  function loadXlsx() { if (window.XLSX) return Promise.resolve(); if (window.__xlsxP) return window.__xlsxP; var L = ['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js']; window.__xlsxP = L.reduce(function (p, src) { return p.catch(function () { return new Promise(function (res, rej) { var sc = document.createElement('script'); sc.src = src; sc.onload = function () { window.XLSX ? res() : rej(); }; sc.onerror = function () { sc.remove(); rej(); }; document.head.appendChild(sc); }); }); }, Promise.reject()).catch(function () { window.__xlsxP = null; throw new Error(T('تعذّر تحميل مكتبة Excel من الإنترنت. للاستيراد احفظ الملف بصيغة CSV. (التصدير يحتاج المكتبة.)', 'Could not load the Excel library. For import, save the file as CSV. (Export needs the library.)')); }); return window.__xlsxP; }
   async function exportXlsx() {
     var rows = exportRows(); if (!rows.length) return; await loadXlsx();
     var ws = window.XLSX.utils.json_to_sheet(rows), wb = window.XLSX.utils.book_new(); window.XLSX.utils.book_append_sheet(wb, ws, 'Results'); window.XLSX.writeFile(wb, 'exam-' + X.rv.exam.id + '.xlsx');

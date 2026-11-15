@@ -909,16 +909,45 @@
       '<div class="tabs"><button class="btn pri" data-act="cm-map-ok">' + h(T('اعتماد الأعمدة (' + S.body.length + ' سطر)', 'Use these columns (' + S.body.length + ' rows)')) + '</button><button class="btn" data-act="cm-clearrows">' + h(T('إلغاء', 'Cancel')) + '</button></div></div>';
   }
   function normNum(v) { return String(v == null ? '' : v).replace(/[\u0660-\u0669]/g, function (d) { return d.charCodeAt(0) - 1632; }).replace(/[\u200b-\u200f\u202a-\u202e\ufeff\s\-_\/]/g, '').replace(/\.0+$/, ''); }
+  var XLSX_SRC = ['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'];
   function loadXlsx() {
     if (window.XLSX) return Promise.resolve();
-    return new Promise(function (res, rej) { var sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; sc.onload = res; sc.onerror = function () { rej(new Error(T('تعذّر تحميل مكتبة Excel (تحقق من الاتصال)', 'Could not load the Excel library'))); }; document.head.appendChild(sc); });
+    if (window.__xlsxP) return window.__xlsxP;
+    var p = XLSX_SRC.reduce(function (prev, src) {
+      return prev.catch(function () { return new Promise(function (res, rej) { var sc = document.createElement('script'); sc.src = src; sc.onload = function () { window.XLSX ? res() : rej(); }; sc.onerror = function () { sc.remove(); rej(); }; document.head.appendChild(sc); }); });
+    }, Promise.reject()).catch(function () { window.__xlsxP = null; throw new Error(T('تعذّر تحميل مكتبة Excel من الإنترنت (جرّبنا 3 مصادر). احفظ الملف بصيغة CSV وارفعه، فهو لا يحتاج المكتبة.', 'Could not load the Excel library (3 sources tried). Save the file as CSV and upload that: it needs no library.')); });
+    window.__xlsxP = p; return p;
   }
+  // قارئ CSV مدمج بلا مكتبات: يدعم الفاصلة والفاصلة المنقوطة والتبويب والعلامات المقتبسة، وترميز UTF-8 أو Windows-1256
+  window.parseCsvText = function (buf) {
+    var txt; try { txt = new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch (e) { try { txt = new TextDecoder('windows-1256').decode(buf); } catch (e2) { txt = new TextDecoder('utf-8').decode(buf); } }
+    txt = txt.replace(/^\ufeff/, '');
+    var first = txt.split(/\r?\n/)[0] || '', d = [',', ';', '\t'].map(function (x) { return [x, first.split(x).length]; }).sort(function (a, b) { return b[1] - a[1]; })[0][0];
+    var rows = [], row = [], cur = '', q = false;
+    for (var i = 0; i < txt.length; i++) {
+      var ch = txt[i];
+      if (q) { if (ch === '"') { if (txt[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+      else if (ch === '"') q = true;
+      else if (ch === d) { row.push(cur); cur = ''; }
+      else if (ch === '\n' || ch === '\r') { if (ch === '\r' && txt[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; }
+      else cur += ch;
+    }
+    if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+    return rows;
+  };
+  window.readTableFile = async function (file) {
+    var buf = await file.arrayBuffer();
+    if (/\.(csv|txt|tsv)$/i.test(file.name) || /^text\//.test(file.type || '')) return window.parseCsvText(buf);
+    await loadXlsx();
+    var wb = window.XLSX.read(buf, { type: 'array' });
+    return window.XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', raw: false });
+  };
   async function readSheet(file) {
     if (!file) return;
+    toast_(T('جارٍ قراءة الملف…', 'Reading the file…'));
     await guard(async function () {
-      await loadXlsx();
-      var wb = window.XLSX.read(await file.arrayBuffer(), { type: 'array' });
-      var data = window.XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', raw: false });
+      var data;
+      try { data = await window.readTableFile(file); } catch (e) { toast_(e.message || String(e)); throw e; }
       data = data.filter(function (r) { return r.some(function (c) { return String(c).trim(); }); });
       if (!data.length) throw new Error(T('الملف فارغ', 'Empty file'));
       var head = data[0].map(function (c) { return String(c).trim(); });
@@ -934,6 +963,7 @@
       else { body = data; head = data[0].map(function () { return ''; }); iNum = 0; iName = Math.min(1, head.length - 1); iNid = -1; iMaj = -1; iCoh = -1; }
       ST.admin.rows = null; ST.admin.rowsInfo = '';
       ST.admin.sheet = { head: head, body: body, map: { num: iNum, name: iName, nid: iNid, maj: iMaj, coh: iCoh } };
+      toast_(T('قُرئ الملف: ' + body.length + ' سطراً. راجع أعمدة الملف ثم اضغط «اعتماد الأعمدة».', 'File read: ' + body.length + ' rows. Check the columns and press Use these columns.'));
     });
   }
   function applyMap() {
