@@ -1,155 +1,121 @@
-// admin-accounts: ينشئ حسابات الطلبة/الموظفين من قائمة، ويعيد كلمة المرور الافتراضية. للمدير فقط.
-// يستخدم مفتاح الخدمة الموجود تلقائياً في بيئة الدالة (لا يُوضع في التطبيق ولا يُرسل لأحد).
+// Supabase Edge Function: sends due appointment reminders via Web Push.
+// Run every minute with pg_cron (see README). Secrets: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT, CRON_SECRET.
+// The service_role key is available to Edge Functions as SUPABASE_SERVICE_ROLE_KEY and never reaches the browser.
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import webpush from 'npm:web-push@3.6.7';
 
-const DEFAULT_PW = '12345678';
-const DOMAIN = 'planner.local';
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } });
+const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+webpush.setVapidDetails(Deno.env.get('VAPID_SUBJECT')!, Deno.env.get('VAPID_PUBLIC_KEY')!, Deno.env.get('VAPID_PRIVATE_KEY')!);
+
+// Convert a wall-clock "YYYY-MM-DD" + "HH:MM" in a time zone to a UTC timestamp (ms).
+function zonedToUtc(date: string, time: string, tz: string): number {
+  const guess = Date.parse(`${date}T${time || '09:00'}:00Z`);
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(new Date(guess));
+  const g = (t: string) => Number(parts.find(p => p.type === t)!.value);
+  const asLocal = Date.UTC(g('year'), g('month') - 1, g('day'), g('hour'), g('minute'));
+  return guess - (asLocal - guess);
+}
+
+async function reminders(): Promise<number> {
+  const now = Date.now(), windowMs = 3 * 60_000;
+  const { data: subs } = await sb.from('push_subscriptions').select('*');
+  const byUser = new Map<string, any[]>();
+  (subs ?? []).forEach(s => byUser.set(s.user_id, [...(byUser.get(s.user_id) ?? []), s]));
+  let sent = 0;
+  for (const [userId, list] of byUser) {
+    const tz = list[0].tz || 'UTC';
+    const { data: rows } = await sb.from('records').select('id,data').eq('user_id', userId).eq('kind', 'appts').eq('deleted', false);
+    for (const r of rows ?? []) {
+      const a = r.data; if (!a || a.status === 'done' || a.status === 'cancelled') continue;
+      const base = zonedToUtc(a.date, a.start, tz);
+      const times: { at: number; off: number }[] = (a.rem?.offs ?? []).map((o: number) => ({ at: base - o * 60000, off: o }));
+      if (a.rem?.custom) times.push({ at: zonedToUtc(a.rem.custom.slice(0, 10), a.rem.custom.slice(11, 16), tz), off: -1 });
+      for (const t of times) {
+        if (t.at > now || t.at < now - windowMs) continue;
+        const key = `${r.id}|${t.at}`;
+        const ins = await sb.from('reminders_sent').insert({ user_id: userId, key });   // primary key blocks duplicates
+        if (ins.error) continue;
+        for (const s of list) {
+          try { await webpush.sendNotification({ endpoint: s.endpoint, keys: s.keys }, JSON.stringify({ title: a.title, body: `${a.date} ${a.start ?? ''}`, tag: key })); sent++; }
+          catch (e: any) { if (e.statusCode === 404 || e.statusCode === 410) await sb.from('push_subscriptions').delete().eq('user_id', userId).eq('endpoint', s.endpoint); }
+        }
+      }
+    }
+    // المتابعات اليومية: تنبيه عند حلول تاريخ الاستحقاق (9 صباحاً بتوقيت المستخدم) كأنها مهمة
+    const { data: fl } = await sb.from('records').select('id,data').eq('user_id', userId).eq('kind', 'follows').eq('deleted', false);
+    for (const r of fl ?? []) {
+      const f = r.data; if (!f || f.status === 'done' || !f.due) continue;
+      const at = zonedToUtc(f.due, '09:00', tz);
+      if (at > now || at < now - windowMs) continue;
+      const key = `${r.id}|due|${f.due}`;
+      const ins = await sb.from('reminders_sent').insert({ user_id: userId, key });
+      if (ins.error) continue;
+      for (const s of list) {
+        try { await webpush.sendNotification({ endpoint: s.endpoint, keys: s.keys }, JSON.stringify({ title: '⏰ ' + f.title, body: 'انتهت المدة المخصصة لهذه المتابعة', tag: key })); sent++; }
+        catch (e: any) { if (e.statusCode === 404 || e.statusCode === 410) await sb.from('push_subscriptions').delete().eq('user_id', userId).eq('endpoint', s.endpoint); }
+      }
+    }
+  }
+  return sent;
+}
+
+// ───── إشعارات التواصل: رسائل فردية، قنوات الموظفين، إعلانات الشعب ─────
+const CH_NAME: Record<string, string> = { all: 'الجميع', academic: 'أكاديمي', practical: 'مشرف عملي', admin: 'إداري' };
+const clip = (t: string, n = 120) => (t ?? '').length > n ? t.slice(0, n) + '…' : (t ?? '');
+
+async function messages(): Promise<number> {
+  const nowIso = new Date().toISOString();
+  const st = await sb.from('comm_push_state').select('last_ts').eq('id', 1).maybeSingle();
+  if (st.error) return 0;                                   // comm-push.sql not installed yet
+  if (!st.data) { await sb.from('comm_push_state').upsert({ id: 1, last_ts: nowIso }); return 0; }   // first run: start from now
+  const from = st.data.last_ts as string;
+  const items = new Map<string, { title: string; body: string }[]>();
+  const add = (uid: string, title: string, body: string) => items.set(uid, [...(items.get(uid) ?? []), { title, body: clip(body) }]);
+
+  const dm = await sb.from('communication_notifications').select('user_id,title,body').gt('created_at', from).lte('created_at', nowIso).limit(500);
+  (dm.data ?? []).forEach((n: any) => add(n.user_id, n.title || 'رسالة جديدة', n.body));
+
+  const ch = await sb.from('comm_channel_messages').select('channel,sender_id,body').gt('created_at', from).lte('created_at', nowIso).limit(300);
+  if (ch.data?.length) {
+    const { data: staff } = await sb.from('profiles').select('id,role,full_name').in('role', ['admin', 'professor', 'staff']);
+    const { data: cats } = await sb.from('comm_staff_categories').select('user_id,category');
+    const catOf = new Map((cats ?? []).map((c: any) => [c.user_id, c.category]));
+    const roleOf = new Map((staff ?? []).map((u: any) => [u.id, u.role]));
+    const nameOf = new Map((staff ?? []).map((u: any) => [u.id, u.full_name]));
+    for (const m of ch.data) for (const u of staff ?? []) {
+      if (u.id === m.sender_id) continue;
+      if (u.role === 'admin' || u.role === 'professor' || m.channel === 'all' || catOf.get(u.id) === m.channel) add(u.id, `قناة ${CH_NAME[m.channel] ?? m.channel}`, `${u.role !== 'admin' && roleOf.get(m.sender_id) === 'admin' ? 'PCN' : (nameOf.get(m.sender_id) ?? '')}: ${m.body}`);
+    }
+  }
+
+  const an = await sb.from('comm_announcements').select('cohort_id,title,body').gt('created_at', from).lte('created_at', nowIso).limit(100);
+  if (an.data?.length) {
+    const { data: mem } = await sb.from('comm_cohort_members').select('user_id,cohort_id').in('cohort_id', [...new Set(an.data.map((a: any) => a.cohort_id))]);
+    for (const a of an.data) for (const m of (mem ?? []).filter((x: any) => x.cohort_id === a.cohort_id)) add(m.user_id, a.title || 'إعلان جديد من الإدارة', a.body);
+  }
+
+  let sent = 0;
+  if (items.size) {
+    const { data: subs } = await sb.from('push_subscriptions').select('*').in('user_id', [...items.keys()]);
+    for (const [uid, list] of items) {
+      const my = (subs ?? []).filter((s: any) => s.user_id === uid);
+      if (!my.length) continue;
+      const out = list.length > 3 ? [{ title: 'التواصل', body: `${list.length} رسائل جديدة` }] : list;
+      for (const n of out) for (const s of my) {
+        try { await webpush.sendNotification({ endpoint: s.endpoint, keys: s.keys }, JSON.stringify({ title: n.title, body: n.body, tag: 'comm-' + uid, url: './index.html' })); sent++; }
+        catch (e: any) { if (e.statusCode === 404 || e.statusCode === 410) await sb.from('push_subscriptions').delete().eq('user_id', uid).eq('endpoint', s.endpoint); }
+      }
+    }
+  }
+  await sb.from('comm_push_state').upsert({ id: 1, last_ts: nowIso });
+  return sent;
+}
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
-  try {
-    const url = Deno.env.get('SUPABASE_URL')!;
-    const admin = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
-    const token = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
-    const { data: u } = await admin.auth.getUser(token);
-    if (!u?.user) return json({ error: 'unauthorized' }, 401);
-    const { data: me } = await admin.from('profiles').select('role').eq('id', u.user.id).maybeSingle();
-    if (!me || me.role !== 'admin') return json({ error: 'admin only' }, 403);
-
-    const body = await req.json();
-    // صلاحيات المسؤول الفرعي: لا سجل في admin_perms = مسؤول رئيسي (كل شيء)
-    const { data: ap } = await admin.from('admin_perms').select('perms').eq('user_id', u.user.id).maybeSingle();
-    const can = (k: string) => !ap || !!(ap.perms && ap.perms[k] === true);
-    const need: Record<string, string> = { reset: 'reset', delete: 'delete', wipe: 'wipe', create: 'create' };
-    if (need[body.action] && !can(need[body.action])) return json({ error: 'permission denied: ' + need[body.action] }, 403);
-
-    if (body.action === 'reset') {
-      // إعادة كلمة المرور إلى الافتراضية: لحساب واحد (user_id) أو لقائمة (ids) أو لمجموعة كاملة (scope + after، على دفعات).
-      const resetOne = async (id: string) => {
-        const { data: t } = await admin.from('profiles').select('id, role').eq('id', id).maybeSingle();
-        if (!t) return 'missing';
-        if (t.role === 'admin') return 'skipped';
-        const r = await admin.auth.admin.updateUserById(t.id, { password: DEFAULT_PW });
-        if (r.error) return 'error:' + r.error.message;
-        await admin.from('comm_pw_status').upsert({ user_id: t.id, must_change: true, changed_at: null });
-        return 'ok';
-      };
-      let ids: string[] = [];
-      let next: string | null = null, done = true;
-      if (body.scope) {
-        const roles = body.scope === 'students' ? ['student'] : body.scope === 'staff' ? ['professor', 'staff'] : ['student', 'professor', 'staff'];
-        let q = admin.from('profiles').select('id').in('role', roles).order('id', { ascending: true }).limit(40);
-        if (typeof body.after === 'string' && body.after) q = q.gt('id', body.after);
-        const { data: rows } = await q;
-        ids = (rows ?? []).map((x: any) => x.id);
-        if (ids.length === 40) { next = ids[ids.length - 1]; done = false; }
-      } else {
-        ids = (Array.isArray(body.ids) ? body.ids : body.user_id ? [body.user_id] : []).filter((x: unknown) => typeof x === 'string').slice(0, 40);
-      }
-      let okN = 0, skipped = 0; const errs: string[] = [];
-      for (const id of ids) {
-        const res = await resetOne(id);
-        if (res === 'ok') okN++; else if (res.startsWith('error:')) errs.push(res.slice(6)); else skipped++;
-      }
-      if (!body.scope && ids.length === 1 && errs.length) return json({ error: errs[0] }, 400);
-      return json({ ok: true, reset: okN, skipped, errors: errs.slice(0, 3), next, done });
-    }
-
-    if (body.action === 'delete') {
-      // حذف أي حساب غير مدير (طالب/موظف). المدراء لا يُحذفون أبداً. كل حساب يُحذف على حدة وتُرجَع نتيجته.
-      const ids: string[] = (Array.isArray(body.ids) ? body.ids : []).filter((x: unknown) => typeof x === 'string').slice(0, 200);
-      const results: Array<Record<string, unknown>> = [];
-      for (const id of ids) {
-        if (id === u.user.id) { results.push({ id, status: 'skipped', message: 'self' }); continue; }
-        const { data: t } = await admin.from('profiles').select('role').eq('id', id).maybeSingle();
-        if (!t) { results.push({ id, status: 'missing' }); continue; }
-        if (t.role === 'admin') { results.push({ id, status: 'skipped', message: 'admin' }); continue; }
-        // الحذف الكامل (محادثات ورسائل وطلبات) داخل معاملة واحدة عبر comm_purge_student؛ وإن لم تُثبَّت بعد نرجع للحذف البسيط
-        let msgs = 0;
-        let pg = await admin.rpc('comm_purge_user', { p_id: id });
-        if (pg.error && /comm_purge_user|schema cache|does not exist/i.test(pg.error.message) && t.role === 'student') pg = await admin.rpc('comm_purge_student', { p_id: id });
-        if (pg.error) {
-          if (!/comm_purge_user|comm_purge_student|schema cache|does not exist/i.test(pg.error.message)) { results.push({ id, status: 'error', message: pg.error.message }); continue; }
-          const pr = await admin.from('profiles').delete().eq('id', id);
-          if (pr.error) { results.push({ id, status: 'error', message: pr.error.message + ' (شغّل staff-accounts.sql للحذف مع الرسائل)' }); continue; }
-        } else { msgs = Number((pg.data as any)?.messages || 0); }
-        const au = await admin.auth.admin.deleteUser(id);
-        if (au.error) { results.push({ id, status: 'error', message: au.error.message }); continue; }
-        results.push({ id, status: 'deleted', messages: msgs });
-      }
-      return json({ results });
-    }
-
-    if (body.action === 'wipe') {
-      // مسح كل المراسلات (قاعدة البيانات ثم الملفات المرفقة). الحسابات تبقى.
-      const w = await admin.rpc('comm_wipe_messages');
-      if (w.error) return json({ error: w.error.message }, 400);
-      let removed = 0;
-      const walk = async (prefix: string, depth: number): Promise<void> => {
-        if (depth > 6) return;
-        const { data: items } = await admin.storage.from('comm-files').list(prefix, { limit: 1000 });
-        const files: string[] = [];
-        for (const it of items ?? []) {
-          const path = prefix ? `${prefix}/${it.name}` : it.name;
-          if (it.id) files.push(path); else await walk(path, depth + 1);
-        }
-        for (let i = 0; i < files.length; i += 100) {
-          const rm = await admin.storage.from('comm-files').remove(files.slice(i, i + 100));
-          if (!rm.error) removed += files.slice(i, i + 100).length;
-        }
-      };
-      try { await walk('', 0); } catch (_e) { /* الملفات تُحذف بأفضل جهد */ }
-      return json({ ok: true, counts: w.data, files: removed });
-    }
-
-    if (body.action === 'create') {
-      const rows = Array.isArray(body.rows) ? body.rows.slice(0, 300) : [];
-      const allowSameName = body.allow_same_name === true;
-      const norm = (t: string) => String(t || '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim().toLowerCase();
-      // الموجودون الآن: للمقارنة فقط (الاسم، الرقم الجامعي، رقم الهوية)
-      const { data: ex } = await admin.from('profiles').select('full_name, university_id, national_id, employee_number').limit(20000);
-      const names = new Set<string>(), nums = new Set<string>(), nids = new Set<string>();
-      const addKnown = (n: string, num: string, nid: string) => { if (n) names.add(norm(n)); if (num) { nums.add(num); } if (nid) { nids.add(nid); nums.add(nid); } };
-      (ex ?? []).forEach((e: any) => { if (e.university_id) nums.add(String(e.university_id).trim()); if (e.national_id) { nids.add(String(e.national_id).trim()); nums.add(String(e.national_id).trim()); } if (e.employee_number) nums.add(String(e.employee_number).trim()); if (e.full_name) names.add(norm(e.full_name)); });
-      const results: Array<Record<string, unknown>> = [];
-      for (const r of rows) {
-        const number = String(r.number || '').trim();
-        const name = String(r.name || '').trim();
-        const nid = String(r.national_id || '').trim();
-        const role = ['student', 'professor', 'staff'].includes(r.role) ? r.role : 'student';
-        if (!/^[A-Za-z0-9]{3,20}$/.test(number) || !name || (nid && !/^[A-Za-z0-9]{5,20}$/.test(nid))) { results.push({ number, status: 'invalid' }); continue; }
-        if (nums.has(number) || (nid && (nids.has(nid) || nums.has(nid)))) { results.push({ number, status: 'exists' }); continue; }
-        if (!allowSameName && names.has(norm(name))) { results.push({ number, name, status: 'dup_name' }); continue; }
-        const c = await admin.auth.admin.createUser({
-          email: `${number.toLowerCase()}@${DOMAIN}`, password: DEFAULT_PW, email_confirm: true,
-          user_metadata: { full_name: name },
-        });
-        if (c.error || !c.data.user) { results.push({ number, status: 'error', message: c.error?.message || 'create failed' }); continue; }
-        const id = c.data.user.id;
-        const prof: Record<string, unknown> = { id, role, full_name: name, university_id: number, major: r.major ? String(r.major) : null };
-        if (nid) prof.national_id = nid;
-        if (role !== 'student') prof.employee_number = number; // الرقم الوظيفي = اسم المستخدم
-        const p = await admin.from('profiles').upsert(prof);
-        if (p.error) {
-          await admin.auth.admin.deleteUser(id);
-          results.push({ number, status: 'error', message: 'profile: ' + p.error.message });
-          continue;
-        }
-        addKnown(name, number, nid);
-        await admin.from('comm_pw_status').upsert({ user_id: id, must_change: true });
-        if (role === 'student' && Number.isInteger(r.cohort_id)) await admin.from('comm_cohort_members').upsert({ user_id: id, cohort_id: r.cohort_id });
-        if (role !== 'student' && ['academic', 'practical', 'admin'].includes(r.category)) await admin.from('comm_staff_categories').upsert({ user_id: id, category: r.category });
-        results.push({ number, status: 'created' });
-      }
-      return json({ results });
-    }
-    return json({ error: 'unknown action' }, 400);
-  } catch (e) {
-    return json({ error: String((e as Error).message || e) }, 500);
-  }
+  if (req.headers.get('x-cron-secret') !== Deno.env.get('CRON_SECRET')) return new Response('forbidden', { status: 403 });
+  let sent = 0, msgs = 0;
+  try { sent = await reminders(); } catch (e) { console.error('reminders', e); }
+  try { msgs = await messages(); } catch (e) { console.error('messages', e); }
+  return new Response(JSON.stringify({ sent, msgs }), { headers: { 'content-type': 'application/json' } });
 });
+

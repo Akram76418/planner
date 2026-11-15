@@ -218,7 +218,7 @@
       '<label>' + h(T('عرض النتيجة للطالب', 'Result visibility')) + '<select id="xm-fm"><option value="after_release"' + (e.feedback_mode !== 'immediate' ? ' selected' : '') + '>' + h(T('بعد أن أطلقها أنا (موصى به)', 'After I release it (recommended)')) + '</option><option value="immediate"' + (e.feedback_mode === 'immediate' ? ' selected' : '') + '>' + h(T('فور التسليم', 'Right after submitting')) + '</option></select></label></div>' +
       '<label>' + h(T('الوصف (اختياري)', 'Description (optional)')) + '<textarea id="xm-desc" rows="2" style="width:100%">' + h(e.description || '') + '</textarea></label>' +
       '<div class="sub" style="margin-top:8px">' + h(T('الشعب المستهدفة', 'Target cohorts')) + '</div>' + coh +
-      '<h3 style="margin-top:14px">' + h(T('الأسئلة', 'Questions')) + '</h3>' + qs + '<div class="tabs"><button class="btn" data-act="xm-qadd">+ ' + h(T('سؤال', 'Question')) + '</button><button class="btn pri" data-act="xm-save"' + (X.busy ? ' disabled' : '') + '>' + h(T('حفظ الاختبار', 'Save exam')) + '</button></div></div>';
+      '<h3 style="margin-top:14px">' + h(T('الأسئلة', 'Questions')) + '</h3><p class="sub"><label class="btn sm" style="cursor:pointer">⬆ ' + h(T('استيراد الأسئلة دفعة واحدة من Excel / CSV', 'Import all questions from Excel / CSV')) + '<input type="file" hidden accept=".xlsx,.xls,.csv" data-xm="qimport"></label> ' + h(T('صف لكل سؤال (حمّل القالب من مدير النظام). تُضاف الأسئلة إلى المحرّر للمراجعة قبل الحفظ.', 'One row per question (get the template). Questions are added to the editor for review before saving.')) + '</p>' + qs + '<div class="tabs"><button class="btn" data-act="xm-qadd">+ ' + h(T('سؤال', 'Question')) + '</button><button class="btn pri" data-act="xm-save"' + (X.busy ? ' disabled' : '') + '>' + h(T('حفظ الاختبار', 'Save exam')) + '</button></div></div>';
   }
   function collect() {
     var E = X.ed; if (!E || X.view !== 'edit') return;
@@ -244,6 +244,74 @@
       E.qs = (q.data || []).map(function (x) { var rb = x.justification_rubrics; rb = Array.isArray(rb) ? rb[0] : rb; rb = rb || {}; return { id: x.id, stem: x.stem, options: x.options, correct: x.correct_options, multi: x.multi_select, category: x.category || '', time_sec: x.time_sec || '', key: rb.key_reasoning || '', concepts: conceptsToText(rb.concepts, rb.required_concepts) }; });
     } else E.qs = [blankQ()];
     X.ed = E; X.view = 'edit'; X.msg = '';
+  }
+  /* ---- استيراد الأسئلة من Excel/CSV: صف لكل سؤال. أي خطأ في أي صف يمنع الاستيراد كله ويُعرض بالتفصيل ---- */
+  var LMAP = { '1': 0, 'ا': 0, 'a': 0, '2': 1, 'ب': 1, 'b': 1, '3': 2, 'ج': 2, 'c': 2, '4': 3, 'د': 3, 'd': 3, '5': 4, 'ه': 4, 'e': 4, '6': 5, 'و': 5, 'f': 5, '7': 6, 'g': 6, '8': 7, 'h': 7, '9': 8, 'i': 8, '10': 9, 'j': 9 };
+  function nk(x) { return String(x == null ? '' : x).replace(/[​-‏‪-‮﻿ـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim().toLowerCase(); }
+  function optIdx(h) { var k = nk(h).replace(/^(خيار|الخيار|option|choice)\s*/, '').replace(/[\s.:)]+$/, ''); return Object.prototype.hasOwnProperty.call(LMAP, k) ? LMAP[k] : -1; }
+  function colKind(h) {
+    var k = nk(h); if (!k) return '';
+    if (/^(السؤال|نص السؤال|سؤال|question|stem|q)$/.test(k)) return 'stem';
+    if (/^(الاجابه الصحيحه|الاجابه|الصحيح|الجواب|الاجابات الصحيحه|correct|answer|correct answer)$/.test(k) || /^(الاجابه الصحيحه|correct)/.test(k)) return 'cor';
+    if (/^(التصنيف|الفئه|category)$/.test(k)) return 'cat';
+    if (/(زمن|ثواني|ثانيه|seconds|time)/.test(k)) return 'sec';
+    if (/(معيار|الفكره|rubric|key reasoning|key)/.test(k)) return 'key';
+    if (/(المفاهيم|مفاهيم|concepts)/.test(k)) return 'con';
+    return optIdx(h) >= 0 ? 'opt' : '';
+  }
+  function parseAoa(aoa) {
+    var hr = -1, kinds = [], r, c;
+    for (r = 0; r < Math.min(aoa.length, 5) && hr < 0; r++) { var ks = (aoa[r] || []).map(colKind); if (ks.indexOf('stem') > -1 && ks.indexOf('cor') > -1 && ks.filter(function (k) { return k === 'opt'; }).length >= 2) { hr = r; kinds = ks; } }
+    if (hr < 0) return { qs: [], errors: [T('لم أجد صف العناوين. يجب أن يحوي: السؤال، خيارين على الأقل (أ، ب…)، الإجابة الصحيحة. حمّل القالب.', 'Header row not found. Needs: Question, at least two options (A, B…), Correct answer. Download the template.')] };
+    var cols = { stem: -1, cor: -1, cat: -1, sec: -1, key: -1, con: -1 }, optCols = [];
+    kinds.forEach(function (k, i) { if (k === 'opt') optCols.push({ i: i, n: optIdx(aoa[hr][i]) }); else if (k && cols[k] === -1) cols[k] = i; });
+    optCols.sort(function (a, b) { return a.n - b.n; });
+    var qs = [], errors = [], cell = function (row, i) { return i < 0 || row[i] == null ? '' : String(row[i]).replace(/\r/g, '').trim(); };
+    for (r = hr + 1; r < aoa.length; r++) {
+      var row = aoa[r] || [], stem = cell(row, cols.stem), n = r + 1;
+      if (!row.some(function (x) { return String(x == null ? '' : x).trim(); })) continue;
+      if (!stem) { errors.push(T('الصف ' + n + ': نص السؤال فارغ', 'Row ' + n + ': empty question')); continue; }
+      var opts = [], map = {};
+      optCols.forEach(function (oc) { var t = cell(row, oc.i); if (t) { map[oc.n] = opts.length; opts.push(t); } });
+      if (opts.length < 2) { errors.push(T('الصف ' + n + ': يلزم خياران على الأقل', 'Row ' + n + ': at least two options')); continue; }
+      var raw = cell(row, cols.cor), toks = raw.split(/[,،;|+\s\/&]+/).filter(Boolean), cor = [], bad = false;
+      toks.forEach(function (t) {
+        var k = nk(t), parts = (!Object.prototype.hasOwnProperty.call(LMAP, k) && /^[a-j]{2,}$/.test(k)) ? k.split('') : [k];
+        parts.forEach(function (p) { if (!Object.prototype.hasOwnProperty.call(LMAP, p) || map[LMAP[p]] == null) bad = true; else if (cor.indexOf(map[LMAP[p]]) < 0) cor.push(map[LMAP[p]]); });
+      });
+      if (!raw || bad || !cor.length) { errors.push(T('الصف ' + n + ': الإجابة الصحيحة «' + raw + '» غير مفهومة أو تشير لخيار غير موجود (استخدم الحرف مثل B أو ب، وللمتعدد: A,C)', 'Row ' + n + ': correct answer "' + raw + '" is invalid or points to a missing option (use a letter like B; multiple: A,C)')); continue; }
+      var sec = cell(row, cols.sec), secN = sec === '' ? '' : num(sec, NaN);
+      if (secN !== '' && (isNaN(secN) || secN < 10 || secN > 7200)) { errors.push(T('الصف ' + n + ': زمن السؤال من 10 إلى 7200 ثانية', 'Row ' + n + ': seconds must be 10–7200')); continue; }
+      qs.push({ id: null, stem: stem.slice(0, 4000), options: opts, correct: cor.sort(function (a, b) { return a - b; }), multi: cor.length > 1, category: cell(row, cols.cat).slice(0, 100), time_sec: secN === '' ? '' : String(Math.floor(secN)), key: cell(row, cols.key), concepts: cell(row, cols.con).split(/\n|;|؛/).map(function (l) { return l.trim(); }).filter(Boolean).join('\n') });
+    }
+    if (!qs.length && !errors.length) errors.push(T('لا أسئلة في الملف', 'No questions in the file'));
+    return { qs: qs, errors: errors };
+  }
+  function applyExamSheet(aoa, e) {
+    (aoa || []).forEach(function (row) {
+      var k = nk(row[0]), v = row[1] == null ? '' : String(row[1]).trim(); if (!k || v === '') return;
+      if (/^(العنوان|عنوان الاختبار|title)$/.test(k)) e.title = v.slice(0, 200);
+      else if (/^(الوصف|description)$/.test(k)) e.description = v.slice(0, 2000);
+      else if (/(المده|duration|total)/.test(k)) { var d = num(v, NaN); if (!isNaN(d) && d >= 1 && d <= 1440) e.duration_min = Math.floor(d); }
+      else if (/(كل سؤال|per question|per-question)/.test(k)) { var p = num(v, NaN); if (!isNaN(p) && p >= 10 && p <= 7200) e.per_question_sec = Math.floor(p); }
+    });
+  }
+  async function importFile(file) {
+    if (!file || !X.ed) return;
+    collect(); X.err = ''; X.msg = '';
+    try {
+      await loadXlsx();
+      var wb = window.XLSX.read(await file.arrayBuffer(), { type: 'array' }), names = wb.SheetNames;
+      var qn = names.filter(function (n) { return /^(الاسئله|الأسئلة|questions)$/i.test(nk(n)) || /^(الاسئله|questions)$/i.test(n); })[0] || names[0];
+      var en = names.filter(function (n) { return /^(الاختبار|exam|settings|الاعدادات)$/i.test(nk(n)); })[0];
+      var res = parseAoa(window.XLSX.utils.sheet_to_json(wb.Sheets[qn], { header: 1, defval: '', raw: false }));
+      if (res.errors.length) { X.err = res.errors.slice(0, 8).join(' | ') + (res.errors.length > 8 ? ' …(+' + (res.errors.length - 8) + ')' : '') + T(' — لم يُستورد شيء، صحّح الملف وأعد المحاولة.', ' — nothing imported; fix the file and retry.'); return redraw(); }
+      var E = X.ed; if (E.qs.length === 1 && !E.qs[0].id && !E.qs[0].stem.trim()) E.qs = [];
+      E.qs = E.qs.concat(res.qs);
+      if (en) applyExamSheet(window.XLSX.utils.sheet_to_json(wb.Sheets[en], { header: 1, defval: '', raw: false }), E.exam);
+      X.msg = T('أُضيف ' + res.qs.length + ' سؤالاً. راجعها ثم اضغط «حفظ الاختبار» (لم يُحفظ شيء بعد).', res.qs.length + ' questions added. Review them, then press Save (nothing is saved yet).');
+    } catch (e) { X.err = (e && e.message) || String(e); }
+    redraw();
   }
   async function saveExam() {
     collect(); var E = X.ed, e = E.exam;
@@ -391,6 +459,7 @@
       document.querySelectorAll('.xm-opt').forEach(function (l) { var c = l.querySelector('input'); l.classList.toggle('on', !!(c && c.checked)); });
     }
   });
+  document.addEventListener('change', function (e) { var t = e.target; if (t && t.dataset && t.dataset.xm === 'qimport') { var f = t.files && t.files[0]; t.value = ''; importFile(f); } });
   document.addEventListener('input', function (e) {
     var t = e.target; if (!t.dataset || t.dataset.ex !== 'txt' || !X.run) return;
     var R = X.run, now = Date.now(); R.text = t.value; if (!R.t0) R.t0 = now; R.t1 = now; R.sig.keys++;
@@ -402,5 +471,5 @@
   window.addEventListener('blur', lost);
   document.addEventListener('visibilitychange', function () { if (document.hidden) lost(); });
 
-  window.EXAMS = { visible: visible, instr: instr, html: html, load: load, badge: badge, arm: armTick, active: function () { return X.view === 'run'; }, loaded: function () { return X.loaded; } };
+  window.EXAMS = { parseAoa: parseAoa, visible: visible, instr: instr, html: html, load: load, badge: badge, arm: armTick, active: function () { return X.view === 'run'; }, loaded: function () { return X.loaded; } };
 })();
