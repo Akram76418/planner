@@ -87,8 +87,13 @@
   }
 
   /* ---- الطالب: الحل ---- */
-  function newRun(st, exam) { return { exam: exam, st: st, sel: [], text: '', sig: { paste: 0, blur: 0, typed_ms: 0, keys: 0 }, t0: 0, t1: 0, qEnd: st.q_left_s == null ? null : Date.now() + st.q_left_s * 1000, tEnd: st.total_left_s == null ? null : Date.now() + st.total_left_s * 1000, sent: false }; }
-  function resetQ(R, st) { R.st = st; R.sel = []; R.text = ''; R.sig = { paste: 0, blur: 0, typed_ms: 0, keys: 0 }; R.t0 = 0; R.t1 = 0; R.sent = false; R.qEnd = st.q_left_s == null ? null : Date.now() + st.q_left_s * 1000; R.tEnd = st.total_left_s == null ? null : Date.now() + st.total_left_s * 1000; }
+  /* مسودة محلية للسؤال الحالي (الاختيار والنص) تنجو من انقطاع النت وإعادة تحميل الصفحة؛ لا تتجاوز مهلة الخادم */
+  function dkey(R) { return 'xm_draft_' + R.st.attempt_id + '_' + R.st.question.id; }
+  function saveDraft() { var R = X.run; if (!R || !R.st || !R.st.question) return; try { localStorage.setItem(dkey(R), JSON.stringify({ sel: R.sel, text: R.text, sig: R.sig, t0: R.t0, t: Date.now() })); } catch (e) {} }
+  function loadDraft(R) { try { var d = JSON.parse(localStorage.getItem(dkey(R)) || 'null'); if (d && Array.isArray(d.sel) && typeof d.text === 'string') { R.sel = d.sel.filter(function (i) { return i < R.st.question.options.length; }); R.text = d.text.slice(0, 600); if (d.sig) R.sig = { paste: d.sig.paste | 0, blur: d.sig.blur | 0, typed_ms: d.sig.typed_ms | 0, keys: d.sig.keys | 0 }; R.t0 = d.t0 || 0; } } catch (e) {} }
+  function clearDraft(R) { try { localStorage.removeItem(dkey(R)); } catch (e) {} }
+  function newRun(st, exam) { var R0 = { exam: exam, st: st, sel: [], text: '', sig: { paste: 0, blur: 0, typed_ms: 0, keys: 0 }, t0: 0, t1: 0, qEnd: st.q_left_s == null ? null : Date.now() + st.q_left_s * 1000, tEnd: st.total_left_s == null ? null : Date.now() + st.total_left_s * 1000, sent: false }; loadDraft(R0); return R0; }
+  function resetQ(R, st) { R.st = st; R.sel = []; R.text = ''; R.sig = { paste: 0, blur: 0, typed_ms: 0, keys: 0 }; R.t0 = 0; R.t1 = 0; R.sent = false; R.qEnd = st.q_left_s == null ? null : Date.now() + st.q_left_s * 1000; R.tEnd = st.total_left_s == null ? null : Date.now() + st.total_left_s * 1000; loadDraft(R); }
   function runHtml() {
     var R = X.run, st = R.st, q = st.question;
     var opts = (q.options || []).map(function (o, i) {
@@ -119,7 +124,7 @@
   }
   /* عند انتهاء الزمن: أرسل ما كُتب إن كان صالحاً (الخادم يمهل 3 ثوانٍ)، وإلا اطلب حالة الخادم لينتقل */
   function expired() {
-    var R = X.run; if (!R || R.sent) return; R.sent = true; stopTick();
+    var R = X.run; if (!R || R.sent || (R.noAuto && Date.now() < R.noAuto)) return; R.sent = true; stopTick();
     if (R.sel.length && R.text.trim().length >= 5) return void submit(true);
     go(async function () { await advance(await rpc('ex_current', { p_attempt: R.st.attempt_id })); });
   }
@@ -136,8 +141,12 @@
     await go(async function () {
       var r;
       try { r = await rpc('ex_answer', { p_attempt: R.st.attempt_id, p_question: R.st.question.id, p_selected: R.sel.slice().sort(function (a, b) { return a - b; }), p_text: R.text.trim(), p_signals: sg }); }
-      catch (e) { R.sent = false; throw e; }
-      grade(r.justification_id);
+      catch (e) {
+        R.sent = false; R.noAuto = Date.now() + 5000;
+        if (auto) { try { await advance(await rpc('ex_current', { p_attempt: R.st.attempt_id })); return; } catch (e2) { /* لا اتصال: تبقى المسودة ويُعاد الإرسال لاحقاً */ } }
+        throw e;
+      }
+      clearDraft(R); grade(r.justification_id);
       await advance(r.next);
     });
   }
@@ -517,6 +526,7 @@
     if (k === 'opt' && X.run) {
       var R = X.run, i = Number(t.dataset.i);
       if (R.st.question.multi) { var p = R.sel.indexOf(i); if (t.checked && p < 0) R.sel.push(i); else if (!t.checked && p > -1) R.sel.splice(p, 1); } else R.sel = [i];
+      saveDraft();
       document.querySelectorAll('.xm-opt').forEach(function (l) { var c = l.querySelector('input'); l.classList.toggle('on', !!(c && c.checked)); });
     }
   });
@@ -524,10 +534,18 @@
   document.addEventListener('input', function (e) {
     var t = e.target; if (!t.dataset || t.dataset.ex !== 'txt' || !X.run) return;
     var R = X.run, now = Date.now(); R.text = t.value; if (!R.t0) R.t0 = now; R.t1 = now; R.sig.keys++;
+    saveDraft();
     var c = $q('#xm-cnt'); if (c) c.textContent = t.value.length + ' / 600';
   });
   function noPaste(e) { var t = e.target; if (t && t.id === 'xm-txt' && X.run) { e.preventDefault(); X.run.sig.paste++; } }
   document.addEventListener('paste', noPaste); document.addEventListener('drop', noPaste);
+  function netBanner(on) {
+    var r = root(), b = $q('#xm-net'); if (!r || X.view !== 'run') return;
+    if (!on) { if (b) b.remove(); return; }
+    if (!b) { b = document.createElement('p'); b.id = 'xm-net'; b.className = 'pill bad'; b.textContent = T('انقطع الاتصال. إجابتك محفوظة على جهازك، لكن الوقت لا يتوقف. أرسلها فور عودة الاتصال.', 'You are offline. Your answer is saved on this device, but the clock keeps running. Submit as soon as you are back online.'); r.insertBefore(b, r.firstChild); }
+  }
+  window.addEventListener('offline', function () { netBanner(true); });
+  window.addEventListener('online', function () { netBanner(false); });
   function lost() { if (X.view === 'run' && X.run) X.run.sig.blur++; }
   window.addEventListener('blur', lost);
   document.addEventListener('visibilitychange', function () { if (document.hidden) lost(); });
