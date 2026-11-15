@@ -51,6 +51,7 @@
   async function boot() {
     try {
       if (!isAdmin()) { try { ST.admNames = {}; (await rpc('comm_admin_names') || []).forEach(function (x) { ST.admNames[String(x).trim()] = 1; }); ST.admIds = {}; (await rpc('comm_admin_ids') || []).forEach(function (x) { ST.admIds[x] = 1; }); } catch (e) {} }
+      if (window.EXAMS && window.EXAMS.visible() && role() === 'student') { try { await window.EXAMS.load(); } catch (e) {} }
       ST.tkr = []; if (isStaff()) { try { ST.tkr = (await rpc('tk_my_rounds')) || []; } catch (e) { ST.tkr = []; } }
       ST.access = null; if (isStaff() && !isAdmin()) { try { ST.access = await rpc('comm_my_access'); } catch (e) { ST.access = { weekly: true, cohorts: true }; } }
       if (isStaff()) ST.cohorts = (await rpc('comm_list_cohorts')) || [];
@@ -93,6 +94,7 @@
     if (ST.tab === 'poll') return loadPolls();
     if (ST.tab === 'week') return loadWeek();
     if (ST.tab === 'tk') return loadTk();
+    if (ST.tab === 'ex') return window.EXAMS && window.EXAMS.load();
     if (ST.tab === 'staff') {
       var rows = await rpc('comm_channel_list', { p_channel: ST.chan, p_limit: 60 });
       ST.items = (rows || []).slice().reverse();
@@ -149,6 +151,7 @@
     t.push(['sched', (blocked('sched') ? '🔒 ' : '') + T('الجدول', 'Schedule'), 0]);
     t.push(['poll', T('استبيانات', 'Polls'), !isAdmin() ? unvoted() : 0]);
     if (isStaff()) t.push(['tk', '🤝 ' + T('التكافل', 'Takaful'), tkTodo()]);
+    if (window.EXAMS && window.EXAMS.visible()) t.push(['ex', '📝 ' + T('الاختبارات', 'Exams'), window.EXAMS.badge()]);
     if (isStaff()) t.push(['week', (blocked('week') ? '🔒 ' : '') + T('جدول الدوام', 'Weekly roster'), 0]);
     if (isAdmin() && admSubs().length) t.push(['admin', T('إدارة', 'Admin'), 0]);
     t.push(['me', T('حسابي', 'My account'), 0]);
@@ -158,7 +161,7 @@
     var root = $c('#cm-root'); if (!root) return;
     var body = '';
     if (blocked(ST.tab)) body = lockHtml(); else if (ST.tab === 'dm') body = dmHtml(); else if (ST.tab === 'staff') body = staffHtml(); else if (ST.tab === 'ann') body = annHtml();
-    else if (ST.tab === 'home') body = homeHtml(); else if (ST.tab === 'sched') body = schedHtml(); else if (ST.tab === 'poll') body = pollHtml(); else if (ST.tab === 'week') body = weekHtml(); else if (ST.tab === 'tk') body = tkHtml();
+    else if (ST.tab === 'home') body = homeHtml(); else if (ST.tab === 'sched') body = schedHtml(); else if (ST.tab === 'poll') body = pollHtml(); else if (ST.tab === 'week') body = weekHtml(); else if (ST.tab === 'tk') body = tkHtml(); else if (ST.tab === 'ex') body = window.EXAMS ? window.EXAMS.html() : '';
     else if (ST.tab === 'admin') body = adminHtml(); else body = meHtml();
     root.innerHTML = '<header class="top"><h1>' + h(T('التواصل', 'Communication')) + '</h1></header>' + tabs() +
       (ST.err && body.indexOf('cm-comp') < 0 ? '<p class="pill bad">' + h(ST.err) + '</p>' : '') + body;
@@ -234,7 +237,7 @@
 
   var SUBPERM = { create: 'create', requests: 'requests', pending: 'reset', students: 'students', dups: 'students', staff: 'staff', assign: 'staff', cohorts: 'cohorts', admins: 'main' };
   function admSubs() { return Object.keys(SUBPERM).filter(function (k) { return CAN(SUBPERM[k]); }).map(function (k) { return [k]; }); }
-  var PERM_LIST = [['create', 'إنشاء حسابات', 'Create accounts'], ['requests', 'طلبات التسجيل', 'Sign-up requests'], ['students', 'الطلبة والشعب والتكرار', 'Students, cohorts, duplicates'], ['staff', 'الموظفون والأكاديميون', 'Staff & academics'], ['cohorts', 'إدارة الشعب', 'Manage cohorts'], ['reset', 'إعادة كلمات المرور', 'Reset passwords'], ['delete', 'حذف الحسابات', 'Delete accounts'], ['ann', 'الإعلانات والقنوات', 'Announcements & channels'], ['sched', 'جدول المحاضرات', 'Schedule'], ['poll', 'الاستبيانات', 'Polls'], ['weekly', 'جدول الدوام', 'Weekly roster'], ['logs', 'السجلات', 'Logs'], ['wipe', 'مسح الرسائل', 'Wipe messages'], ['proj', 'المشاريع الخارجية', 'External projects'], ['book', 'حجز المحاضرات', 'Lecture booking'], ['tk', 'التكافل (إدارة الدورات والمبالغ)', 'Takaful management'], ['iv', 'المقابلات', 'Interviews'], ['p_dash', 'منظّم الأعمال: لوحة التحكم', 'Planner: Dashboard'], ['p_cal', 'منظّم الأعمال: التقويم', 'Planner: Calendar'], ['p_appts', 'منظّم الأعمال: المواعيد', 'Planner: Appointments'], ['p_follow', 'منظّم الأعمال: متابعاتي اليومية', 'Planner: Daily follow-ups'], ['p_reports', 'منظّم الأعمال: التقارير والإنجازات', 'Planner: Reports']];
+  var PERM_LIST = [['create', 'إنشاء حسابات', 'Create accounts'], ['requests', 'طلبات التسجيل', 'Sign-up requests'], ['students', 'الطلبة والشعب والتكرار', 'Students, cohorts, duplicates'], ['staff', 'الموظفون والأكاديميون', 'Staff & academics'], ['cohorts', 'إدارة الشعب', 'Manage cohorts'], ['reset', 'إعادة كلمات المرور', 'Reset passwords'], ['delete', 'حذف الحسابات', 'Delete accounts'], ['ann', 'الإعلانات والقنوات', 'Announcements & channels'], ['sched', 'جدول المحاضرات', 'Schedule'], ['poll', 'الاستبيانات', 'Polls'], ['weekly', 'جدول الدوام', 'Weekly roster'], ['logs', 'السجلات', 'Logs'], ['wipe', 'مسح الرسائل', 'Wipe messages'], ['proj', 'المشاريع الخارجية', 'External projects'], ['book', 'حجز المحاضرات', 'Lecture booking'], ['tk', 'التكافل (إدارة الدورات والمبالغ)', 'Takaful management'], ['iv', 'المقابلات', 'Interviews'], ['ex', 'الاختبارات (إدارة وتصحيح)', 'Exams (manage & grade)'], ['p_dash', 'منظّم الأعمال: لوحة التحكم', 'Planner: Dashboard'], ['p_cal', 'منظّم الأعمال: التقويم', 'Planner: Calendar'], ['p_appts', 'منظّم الأعمال: المواعيد', 'Planner: Appointments'], ['p_follow', 'منظّم الأعمال: متابعاتي اليومية', 'Planner: Daily follow-ups'], ['p_reports', 'منظّم الأعمال: التقارير والإنجازات', 'Planner: Reports']];
   function normQ(t) { return String(t || '').toLowerCase().replace(/[\u064B-\u0652\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim(); }
   function staffTools(A) {
     var found = A.found ? '<div class="list" style="margin-top:6px">' + (A.found.map(function (x) {
@@ -465,6 +468,7 @@
     'cm-pw': function () { guard(async function () { var v = ($c('#cm-np').value || ''); if (v.length < 8) throw new Error(T('8 أحرف على الأقل', 'At least 8 characters')); var r = await sb().auth.updateUser({ password: v }); if (r.error) throw r.error; toast_(T('تم تغيير كلمة المرور', 'Password changed')); }); }
   };
   window.EXTRA_ACT = Object.assign(window.EXTRA_ACT || {}, ACTS);
+  window.COMM_API = { rpc: rpc, sb: sb, ar: ar, role: role, CAN: CAN, draw: function () { draw(); }, me: me };
 
   async function searchRecips() {
     try { ST.recips = (await rpc('search_communication_recipients', { search_text: ST.q || '', page_size: 40 })) || []; } catch (e) { ST.err = e.message; }
