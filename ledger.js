@@ -97,7 +97,7 @@
       '<div style="height:7px;border-radius:5px;background:rgba(127,127,127,.2);margin:6px 0"><div style="height:7px;border-radius:5px;background:var(--accent,#0b8a97);width:' + pc + '%"></div></div>' +
       (a.note ? '<div class="sub">' + h(a.note) + '</div>' : '') + payForm(a) +
       (open ? '<div class="list" style="margin-top:6px">' + (pays.map(function (p) {
-        return '<div class="row"><div class="main"><div class="t">' + h(money(p.amount, a.currency)) + '</div><div class="sub">' + h(dayDate(p.paid_at)) + (p.note ? ' · ' + h(p.note) : '') + '</div></div><div class="act"><button class="btn sm pri" data-act="lg-receipt" data-id="' + p.id + '">' + h(T('وصل', 'Receipt')) + '</button> <button class="btn sm" data-act="lg-receipt-word" data-id="' + p.id + '">Word</button> <button class="btn sm" data-act="lg-pay-edit" data-id="' + p.id + '">' + h(T('تعديل', 'Edit')) + '</button> <button class="btn sm bad" data-act="lg-pay-del" data-id="' + p.id + '" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button></div></div>';
+        return '<div class="row"><div class="main"><div class="t">' + h(money(p.amount, a.currency)) + '</div><div class="sub">' + h(dayDate(p.paid_at)) + (p.note ? ' · ' + h(p.note) : '') + '</div></div><div class="act"><button class="btn sm pri" data-act="lg-receipt" data-id="' + p.id + '">' + h(T('وصل', 'Receipt')) + '</button> <button class="btn sm" data-act="lg-receipt-word" data-id="' + p.id + '">Word</button> <button class="btn sm" data-act="lg-receipt-img" data-id="' + p.id + '">' + h(T('صورة', 'Image')) + '</button> <button class="btn sm" data-act="lg-pay-edit" data-id="' + p.id + '">' + h(T('تعديل', 'Edit')) + '</button> <button class="btn sm bad" data-act="lg-pay-del" data-id="' + p.id + '" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button></div></div>';
       }).join('') || '<div class="empty">' + h(T('لا دفعات بعد', 'No payments yet')) + '</div>') + '</div>' : '') + '</div>';
   }
   function reportData() {
@@ -207,7 +207,12 @@
     var remLine = rem > 0.0001 ? 'ويتبقى <b>' + fmt(rem) + '</b> ' + esc(cur) + (isIn ? ' لدى السيد/ ' + who : ' في ذمتي للسيد/ ' + who) + '.' : 'وبهذه الدفعة يكون المبلغ قد سُدّد بالكامل.';
     var d = p.paid_at, day = '';
     try { day = new Date(d + 'T00:00:00').toLocaleDateString('ar', { weekday: 'long' }); } catch (e) {}
-    var sig = pr.sig ? '<img src="' + pr.sig + '" alt="" style="height:60px;vertical-align:middle">' : '';
+    var sig = pr.sig ? '<img src="' + pr.sig + '" alt="" style="height:56px;max-width:210px;vertical-align:bottom">' : '';
+    /* خانة توقيع: السطر الأول «العنوان / الاسم» وتحته مباشرة مساحة التوقيع على خط، بنفس العرض ومحاذاة الوسط للطرفين */
+    var signBox = function (label, nm, img) {
+      return '<td style="width:50%;text-align:center;vertical-align:top;padding:4px 10px">' + label + ' / <b>' + nm + '</b>' +
+        '<div style="margin:8px auto 0;width:82%;height:64px;border-bottom:1px solid #444;text-align:center">' + (img || '') + '</div></td>';
+    };
     var box = 'border:2px solid #12304D;padding:22px 26px;';
     return '<div dir="rtl" style="font-family:Arial,Tahoma,sans-serif;max-width:680px;margin:0 auto;' + box + 'line-height:2.1;font-size:15pt">' +
       '<table width="100%" style="width:100%"><tr><td style="font-size:12pt;color:#555">دفعة رقم ' + (idx + 1) + '</td><td style="text-align:left;font-size:12pt;color:#555">التاريخ: ' + esc(day) + ' ' + esc(d) + '</td></tr></table>' +
@@ -215,14 +220,43 @@
       '<p style="margin:0 0 8px;text-align:justify">' + para + '</p>' +
       landBlock(a) + '<table dir="rtl" width="100%" border="1" cellspacing="0" cellpadding="5" style="width:100%;border-collapse:collapse;font-size:13pt;text-align:center;margin:6px 0 10px"><tr style="background:#eef3f7"><td>الإجمالي الأصلي</td><td>المدفوع سابقاً</td><td>هذه الدفعة</td><td>المتبقي</td></tr><tr><td>' + fmt(a.total) + ' ' + esc(cur) + '</td><td>' + fmt(upto - num(p.amount)) + ' ' + esc(cur) + '</td><td><b>' + fmt(p.amount) + ' ' + esc(cur) + '</b></td><td><b>' + fmt(rem) + ' ' + esc(cur) + '</b></td></tr></table>' +
       '<p style="margin:0 0 14px">' + remLine + '</p>' +
-      '<table width="100%" style="width:100%;margin-top:10px"><tr><td style="width:60%">' + (isIn ? 'توقيع المستلم' : 'توقيع الدافع') + ' / <b>' + name + '</b></td><td>' + sig + '</td></tr>' +
-      (isIn ? '' : '<tr><td>توقيع المستلم / ' + who + '</td><td>..............................</td></tr>') +
-      '<tr><td colspan="2" style="padding-top:8px">التاريخ: ' + esc(d) + '</td></tr>' +
+      '<table width="100%" style="width:100%;margin-top:10px;border-collapse:collapse"><tr>' +
+      (isIn ? signBox('توقيع المستلم', name, sig) + '<td style="width:50%;text-align:center;vertical-align:top;padding:4px 10px">التاريخ: ' + esc(d) + '</td>'
+            : signBox('توقيع الدافع', name, sig) + signBox('توقيع المستلم', who, '')) + '</tr>' +
+      (isIn ? '' : '<tr><td colspan="2" style="padding-top:8px">التاريخ: ' + esc(d) + '</td></tr>') +
       '<tr><td colspan="2" style="padding-top:14px">توقيع الشهود /</td></tr><tr><td colspan="2">1) ..................................................</td></tr><tr><td colspan="2">2) ..................................................</td></tr></table></div>';
+  }
+  /* تحويل الوصل إلى صورة PNG بلا مكتبات: يرسم المتصفح الوصل نفسه (فتبقى العربية سليمة) داخل SVG ثم إلى canvas */
+  window.lgReceiptPng = function (html) {
+    return new Promise(function (resolve, reject) {
+      var W = 760, host = document.createElement('div'), snap = document.createElement('div');
+      host.style.cssText = 'position:fixed;left:-99999px;top:0;width:' + W + 'px;overflow:hidden';   /* الحاوية الخارجية خارج الشاشة وغير مُسلسَلة */
+      snap.style.cssText = 'width:' + W + 'px;background:#fff;margin:0;padding:0';
+      snap.innerHTML = html; host.appendChild(snap); document.body.appendChild(host);
+      var H = Math.max(snap.offsetHeight, snap.scrollHeight) + 30, xml = new XMLSerializer().serializeToString(snap);
+      document.body.removeChild(host);
+      var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '"><foreignObject x="0" y="0" width="' + W + '" height="' + H + '">' + xml + '</foreignObject></svg>';
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var k = 2, c = document.createElement('canvas'); c.width = W * k; c.height = H * k;
+          var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.scale(k, k); x.drawImage(img, 0, 0);
+          resolve(c.toDataURL('image/png'));
+        } catch (e) { reject(new Error(T('المتصفح لا يسمح بتصدير الصورة هنا. استخدم زر PDF.', 'This browser cannot export the image here. Use the PDF button.'))); }
+      };
+      img.onerror = function () { reject(new Error(T('تعذّر تكوين الصورة', 'Could not build the image'))); };
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    });
+  };
+  function receiptPngDownload(p) {
+    var a = findAcc(p.account_id); if (!a) return Promise.resolve();
+    return window.lgReceiptPng('<div style="background:#fff;padding:12px">' + receiptHtml(p, true) + '</div>').then(function (u) {
+      var l = document.createElement('a'); l.href = u; l.download = 'receipt-' + p.paid_at + '.png'; document.body.appendChild(l); l.click(); l.remove();
+    });
   }
   function receiptWindow(p) {
     var w = window.open('', '_blank'); if (!w) { toast_(T('اسمح بالنوافذ المنبثقة لعرض الوصل', 'Allow pop-ups to view the receipt')); return; }
-    w.document.write('<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>وصل</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:16px;background:#fff;color:#000}.who{border-bottom:1px dashed #0b8a97;outline:none;padding:0 3px}@media print{.who{border:0}}@media print{.np{display:none}body{margin:0}}</style></head><body><div class="np" style="text-align:center;margin-bottom:12px"><button onclick="window.print()" style="padding:8px 18px;font-size:15px">طباعة / حفظ PDF</button><div style="font-size:13px;color:#555;margin-top:6px">للتعديل: اضغط على اسم الشخص داخل الوصل واكتب أي اسم، ثم اطبع.</div></div>' + receiptHtml(p) + '<script>document.addEventListener("input",function(e){var t=e.target.closest&&e.target.closest(".who");if(!t)return;document.querySelectorAll(".who").forEach(function(x){if(x!==t)x.textContent=t.textContent})})<\/script></body></html>');
+    w.document.write('<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>وصل</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:16px;background:#fff;color:#000}.who{border-bottom:1px dashed #0b8a97;outline:none;padding:0 3px}@media print{.who{border:0}}@media print{.np{display:none}body{margin:0}}</style></head><body><div class="np" style="text-align:center;margin-bottom:12px"><button onclick="window.print()" style="padding:8px 18px;font-size:15px">طباعة / حفظ PDF</button> <button onclick="saveImg()" style="padding:8px 18px;font-size:15px">🖼 حفظ كصورة PNG</button><div style="font-size:13px;color:#555;margin-top:6px">للتعديل: اضغط على اسم الشخص داخل الوصل واكتب أي اسم، ثم اطبع.</div></div><div id="rc">' + receiptHtml(p) + '</div><script>function saveImg(){var o=window.opener;if(!o||!o.lgReceiptPng){alert("أعد فتح الوصل من التطبيق ثم حاول مرة أخرى");return}var c=document.getElementById("rc").cloneNode(true);c.querySelectorAll(".who").forEach(function(x){x.removeAttribute("contenteditable")});o.lgReceiptPng("<div style=background:#fff;padding:12px>"+c.innerHTML+"</div>").then(function(u){var a=document.createElement("a");a.href=u;a.download="receipt-' + p.paid_at + '.png";document.body.appendChild(a);a.click();a.remove()}).catch(function(e){alert(e&&e.message?e.message:"تعذّر حفظ الصورة")})}document.addEventListener("input",function(e){var t=e.target.closest&&e.target.closest(".who");if(!t)return;document.querySelectorAll(".who").forEach(function(x){if(x!==t)x.textContent=t.textContent})})<\/script></body></html>');
     w.document.close();
   }
   function receiptWord(p) {
@@ -267,6 +301,7 @@
     },
     'lg-pay-del': function (el) { guard(async function () { var r = await sb().from('ledger_payments').delete().eq('id', el.dataset.id); if (r.error) throw r.error; await load2(); }); },
     'lg-receipt': function (el) { var p = findPay(el.dataset.id); if (p) receiptWindow(p); },
+    'lg-receipt-img': function (el) { var p = findPay(el.dataset.id); if (p) receiptPngDownload(p).catch(function (e) { L.err = (e && e.message) || String(e); draw(); }); },
     'lg-receipt-word': function (el) { var p = findPay(el.dataset.id); if (p) saveBlob('receipt-' + p.paid_at + '.doc', new Blob(['﻿', receiptWord(p)], { type: 'application/msword;charset=utf-8' })); },
     'lg-land-fill': function () { var set = function (id, v) { var e = $q('#' + id); if (e) e.value = v; }; set('lf-plot', '2'); set('lf-parcel', '2346'); set('lf-area', '268 م²'); set('lf-loc', 'أراضي النصيرات - قنى دير البلح'); set('lf-cdate', '2023-09-30'); set('lf-desc', 'قسط شهري من باقي بيع قطعة أرض مساحتها (268) متر مربع من أراضي النصيرات - قنى دير البلح، قسيمة رقم (2)، قطعة رقم (2346)، وذلك حسب الاتفاق الذي نص عليه عقد البيع بين الطرفين والذي أبرم وحرر بتاريخ 30-09-2023'); },
     'lg-prof-open': function () { L.profForm = true; draw(); },

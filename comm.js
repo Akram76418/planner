@@ -136,6 +136,14 @@
     }
     return P;
   }
+  /* مُلتقط ملفات ثابت لصفحات الإدارة: التحديث الدوري (softDraw كل 8 ثوانٍ) كان يعيد رسم الصفحة ويحذف خانة الملف أثناء فتح نافذة الاختيار، فلا يصل الملف ولا تظهر أي رسالة */
+  function filePicker(accept, cb) {
+    var P = document.getElementById('cm-picker2');
+    if (!P) { P = document.createElement('input'); P.type = 'file'; P.id = 'cm-picker2'; P.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0'; document.body.appendChild(P); }
+    P.accept = accept;
+    P.onchange = function () { var f = P.files && P.files[0]; P.value = ''; if (f) cb(f); };
+    P.click();
+  }
   function fileChip(m) { return m.file_path ? '<div><button class="btn sm" data-act="cm-file" data-p="' + h(m.file_path) + '">📎 ' + h(m.file_name || 'file') + ' · ' + size(m.file_size) + '</button></div>' : ''; }
 
   /* ---------- drawing ---------- */
@@ -275,7 +283,7 @@
     var body = '';
     if (A.sub === 'create') {
       body = '<p class="sub">' + h(T('ألصق سطراً لكل شخص: الرقم الأكاديمي (للموظف: الرقم الوظيفي) ثم فاصلة أو Tab ثم الاسم. كلمة المرور الافتراضية 12345678 ويُلزَم تغييرها عند أول دخول.', 'One person per line: academic number, comma or Tab, name. Default password 12345678; they must change it at first sign-in.')) + '</p>' +
-        '<div style="margin:8px 0"><label class="btn" style="cursor:pointer">📄 ' + h(T('رفع ملف Excel أو CSV', 'Upload Excel or CSV')) + '<input type="file" hidden accept=".xlsx,.xls,.csv" data-cm="xlsx"></label> <span class="sub">' + h(T('أعمدة الملف: الرقم الجامعي، الاسم (اختياري: التخصص، الشعبة)', 'Columns: number, name (optional: major, cohort)')) + '</span></div>' +
+        '<div style="margin:8px 0"><button type="button" class="btn" data-act="cm-pick-xlsx">📄 ' + h(T('رفع ملف Excel أو CSV', 'Upload Excel or CSV')) + '</button> <span class="sub">' + h(T('أعمدة الملف: الرقم الجامعي، الاسم (اختياري: التخصص، الشعبة)', 'Columns: number, name (optional: major, cohort)')) + '</span></div>' +
         (A.rows ? '<p class="pill ok">' + h(A.rowsInfo) + ' <button class="btn sm" data-act="cm-clearrows">✕</button></p>' : '') +
         (A.sheet ? sheetHtml() : '') +
         '<textarea id="ac-list" class="cm-ta" data-cm="cf" data-k="list" placeholder="20250071, الاسم"' + (A.rows ? ' disabled' : '') + '>' + h(A.clist || '') + '</textarea>' +
@@ -341,6 +349,8 @@
     'cm-back': function () { ST.conv = null; draw(); },
     'cm-file': function (el) { openFile(el.dataset.p); },
     'cm-pick': function () { picker().click(); },
+    'cm-pick-xlsx': function () { filePicker('.xlsx,.xls,.csv,.txt', readSheet); },
+    'cm-pick-wk': function () { filePicker('.xlsx,.xls,.csv,.txt', importWeek); },
     'cm-unfile': function () { ST.file = null; draw(); },
     'cm-send': function () { send(); },
     'cm-sub': function (el) { ST.admin.sub = el.dataset.s; draw(); guard(loadTab); },
@@ -812,7 +822,7 @@
     return '<div class="card"><h2>' + h(T('الجدول الأسبوعي للمحاضرين والموظفين', 'Weekly schedule: faculty & staff')) + '</h2>' +
       '<p class="sub">' + h(adm ? T('اكتب مكان عمل كل موظف في كل يوم (مثل: الكلية، مستشفى الشفاء، إجازة). يُحفظ التعديل تلقائياً عند الخروج من الخانة.', 'Type each person\'s workplace per day. Edits save automatically when you leave a cell.') : T('جدول أماكن العمل الأسبوعي.', 'Weekly workplace table.')) + '</p>' +
       (ST.week.note ? '<p class="pill ok">' + h(ST.week.note) + '</p>' : '') +
-      '<div class="tabs" style="margin:8px 0">' + (adm ? '<button class="btn pri" data-act="wk-add">+ ' + h(T('إضافة صف', 'Add row')) + '</button><button class="btn" data-act="wk-fill">' + h(T('إضافة كل الموظفين المسجلين', 'Add all registered staff')) + '</button><label class="btn" style="cursor:pointer">⬆ ' + h(T('استيراد من Excel', 'Import from Excel')) + '<input type="file" hidden accept=".xlsx,.xls,.csv" data-cm="wkxlsx"></label><button class="btn sm" data-act="wk-imp-hint">?</button>' : '') +
+      '<div class="tabs" style="margin:8px 0">' + (adm ? '<button class="btn pri" data-act="wk-add">+ ' + h(T('إضافة صف', 'Add row')) + '</button><button class="btn" data-act="wk-fill">' + h(T('إضافة كل الموظفين المسجلين', 'Add all registered staff')) + '</button><button type="button" class="btn" data-act="cm-pick-wk">⬆ ' + h(T('استيراد من Excel', 'Import from Excel')) + '</button><button class="btn sm" data-act="wk-imp-hint">?</button>' : '') +
       '<button class="btn" data-act="wk-export">⬇ ' + h(T('تصدير Word', 'Export to Word')) + '</button>' + (adm && rows.length ? '<button class="btn sm bad" data-act="wk-clear" data-confirm="1" data-confirm-text="اضغط لتأكيد المسح">' + h(T('مسح الجدول', 'Clear table')) + '</button>' : '') + '</div>' +
       '<div style="overflow-x:auto"><table class="cm-wk" style="border-collapse:collapse;width:100%">' + head + (body || '<tr><td colspan="10" class="empty">' + h(T('لا بيانات. أضف صفاً أو أضف الموظفين المسجلين.', 'No rows yet.')) + '</td></tr>') + '</table></div></div>';
   }
