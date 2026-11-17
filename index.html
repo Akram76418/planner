@@ -52,6 +52,7 @@ main{min-width:0}
 .g4{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 .g2{grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr))}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+.sc{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:10px;margin-bottom:14px}.sc button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:14px 6px;min-height:88px;border-radius:14px;background:var(--surface);border:1px solid var(--line);color:var(--fg);font:inherit;font-size:13px;text-align:center;cursor:pointer;line-height:1.3}.sc button:hover,.sc button:focus-visible{border-color:var(--accent,#0b8a97);outline:none}.sc button svg{width:26px;height:26px;opacity:.9}
 .card h2{font-size:16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:8px}
 .stat{display:flex;flex-direction:column;gap:2px}
 .stat b{font-family:var(--f-disp);font-size:26px;font-variant-numeric:tabular-nums;line-height:1.2}
@@ -649,6 +650,7 @@ function vDash(){
   const list=(arr,fn,max)=>arr.length?`<div class="list">${arr.slice(0,max||99).map(fn).join('')}</div>`:`<div class="empty">${t('noItems')}</div>`;
   return head(fmtD(d,{weekday:'long',day:'numeric',month:'long',year:'numeric'}),t('app'))+
   (()=>{const m=window.syncBanner?window.syncBanner():(UI.persisted?t('unsynced'):(L()==='ar'?'تعذّر حفظ البيانات في هذا المتصفح. الحفظ المحلي غير متاح الآن.':'Local storage is unavailable in this browser, so nothing is being saved.'));return m?`<div class="banner noprint"><span>${esc(m)}</span></div>`:''})()+
+  (()=>{const vs=views().filter(v=>v!=='dash'&&v!=='logs');return vs.length>1?`<div class="sc" role="navigation" aria-label="${esc(t('dash'))}">${vs.map(v=>`<button data-act="go" data-v="${v}">${ic(v,26)}<span>${esc(t(v))}</span></button>`).join('')}</div>`:''})()+
   `<div class="grid g4" style="margin-bottom:14px">
     <div class="card stat"><b>${todays.length}</b><span>${t('dToday')}</span></div>
     <div class="card stat"><b>${next?esc(next.start||'—'):'—'}</b><span>${t('dNext')}${next?': '+esc(next.title):''}</span></div>
@@ -791,6 +793,7 @@ function vSettings(){
    <div class="tabs">${['auto','light','dark'].map(m=>`<button data-act="set-theme" data-m="${m}" aria-pressed="${S.meta.theme===m}">${t(m)}</button>`).join('')}</div></section>
   <section class="card"><h2>${t('settingsNotif')}</h2><p class="sub">${t('notifState')}: <b>${esc(perm)}</b></p><div class="tabs"><button class="btn pri" data-act="notif-allow">${t('allow')}</button><button class="btn" data-act="notif-test">${t('test')}</button></div><p class="sub">${t('notifNote')}</p></section>
   <section class="card"><h2>${t('backup')}</h2><div class="tabs"><button class="btn" data-act="export-json">${IN_ARTIFACT?t('copyCsv').replace('CSV','JSON'):t('exportJson')}</button><label class="btn" style="flex-direction:row;color:var(--fg)">${t('importJson')}<input type="file" id="imp" accept="application/json" hidden></label></div><p class="sub">${t('syncNote')}</p></section>
+  ${window.CAN&&window.CAN('logs')?`<section class="card"><h2>${t('logs')}</h2><p class="sub">${L()==='ar'?'سجل العمليات والتغييرات على النظام.':'Activity and change log.'}</p><button class="btn pri" data-act="go" data-v="logs">${ic('logs',18)}<span>${t('logs')}</span></button></section>`:''}
   ${window.accountSection?window.accountSection():''}${window.adminToolsSection?window.adminToolsSection():''}<section class="card"><h2>${t('wipe')}</h2><button class="btn bad" data-act="wipe" data-confirm="1">${t('wipe')}</button></section></div>`;
 }
 
@@ -800,7 +803,8 @@ function render(){
   const th=S.meta.theme;if(th==='auto')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',th);
   const VIEWS=views();if(!VIEWS.includes(UI.view))UI.view=VIEWS[0];
   const signedIn=!!(window.PLANNER_AUTH&&window.PLANNER_AUTH.user&&window.PLANNER_AUTH.user());
-  const navHtml=VIEWS.map(v=>`<button data-act="go" data-v="${v}" ${UI.view===v?'aria-current="page"':''}>${ic(v)}<span>${t(v)}</span></button>`).join('');
+  const curNav=UI.view==='logs'?'settings':UI.view;
+  const navHtml=VIEWS.filter(v=>v!=='logs').map(v=>`<button data-act="go" data-v="${v}" ${curNav===v?'aria-current="page"':''}>${ic(v)}<span>${t(v)}</span></button>`).join('');
   $('#side').innerHTML=`<div class="brand"><img src="logo.png" alt="" width="46" height="46" style="border-radius:50%;background:#fff;padding:2px;display:block;margin-bottom:8px">${esc(window.COMM_ONLY?t('comm'):t('app'))}<small>${esc(window.COMM_ONLY?'':t('appEn'))}</small></div><div class="nav">${navHtml}</div>`;
   $('#bottom').innerHTML=VIEWS.filter(v=>v!=='logs'&&v!=='ledger'&&v!=='book'&&((v!=='iv'&&v!=='ex')||window.COMM_ONLY)).map(v=>`<button data-act="go" data-v="${v}" ${UI.view===v?'aria-current="page"':''}>${ic(v,22)}<span>${esc(t(v).split(' ')[0])}</span></button>`).join('');
   $('#mtitle').textContent=t(UI.view);

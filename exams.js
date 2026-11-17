@@ -83,7 +83,7 @@
       if (e.closes_at) meta.push(T('يُغلق ', 'Closes ') + fdt(e.closes_at));
       return '<div class="row"><div class="main"><div class="t">' + h(e.title) + ' <span class="pill">' + h(STL[e.state] ? STL[e.state][api().ar() ? 0 : 1] : e.state) + '</span></div><div class="sub">' + h(meta.join(' · ')) + '</div>' + (e.description ? '<div class="sub">' + h(e.description) + '</div>' : '') + '</div><div class="act">' + btn + '</div></div>';
     }).join('');
-    return '<div class="card"><h2>' + h(T('الاختبارات', 'Exams')) + '</h2><div class="list">' + (rows || '<div class="empty">' + h(T('لا توجد اختبارات متاحة لك', 'No exams available')) + '</div>') + '</div></div>';
+    return '<div class="card"><h2>' + h(T('الاختبارات', 'Exams')) + '</h2><div class="list">' + (rows || '<div class="empty">' + h(T('لا توجد اختبارات متاحة لك الآن.', 'No exams available to you right now.')) + '<div class="sub" style="margin-top:6px">' + h(T('إن كنت تنتظر اختباراً فتأكد من الإدارة أن الاختبار منشور وأن حسابك مضاف إلى شعبته. وإن ظهرت نافذة تغيير كلمة المرور فأكمل تغييرها أولاً.', 'If you expect an exam, ask the admin to confirm it is published and your account is in its cohort. If a change-password window appears, complete it first.')) + '</div></div>') + '</div></div>';
   }
 
   /* ---- الطالب: الحل ---- */
@@ -174,7 +174,7 @@
     var rows = (X.list || []).map(function (e) {
       var nq = e.ex_questions && e.ex_questions[0] ? e.ex_questions[0].count : 0;
       return '<div class="row" style="align-items:flex-start"><div class="main"><div class="t">' + h(e.title) + ' ' + (e.published ? '<span class="pill ok">' + h(T('منشور', 'Published')) + '</span>' : '<span class="pill">' + h(T('مسودة', 'Draft')) + '</span>') + (e.released ? ' <span class="pill ok">' + h(T('النتائج مُطلقة', 'Results released')) + '</span>' : '') + '</div>' +
-        '<div class="sub">' + nq + ' ' + h(T('سؤال', 'questions')) + ' · ' + h(T('الشعب: ', 'Cohorts: ')) + h(cohNames(e.cohort_ids)) + '</div></div>' +
+        '<div class="sub">' + nq + ' ' + h(T('سؤال', 'questions')) + ' · ' + h(T('الشعب: ', 'Cohorts: ')) + h(cohNames(e.cohort_ids)) + audHtml(e) + '</div>' + warnHtml(e, nq) + '</div>' +
         '<div class="act" style="display:flex;gap:4px;flex-wrap:wrap"><button class="btn sm" data-act="xm-edit" data-id="' + e.id + '">' + h(T('تحرير', 'Edit')) + '</button><button class="btn sm pri" data-act="xm-rev" data-id="' + e.id + '">' + h(T('المراجعة والنتائج', 'Review & results')) + '</button>' +
         '<button class="btn sm" data-act="xm-pub" data-id="' + e.id + '">' + h(e.published ? T('إلغاء النشر', 'Unpublish') : T('نشر', 'Publish')) + '</button><button class="btn sm" data-act="xm-rel" data-id="' + e.id + '">' + h(e.released ? T('إخفاء النتائج', 'Hide results') : T('إطلاق النتائج للطلبة', 'Release results')) + '</button>' +
         '<button class="btn sm bad" data-act="xm-del" data-id="' + e.id + '" data-confirm="1" data-confirm-text="' + h(T('اضغط لتأكيد الحذف النهائي', 'Click to confirm')) + '">' + h(T('حذف', 'Delete')) + '</button></div></div>';
@@ -201,6 +201,16 @@
     }).join('');
     return '<details style="margin:8px 0"><summary class="sub">🌐 ' + h(T('الطلبة الخارجيون (من جامعة أخرى): عزلهم عن بيانات الكلية', 'External students (other university): isolate from college data')) + '</summary>' +
       '<p class="sub">' + h(T('الشعبة المعلَّمة «خارجية» لا يظهر أعضاؤها في قوائم الطلبة ولا البحث ولا التكرار ولا استبيانات الطلبة، ولا يراسلون أحداً ولا يراسلهم أحد. يرون الاختبارات المنشورة لشعبتهم فقط. احذف حساباتهم بعد انتهاء الاختبار.', 'Members of an external cohort are hidden from student lists, search, duplicates and student polls, and cannot message or be messaged. They only see exams published to their cohort. Delete their accounts after the exam.')) + '</p><div class="list">' + (rows || '<div class="empty">—</div>') + '</div></details>';
+  }
+  function audCount(e) { if (!X.ext) return null; var m = {}; X.ext.forEach(function (c) { m[c.id] = Number(c.members) || 0; }); return (e.cohort_ids || []).reduce(function (s, i) { return s + (m[i] || 0); }, 0); }
+  function audHtml(e) { var n = audCount(e); return n == null ? '' : ' · ' + h(T('الطلبة المستهدفون: ', 'Target students: ')) + n; }
+  function warnHtml(e, nq) {
+    var w = [], n = audCount(e);
+    if (!nq) w.push(T('لا أسئلة بعد', 'no questions yet'));
+    if (!(e.cohort_ids || []).length) w.push(T('لم تُختر شعبة', 'no cohort selected'));
+    else if (n === 0) w.push(T('لا طلبة في الشعب المختارة: لن يرى أحد الاختبار. انقل الطلبة إلى الشعبة من «التواصل ← إدارة ← الطلبة والشعب».', 'the selected cohorts have no students, so nobody will see the exam. Move students into the cohort from Communication → Admin → Students & cohorts.'));
+    if (!e.published) w.push(T('مسودة: لا يراها الطلبة حتى تضغط «نشر»', 'draft: students cannot see it until you press Publish'));
+    return w.length ? '<div class="pill warn" style="margin-top:4px;white-space:normal">⚠ ' + h(w.join(' · ')) + '</div>' : '';
   }
   function cohNames(ids) { var m = {}; (X.cohorts || []).forEach(function (c) { m[c.id] = c.name; }); return (ids || []).map(function (i) { return m[i] || i; }).join('، ') || '—'; }
 

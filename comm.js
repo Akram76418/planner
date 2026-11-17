@@ -93,6 +93,7 @@
     if (ST.tab === 'poll') return loadPolls();
     if (ST.tab === 'week') return loadWeek();
     if (ST.tab === 'tk') return loadTk();
+    if (ST.tab === 'mystu') return loadMyStu();
     if (ST.tab === 'staff') {
       var rows = await rpc('comm_channel_list', { p_channel: ST.chan, p_limit: 60 });
       ST.items = (rows || []).slice().reverse();
@@ -157,6 +158,7 @@
     t.push(['sched', (blocked('sched') ? '🔒 ' : '') + T('الجدول', 'Schedule'), 0]);
     t.push(['poll', T('استبيانات', 'Polls'), !isAdmin() ? unvoted() : 0]);
     if (isStaff()) t.push(['tk', '🤝 ' + T('التكافل', 'Takaful'), tkTodo()]);
+    if (role() === 'professor') t.push(['mystu', '👥 ' + T('طلبة شعبتي', 'My students'), 0]);
     if (isStaff()) t.push(['week', (blocked('week') ? '🔒 ' : '') + T('جدول الدوام', 'Weekly roster'), 0]);
     if (isAdmin() && admSubs().length) t.push(['admin', T('إدارة', 'Admin'), 0]);
     t.push(['me', T('حسابي', 'My account'), 0]);
@@ -166,7 +168,7 @@
     var root = $c('#cm-root'); if (!root) return;
     var body = '';
     if (blocked(ST.tab)) body = lockHtml(); else if (ST.tab === 'dm') body = dmHtml(); else if (ST.tab === 'staff') body = staffHtml(); else if (ST.tab === 'ann') body = annHtml();
-    else if (ST.tab === 'home') body = homeHtml(); else if (ST.tab === 'sched') body = schedHtml(); else if (ST.tab === 'poll') body = pollHtml(); else if (ST.tab === 'week') body = weekHtml(); else if (ST.tab === 'tk') body = tkHtml();
+    else if (ST.tab === 'home') body = homeHtml(); else if (ST.tab === 'sched') body = schedHtml(); else if (ST.tab === 'poll') body = pollHtml(); else if (ST.tab === 'week') body = weekHtml(); else if (ST.tab === 'tk') body = tkHtml(); else if (ST.tab === 'mystu') body = myStuHtml();
     else if (ST.tab === 'admin') body = adminHtml(); else body = meHtml();
     root.innerHTML = '<header class="top"><h1>' + h(T('التواصل', 'Communication')) + '</h1></header>' + tabs() +
       (ST.err && body.indexOf('cm-comp') < 0 ? '<p class="pill bad">' + h(ST.err) + '</p>' : '') + body;
@@ -288,12 +290,14 @@
         (A.sheet ? sheetHtml() : '') +
         '<textarea id="ac-list" class="cm-ta" data-cm="cf" data-k="list" placeholder="20250071, الاسم"' + (A.rows ? ' disabled' : '') + '>' + h(A.clist || '') + '</textarea>' +
         '<label class="ck" style="margin:6px 0"><input id="ac-same" type="checkbox" data-cm="cf" data-k="same"' + (A.csame ? ' checked' : '') + '> ' + h(T('السماح بأسماء متشابهة (الافتراضي: يُتخطى من اسمه موجود)', 'Allow similar names (default: skip existing names)')) + '</label>' +
+        '<div class="card" style="margin:6px 0;padding:8px 10px"><label class="ck"><input id="ac-pfx" type="checkbox" data-cm="cf" data-k="pfx"' + (A.cpfx ? ' checked' : '') + '> ' + h(T('طلبة من جامعة أخرى: إن كان الرقم الجامعي موجوداً لطالب آخر في الكلية، أنشئ الحساب برقم يبدأ بالبادئة:', 'Students from another university: if the number already belongs to another student, create the account with this prefix:')) + '</label> <input id="ac-pfxv" data-cm="cf" data-k="pfxv" value="' + h(A.cpfxv || 'EX') + '" maxlength="4" style="width:70px" dir="ltr"><div class="sub">' + h(T('يدخل الطالب بالرقم مع البادئة، مثل EX120260051. من أُنشئ سابقاً بنفس الاسم يُتخطى ولا يتكرر. تُعرض لك أرقام الدخول الجديدة لتسلّمها لهم.', 'The student logs in with the prefixed number, e.g. EX120260051. Accounts already created with the same name are skipped. You get the new login numbers to hand out.')) + '</div></div>' +
         '<div class="form"><label>' + h(T('النوع', 'Type')) + '<select id="ac-role" data-cm="cf" data-k="role">' + ['student', 'staff', 'professor'].map(function (k) { return '<option value="' + k + '"' + ((A.crole || 'student') === k ? ' selected' : '') + '>' + h(ROLE[k][ar() ? 0 : 1]) + '</option>'; }).join('') + '</select></label>' +
         '<label>' + h(T('التخصص (اختياري)', 'Major (optional)')) + '<input id="ac-major" data-cm="cf" data-k="major" value="' + h(A.cmajor || '') + '"></label>' +
         '<label>' + h(T('الشعبة (للطلبة)', 'Cohort (students)')) + '<select id="ac-coh" data-cm="cf" data-k="coh"><option value="">—</option>' + cohOpt(Number(A.ccoh) || 0) + '</select></label>' +
         '<label>' + h(T('تصنيف (للموظفين)', 'Category (staff)')) + '<select id="ac-cat" data-cm="cf" data-k="cat"><option value="">—</option>' + ['academic', 'practical', 'admin'].map(function (k) { return '<option value="' + k + '"' + (A.ccat === k ? ' selected' : '') + '>' + h(CHAN[k][ar() ? 0 : 1]) + '</option>'; }).join('') + '</select></label></div>' +
         '<button class="btn pri" data-act="cm-create"' + (ST.busy ? ' disabled' : '') + '>' + h(ST.busy ? T('جارٍ الإنشاء…', 'Creating…') : T('إنشاء الحسابات', 'Create accounts')) + '</button>' +
-        (A.res ? '<p class="sub">' + h(A.res) + '</p>' : '');
+        (A.res ? '<p class="sub">' + h(A.res) + '</p>' : '') +
+        (A.pfxList && A.pfxList.length ? '<div class="card" style="margin:6px 0"><b>' + h(T('أرقام الدخول الجديدة (ببادئة): ', 'New prefixed logins: ') + A.pfxList.length) + '</b><div class="sub" dir="ltr" style="white-space:pre-wrap">' + h(A.pfxList.slice(0, 40).map(function (x) { return x.login + '  ←  ' + x.name; }).join('\n')) + '</div><button class="btn sm" data-act="cm-pfx-csv">⬇ ' + h(T('تنزيل القائمة (CSV)', 'Download list (CSV)')) + '</button></div>' : '');
     } else if (A.sub === 'requests') {
       body = '<p class="sub">' + h(T('عند الموافقة يُنشأ الحساب بكلمة المرور 12345678 ويُلزَم الطالب بتغييرها.', 'On approval the account is created with password 12345678; the student must change it.')) + '</p>' +
         (A.reqs.length ? '<div class="form"><label>' + h(T('الشعبة عند الموافقة', 'Cohort on approval')) + '<select id="rq-coh"><option value="">—</option>' + cohOpt(0) + '</select></label><div style="align-self:end"><button class="btn pri" data-act="cm-approve-all" data-confirm="1" data-confirm-text="اضغط لتأكيد الاعتماد"' + (ST.busy ? ' disabled' : '') + '>' + h(T('موافقة على الكل', 'Approve all')) + '</button></div></div>' : '') +
@@ -349,12 +353,14 @@
     'cm-back': function () { ST.conv = null; draw(); },
     'cm-file': function (el) { openFile(el.dataset.p); },
     'cm-pick': function () { picker().click(); },
+    'cm-mystu-csv': function () { var l = ST.mystu || []; if (!l.length) return; var q = function (v) { v = String(v == null ? '' : v); return '"' + v.replace(/"/g, '""') + '"'; }; saveFile('my-students.csv', new Blob(['\ufeff' + ['الشعبة,الاسم,الرقم الجامعي,التخصص'].concat(l.map(function (r) { return [r.cohort_name, r.full_name, r.university_id, r.major].map(q).join(','); })).join('\r\n')], { type: 'text/csv;charset=utf-8' })); },
     'cm-pick-xlsx': function () { filePicker('.xlsx,.xls,.csv,.txt', readSheet); },
     'cm-pick-wk': function () { filePicker('.xlsx,.xls,.csv,.txt', importWeek); },
     'cm-unfile': function () { ST.file = null; draw(); },
     'cm-send': function () { send(); },
     'cm-sub': function (el) { ST.admin.sub = el.dataset.s; draw(); guard(loadTab); },
     'cm-create': function () { createAccounts(); },
+    'cm-pfx-csv': function () { var l = ST.admin.pfxList || []; if (!l.length) return; var q = function (v) { v = String(v == null ? '' : v); return '"' + v.replace(/"/g, '""') + '"'; }; saveFile('external-logins.csv', new Blob(['\ufeff' + ['رقم الدخول,الاسم,الرقم الأصلي,كلمة المرور الافتراضية'].concat(l.map(function (x) { return [x.login, x.name, x.orig, '12345678'].map(q).join(','); })).join('\r\n')], { type: 'text/csv;charset=utf-8' })); },
     'cm-mkstaff': function (el) { var id = el.dataset.id; guard(async function () { await rpc('comm_make_staff', { p_user: id, p_role: 'staff', p_category: null }); ST.admin.staff = await rpc('comm_list_staff'); ST.admin.found = await rpc('comm_find_account', { p_q: ST.admin.fq }); ST.admin.note = T('تم تحويل «' + el.dataset.n + '» إلى موظف. حدّد تصنيفه من القائمة أدناه.', 'Converted to staff.'); }); },
     'cm-addstaff': function () {
       var name = ($c('#sa-name').value || '').trim(), num = normNum(($c('#sa-num').value || '').trim()), role_ = $c('#sa-role').value, cat = $c('#sa-cat').value, same = $c('#sa-same').checked;
@@ -483,6 +489,10 @@
     if (keep) { var q = $c('#cm-q'); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
   }
   var qT; 
+  document.addEventListener('input', function (e) {
+    var t = e.target; if (!t || t.id !== 'mystq') return;
+    var q = t.value.trim().toLowerCase(); document.querySelectorAll('[data-ms]').forEach(function (r) { r.style.display = !q || r.getAttribute('data-ms').indexOf(q) > -1 ? '' : 'none'; });
+  });
   document.addEventListener('input', function (e) {
     var k = e.target.dataset && e.target.dataset.cm; if (!k) return;
     if (k === 'draft') ST.draft = e.target.value; else if (k === 'title') ST.title = e.target.value; else if (k === 'sq') ST.admin.q = e.target.value;
@@ -775,6 +785,21 @@
     });
   }
   async function loadAcc() { ST.admin.acc = {}; try { ((await rpc('comm_staff_access_list')) || []).forEach(function (x) { ST.admin.acc[x.user_id] = x; }); } catch (e) { ST.admin.accErr = true; } }
+  async function loadMyStu() { ST.mystu = (await rpc('comm_my_cohort_students')) || []; }
+  function myStuHtml() {
+    var rows = ST.mystu || [], by = {}, order = [];
+    rows.forEach(function (r) { if (!by[r.cohort_id]) { by[r.cohort_id] = { name: r.cohort_name, list: [] }; order.push(r.cohort_id); } by[r.cohort_id].list.push(r); });
+    var body = order.map(function (id) {
+      var g = by[id];
+      return '<div class="card" style="margin:8px 0"><h3 style="margin:0 0 6px">' + h(g.name) + ' <span class="pill">' + g.list.length + '</span></h3><div class="list">' + g.list.map(function (r, i) {
+        return '<div class="row" data-ms="' + h((r.full_name + ' ' + (r.university_id || '') + ' ' + (r.major || '')).toLowerCase()) + '"><div class="main"><div class="t">' + (i + 1) + '. ' + h(r.full_name) + '</div><div class="sub" dir="auto">' + h((r.university_id || '') + (r.major ? ' · ' + r.major : '')) + '</div></div></div>';
+      }).join('') + '</div></div>';
+    }).join('');
+    return '<div class="card"><h2>👥 ' + h(T('طلبة شعبتي', 'My cohort students')) + ' <span class="pill">' + rows.length + '</span></h2>' +
+      '<p class="sub">' + h(T('الطلبة المسجّلون في الشعب المرتبطة بك فقط.', 'Students of the cohorts linked to you only.')) + '</p>' +
+      '<div class="tabs"><input id="mystq" type="search" placeholder="' + h(T('بحث بالاسم أو الرقم الجامعي…', 'Search name or university number…')) + '" style="flex:1;min-width:180px"><button class="btn sm" data-act="cm-mystu-csv"' + (rows.length ? '' : ' disabled') + '>⬇ ' + h(T('تصدير CSV', 'Export CSV')) + '</button></div></div>' +
+      (body || '<div class="card"><div class="empty">' + h(T('لا توجد شعبة مرتبطة بك أو لا طلبة فيها. اطلب من الإدارة ربطك بشعبتك من «إدارة ← الشعب».', 'No cohort is linked to you yet, or it has no students. Ask the admin to link you.')) + '</div></div>');
+  }
   async function loadTk() { ST.tkr = (await rpc('tk_my_rounds')) || []; tkSeen(tkList().join(',')); }
   function tkList() { var l = []; (ST.tkr || []).forEach(function (r) { if (r.accepting && r.my_pledge == null) l.push('p' + r.round_id); if (r.published && r.out_amount != null && !r.out_confirmed) l.push('c' + r.round_id); }); return l; }
   function tkSeen(v) { try { if (v === undefined) return localStorage.getItem('tk_seen_' + (ctx().id || '')) || ''; localStorage.setItem('tk_seen_' + (ctx().id || ''), v); } catch (e) { return ''; } return ''; }
@@ -1019,6 +1044,7 @@
     });
     if (!rows.length) { window.alert(T('لا توجد أسطر للإنشاء. ألصق القائمة أو ارفع ملفاً واضغط «اعتماد الأعمدة» أولاً.', 'No rows to create. Paste a list or upload a file and press "Use these columns" first.')); return; }
     var rl = ({ student: T('طلبة', 'students'), staff: T('موظفين', 'staff'), professor: T('أعضاء هيئة تدريس', 'faculty') })[role_];
+    if (role_ === 'student' && !coh && rows.some(function (r) { return !r.cohort_id; }) && !window.confirm(T('لم تختر شعبة للطلبة. بدون شعبة لن يرى الطالب الاختبارات ولا إعلانات الشعبة، وستحتاج إلى نقلهم لاحقاً من «الطلبة والشعب».\n\nهل تريد المتابعة دون شعبة؟', 'No cohort selected. Students without a cohort will not see exams or cohort announcements and must be moved later.\n\nContinue without a cohort?'))) return;
     if (!window.confirm(T('سيتم إنشاء ' + rows.length + ' حساب بنوع: ' + rl + '. متابعة؟', 'Create ' + rows.length + ' accounts as: ' + rl + '. Continue?'))) return;
     ST.busy = true; ST.admin.res = ''; draw();
     await guard(async function () {
@@ -1028,9 +1054,36 @@
         if (r.error || (r.data && r.data.error)) throw new Error((r.data && r.data.error) || await ferr(r));
         r.data.results.forEach(function (x) { tot[x.status] = (tot[x.status] || 0) + 1; if (x.status === 'error') errs.push(x.number + ': ' + x.message); if (x.status === 'dup_name') dups.push(x.name); if (x.status === 'invalid') bad.push(x.number || '(فارغ)'); if (x.status === 'exists') ex.push(x.number); });
       }
+      /* طلبة جامعة أخرى: الأرقام الموجودة لطالب آخر تُنشأ ببادئة، أما من أُنشئ سابقاً بنفس الاسم فيُتخطى */
+      var pfxRes = '';
+      ST.admin.pfxList = [];
+      if (($c('#ac-pfx') || {}).checked && ex.length && role_ === 'student') {
+        var pv = String(($c('#ac-pfxv') || {}).value || 'EX').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4) || 'EX', byNum = {}, nm = function (x) { return String(x || '').replace(/[\u064B-\u065F\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim().toLowerCase(); };
+        rows.forEach(function (r) { byNum[r.number] = r; });
+        var same_ = function (a, b) { var x = nm(a).split(' ').filter(Boolean), y = nm(b).split(' ').filter(Boolean); if (!x.length || !y.length) return false; var s = x.filter(function (w) { return y.indexOf(w) > -1; }).length; return s / Math.min(x.length, y.length) >= 0.75; };
+        var retry = [], skipped = 0, noacc = 0;
+        for (var k = 0; k < ex.length; k++) {
+          var row = byNum[ex[k]]; if (!row) continue;
+          var found = []; try { found = (await rpc('comm_list_students', { p_cohort: null, p_search: row.number, p_unassigned: false })) || []; } catch (e0) { found = null; }
+          if (found === null) { noacc++; continue; }
+          var mine = found.filter(function (f) { return String(f.university_id) === String(row.number); })[0];
+          if (!mine) { skipped++; continue; }                 // غير ظاهر لك (حساب خارجي معزول) أو ليس طالباً: لا نكرّره
+          if (same_(mine.full_name, row.name)) { skipped++; continue; }   // أُنشئ سابقاً لنفس الشخص
+          retry.push(Object.assign({}, row, { number: pv + row.number, _orig: row.number }));
+        }
+        var made = 0, pErr = [];
+        for (var q2 = 0; q2 < retry.length; q2 += 100) {
+          var rr = await sb().functions.invoke(((window.PLANNER_CONFIG||{}).ADMIN_FN||'admin-accounts'), { body: { action: 'create', allow_same_name: true, rows: retry.slice(q2, q2 + 100).map(function (x) { var y = Object.assign({}, x); delete y._orig; return y; }) } });
+          if (rr.error || (rr.data && rr.data.error)) throw new Error((rr.data && rr.data.error) || await ferr(rr));
+          (rr.data.results || []).forEach(function (x) { if (x.status === 'created') { made++; var src = retry.filter(function (z) { return z.number === x.number; })[0] || {}; ST.admin.pfxList.push({ login: x.number, name: src.name || x.name || '', orig: src._orig || '' }); } else pErr.push(x.number + ': ' + x.status + (x.message ? ' ' + x.message : '')); });
+        }
+        tot.exists = Math.max(0, tot.exists - made); tot.created += made;
+        pfxRes = ' — ' + T('البادئة ' + pv + ': أُنشئ ' + made + ' حساباً برقم جديد، وتُخطّي ' + skipped + ' (أُنشئوا سابقاً بنفس الاسم أو غير ظاهرين لك)' + (noacc ? '، وتعذّر فحص ' + noacc + ' لعدم الصلاحية' : '') + (pErr.length ? '، وفشل ' + pErr.length + ': ' + pErr.slice(0, 3).join(' | ') : ''), 'Prefix ' + pv + ': created ' + made + ', skipped ' + skipped);
+      }
       ST.admin.res = T('أُنشئ ' + tot.created + ' · موجود مسبقاً ' + tot.exists + ' · اسم متشابه تُخطّي ' + tot.dup_name + ' · غير صالح ' + tot.invalid + ' · أخطاء ' + tot.error, 'Created ' + tot.created + ' · existing ' + tot.exists + ' · invalid ' + tot.invalid + ' · similar-name skipped ' + tot.dup_name + ' · errors ' + tot.error) + (dups.length ? ' — ' + T('أسماء مُتخطّاة: ', 'Skipped names: ') + dups.slice(0, 5).join('، ') : '') + (errs.length ? ' — ' + errs.slice(0, 3).join(' | ') : '');
       if (bad.length) ST.admin.res += ' — ' + T('أرقام غير صالحة (أمثلة): ', 'Invalid numbers (examples): ') + bad.slice(0, 5).join('، ') + T(' (المسموح 3–20 حرفاً أو رقماً إنجليزياً بلا رموز)', ' (3–20 letters/digits only)');
-      if (ex.length) ST.admin.res += ' — ' + T('موجودة مسبقاً (أمثلة): ', 'Already exist (examples): ') + ex.slice(0, 5).join('، ');
+      ST.admin.res += pfxRes;
+      if (ex.length && !pfxRes) ST.admin.res += ' — ' + T('موجودة مسبقاً (أمثلة): ', 'Already exist (examples): ') + ex.slice(0, 5).join('، ');
       try { window.alert(ST.admin.res); } catch (e) {}
       ST.admin.pending = await rpc('comm_pending_passwords'); ST.cohorts = await rpc('comm_list_cohorts'); ST.admin.rows = null; ST.admin.rowsInfo = ''; ST.admin.clist = '';
     });
