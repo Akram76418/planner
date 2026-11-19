@@ -11,6 +11,8 @@
   var KINDS = ['appts', 'tasks', 'follows', 'reports', 'settings'];
   var LAST_USER_KEY = 'planner_last_user';
   /* خروج مضمون: لا ينتظر الشبكة أكثر من ثانيتين، ويمسح الجلسة المحلية بنفسه ثم يعيد التحميل (حتى لو تعثّر الاتصال) */
+  /* حساب مسموح: بريد الكلية الداخلي (@planner.local) أو مسؤول/بريد مُدرَج. إن لم تُشغَّل account-lockdown.sql يُسمح مؤقتاً. */
+  async function accountAllowed() { try { var r = await sb.rpc('comm_login_allowed'); if (r.error) return true; return r.data !== false; } catch (e) { return true; } }
   function hardSignOut() {
     var done = false;
     function fin() {
@@ -39,6 +41,7 @@
     el.style.cssText = 'position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto';
     el.dir = lang() === 'ar' ? 'rtl' : 'ltr';
     var recovery = mode === 'recovery';
+    if (mode === 'login' && !msg) { try { if (localStorage.getItem('planner_blocked')) { localStorage.removeItem('planner_blocked'); msg = { t: lang() === 'ar' ? 'هذا الحساب غير مسجَّل لدى الكلية، فلا يُسمح له بالدخول. ادخل برقمك الأكاديمي أو قدّم «طلب تسجيل».' : 'This account is not registered with the college and cannot sign in. Use your academic number or request registration.' }; } } catch (e) {} }
     el.innerHTML = '<form id="auth-form" class="card" style="width:min(400px,100%);display:flex;flex-direction:column;gap:12px" onsubmit="return false">' +
       '<img src="logo.png" alt="" width="84" height="80" style="align-self:center"><h1 style="font-size:22px;text-align:center">' + h(A('title')) + '</h1><p class="sub" style="margin:0;color:var(--muted)">' + h(A('hint')) + '</p>' +
       (mode === 'request' ? '<p class="sub" style="margin:0;color:var(--muted)">' + (lang() === 'ar' ? 'أدخل بياناتك وسترسل الإدارة موافقتها. بعد الموافقة ادخل برقمك (الأكاديمي أو الوظيفي) وكلمة المرور 12345678 ثم غيّرها.' : 'Enter your details; the administration will approve. After approval sign in with your academic number and 12345678, then change it.') + '</p>' +
@@ -53,7 +56,6 @@
       '<button class="btn pri" id="au-go" type="submit" style="justify-content:center">' + h(recovery ? A('setPass') : mode === 'request' ? A('request') : mode === 'forgot' ? A('sendReset') : mode === 'signup' ? A('signup') : A('login')) + '</button>' +
       (recovery ? '' : '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between">' +
         (mode !== 'login' ? '<button class="btn sm" type="button" data-m="login">' + h(A('login')) + '</button>' : '') +
-        (mode !== 'signup' ? '<button class="btn sm" type="button" data-m="signup">' + h(A('signup')) + '</button>' : '') +
         (mode !== 'request' ? '<button class="btn sm" type="button" data-m="request">' + h(A('request')) + '</button>' : '') +
         (mode !== 'forgot' ? '<button class="btn sm" type="button" data-m="forgot">' + h(A('forgot')) + '</button>' : '') + '</div>' +
         '') +
@@ -79,7 +81,7 @@
         var r;
         if (recovery) { r = await sb.auth.updateUser({ password: pass }); if (r.error) throw r.error; el.remove(); await takeSession(); return; }
         if (mode === 'login') { typed = email; email = await resolveLogin(email); r = await sb.auth.signInWithPassword({ email: email, password: pass }); if (r.error) throw r.error; try { sb.rpc('comm_log_event', { p_kind: 'login', p_ua: navigator.userAgent }).then(function () {}, function () {}); } catch (e0) {} el.remove(); await takeSession(); }
-        else if (mode === 'signup') { r = await sb.auth.signUp({ email: email, password: pass, options: { emailRedirectTo: location.origin + location.pathname } }); if (r.error) throw r.error; if (r.data.session) { el.remove(); await takeSession(); } else authScreen('login', { ok: 1, t: A('checkMail') }); }
+        else if (mode === 'signup') { throw new Error(lang() === 'ar' ? 'إنشاء الحسابات بالبريد مغلق. الحسابات تُنشأ من إدارة الكلية: ادخل برقمك الأكاديمي أو قدّم «طلب تسجيل».' : 'Email sign-up is closed. Accounts are created by the college: sign in with your number or send a registration request.'); r = await sb.auth.signUp({ email: email, password: pass, options: { emailRedirectTo: location.origin + location.pathname } }); if (r.error) throw r.error; if (r.data.session) { el.remove(); await takeSession(); } else authScreen('login', { ok: 1, t: A('checkMail') }); }
         else { r = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname }); if (r.error) throw r.error; authScreen('login', { ok: 1, t: A('checkMail') }); }
       } catch (err) { if (mode === 'login') { try { sb.rpc('comm_log_event', { p_kind: 'login_fail', p_who: typed, p_msg: (err && err.message) || '', p_ua: navigator.userAgent }).then(function () {}, function () {}); } catch (e1) {} } authScreen(mode, { t: (err && err.message) || A('bad') }); }
     };
@@ -191,6 +193,7 @@
       if (/type=recovery/.test(location.hash)) return;                                          // recovery screen opens from the auth event
       authScreen('login');
     }).then(async function () {
+      if (user && navigator.onLine && !(await accountAllowed())) { try { localStorage.setItem('planner_blocked', '1'); } catch (e) {} hardSignOut(); await new Promise(function () {}); }
       if (user) {
         await loadCtx();
         if (window.CTX && window.CTX.must_change && navigator.onLine) await forceChange();
