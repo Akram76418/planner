@@ -10,7 +10,7 @@ pre = ('<!doctype html>\n<html lang="ar" dir="rtl"><head><meta charset="utf-8">'
        '<style>[hidden]{display:none!important}body{margin:0}</style>\n')
 libs = ('<script src="config.js"></script>\n'
         '<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>\n'
-        '<script src="sync.js"></script>\n<script src="comm.js"></script>\n<script src="exams.js"></script>\n<script src="rs.js"></script>\n<script src="ext.js"></script>\n<script src="logs.js"></script>\n<script src="ledger.js"></script>\n<script src="takaful.js"></script>\n<script src="booking.js"></script>\n<script src="iv.js"></script>\n')
+        '<script src="sync.js"></script>\n<script src="comm.js"></script>\n<script src="exams.js"></script>\n<script src="rs.js"></script>\n<script src="wb.js"></script>\n<script src="ext.js"></script>\n<script src="logs.js"></script>\n<script src="ledger.js"></script>\n<script src="takaful.js"></script>\n<script src="booking.js"></script>\n<script src="iv.js"></script>\n')
 reg = ("<script>(function(){if(!('serviceWorker' in navigator))return;var had=!!navigator.serviceWorker.controller,done=false;"
        "function busy(){var m=document.getElementById('modal'),a=document.activeElement;return (m&&m.classList.contains('on'))||(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&a.value);}"
        "function go(){if(done)return;if(busy()){setTimeout(go,15000);return}done=true;location.reload()}"
