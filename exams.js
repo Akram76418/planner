@@ -13,11 +13,32 @@
   function r2(n) { return Math.round(Number(n) * 100) / 100; }
   function dtv(iso) { if (!iso) return ''; var d = new Date(iso), p = function (n) { return String(n).padStart(2, '0'); }; return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()); }
   function fdt(iso) { if (!iso) return '—'; try { return new Date(iso).toLocaleString(api().ar() ? 'ar' : 'en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) { return iso; } }
+  function fdl(iso) { if (!iso) return ''; try { return new Date(iso).toLocaleString(api().ar() ? 'ar' : 'en', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { return iso; } }
+  function ftm(iso) { if (!iso) return ''; try { return new Date(iso).toLocaleTimeString(api().ar() ? 'ar' : 'en', { hour: 'numeric', minute: '2-digit' }); } catch (e) { return iso; } }
+  function cdText(ms) {
+    var s = Math.max(0, Math.floor(ms / 1000)), d = Math.floor(s / 86400), hh = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), x = s % 60, p = [];
+    var pl = function (n, one, two, few, many) { return n === 1 ? '1 ' + one : n === 2 ? two : n >= 3 && n <= 10 ? n + ' ' + few : n + ' ' + many; };
+    if (api().ar()) { if (d) p.push(pl(d, 'يوم', 'يومان', 'أيام', 'يوماً')); if (hh) p.push(pl(hh, 'ساعة', 'ساعتان', 'ساعات', 'ساعة')); if (!d && m) p.push(pl(m, 'دقيقة', 'دقيقتان', 'دقائق', 'دقيقة')); if (!d && !hh) p.push(pl(x, 'ثانية', 'ثانيتان', 'ثوانٍ', 'ثانية')); return p.join(' و') || 'الآن'; }
+    if (d) p.push(d + 'd'); if (hh) p.push(hh + 'h'); if (!d && m) p.push(m + 'm'); if (!d && !hh) p.push(x + 's'); return p.join(' ') || 'now';
+  }
+  function cdEl(ts, k) { var l = ts - Date.now(); return '<b data-xm-cd="' + ts + '" data-xm-k="' + k + '">' + h(cdText(l)) + '</b>'; }
+  /* لافتة الموعد: حسب حالة الاختبار (لم يبدأ / متاح / قيد الحل / انتهى الموعد / سُلّم) */
+  function bannerHtml(e) {
+    var o = e.opens_at ? Date.parse(e.opens_at) : null, c = e.closes_at ? Date.parse(e.closes_at) : null, st = e.state, when = '';
+    if (e.opens_at || e.closes_at) when = '<div style="margin-top:4px">📅 ' + h(T('موعد الاختبار: ', 'Exam time: ')) + '<b>' + h(e.opens_at ? fdl(e.opens_at) : '') + '</b>' + (e.closes_at ? h(T(' · ينتهي ', ' · ends ')) + '<b>' + h(ftm(e.closes_at)) + '</b>' : '') + '</div>';
+    var box = function (cls, ic, line) { return '<div class="xm-bn ' + cls + '"><div>' + ic + ' ' + line + '</div>' + when + '</div>'; };
+    if (st === 'upcoming' && o) return box('warn', '⏳', '<b>' + h(T('لم يحن موعد الاختبار بعد.', 'The exam has not started yet.')) + '</b> ' + h(T('يبدأ بعد ', 'Starts in ')) + cdEl(o, 'open'));
+    if (st === 'open') return box('ok', '✅', '<b>' + h(T('الاختبار متاح الآن.', 'The exam is open now.')) + '</b>' + (c ? ' ' + h(T('ينتهي الموعد بعد ', 'Closes in ')) + cdEl(c, 'close') : ''));
+    if (st === 'in_progress') return box('ok', '📝', '<b>' + h(T('لديك محاولة قيد الحل، تابعها الآن.', 'You have an attempt in progress. Continue now.')) + '</b>' + (c ? ' ' + h(T('ينتهي الموعد بعد ', 'Closes in ')) + cdEl(c, 'close') : ''));
+    if (st === 'closed') return box('bad', '⛔', '<b>' + h(T('انتهى موعد الاختبار.', 'The exam time is over.')) + '</b> ' + h(e.attempt_id ? T('سُجّلت إجاباتك التي أرسلتها قبل انتهاء الموعد.', 'Answers you submitted before the deadline were saved.') : T('لم يعد بالإمكان الدخول إليه. إن فاتك لعذر قاهر فتواصل مع المدرّس.', 'It can no longer be started. If you missed it for a valid reason, contact the instructor.')));
+    if (st === 'finished') return box('ok', '✓', '<b>' + h(T('سلّمت الاختبار.', 'You submitted the exam.')) + '</b> ' + h(e.released ? T('نتيجتك متاحة.', 'Your result is available.') : T('ستظهر نتيجتك بعد مراجعة المدرّس واعتمادها.', 'Your result appears after the instructor reviews it.')));
+    return '';
+  }
   function mmss(s) { s = Math.max(0, Math.floor(s)); var m = Math.floor(s / 60); return (m >= 60 ? Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0') : String(m)) + ':' + String(s % 60).padStart(2, '0'); }
   function LET(i) { return String.fromCharCode(65 + i); }
 
   var css = document.createElement('style');
-  css.textContent = '.xm-q{font-size:17px;line-height:1.7;margin:8px 0}.xm-opt{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--bd,#ccc);border-radius:10px;margin:6px 0;cursor:pointer}.xm-opt.on{border-color:var(--accent,#2563eb);background:var(--accent-soft,#dbeafe)}' +
+  css.textContent = '.xm-bn{border-radius:10px;padding:8px 12px;margin-top:8px;line-height:1.8}.xm-bn.warn{background:rgba(217,119,6,.14);border:1px solid #d97706}.xm-bn.ok{background:rgba(21,128,61,.12);border:1px solid #15803d}.xm-bn.bad{background:rgba(185,28,28,.12);border:1px solid #b91c1c}' + '.xm-q{font-size:17px;line-height:1.7;margin:8px 0}.xm-opt{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--bd,#ccc);border-radius:10px;margin:6px 0;cursor:pointer}.xm-opt.on{border-color:var(--accent,#2563eb);background:var(--accent-soft,#dbeafe)}' +
     '.xm-opt input{margin-top:5px}.xm-timer{display:flex;gap:12px;flex-wrap:wrap;font-weight:700}.xm-timer span{background:var(--card-2,rgba(127,127,127,.12));padding:4px 10px;border-radius:99px}.xm-timer .lo{background:var(--bad,#c0392b);color:#fff}' +
     '.xm-just{width:100%;min-height:110px}.xm-bar{height:6px;background:var(--card-2,rgba(127,127,127,.2));border-radius:99px;overflow:hidden;margin:6px 0}.xm-bar i{display:block;height:100%;background:var(--accent,#2563eb)}' +
     '.xm-rv{border:1px solid var(--bd,#ccc);border-radius:12px;padding:12px;margin:10px 0}.xm-rv.nr{border-color:#d97706}.xm-flag{display:inline-block;background:#fde68a;color:#78350f;border-radius:99px;font-size:12px;padding:1px 8px;margin:2px}' +
@@ -73,17 +94,17 @@
   function stuList() {
     var rows = (X.list || []).map(function (e) {
       var btn = '';
-      if (e.state === 'open') btn = '<button class="btn sm pri" data-act="xm-start" data-id="' + e.id + '">' + h(T('ابدأ الاختبار', 'Start')) + '</button>';
-      else if (e.state === 'in_progress') btn = '<button class="btn sm pri" data-act="xm-start" data-id="' + e.id + '">' + h(T('متابعة', 'Continue')) + '</button>';
-      else if (e.state === 'finished') btn = '<button class="btn sm" data-act="xm-res" data-id="' + e.id + '">' + h(T('النتيجة', 'Results')) + '</button>';
+      if (e.state === 'open') btn = '<button class="btn pri" data-act="xm-start" data-id="' + e.id + '">' + h(T('ابدأ الاختبار', 'Start')) + '</button>';
+      else if (e.state === 'in_progress') btn = '<button class="btn pri" data-act="xm-start" data-id="' + e.id + '">' + h(T('متابعة', 'Continue')) + '</button>';
+      else if (e.state === 'upcoming') btn = '<button class="btn" disabled>' + h(T('يبدأ ', 'Starts ') + ftm(e.opens_at)) + '</button>';
+      else if (e.state === 'finished' || (e.state === 'closed' && e.attempt_id)) btn = '<button class="btn" data-act="xm-res" data-id="' + e.id + '">' + h(T('النتيجة', 'Results')) + '</button>';
       var meta = [e.questions + ' ' + T('سؤال', 'questions')];
-      if (e.duration_min) meta.push(T('المدة الكلية ', 'Total ') + e.duration_min + T(' دقيقة', ' min'));
+      if (e.duration_min) meta.push(T('مدة الحل ', 'Duration ') + e.duration_min + T(' دقيقة', ' min'));
       if (e.per_question_sec) meta.push(T('لكل سؤال ', 'Per question ') + e.per_question_sec + T(' ثانية', ' s'));
-      if (e.opens_at) meta.push(T('يبدأ ', 'Opens ') + fdt(e.opens_at));
-      if (e.closes_at) meta.push(T('يُغلق ', 'Closes ') + fdt(e.closes_at));
-      return '<div class="row"><div class="main"><div class="t">' + h(e.title) + ' <span class="pill">' + h(STL[e.state] ? STL[e.state][api().ar() ? 0 : 1] : e.state) + '</span></div><div class="sub">' + h(meta.join(' · ')) + '</div>' + (e.description ? '<div class="sub">' + h(e.description) + '</div>' : '') + '</div><div class="act">' + btn + '</div></div>';
+      return '<div class="card" style="margin:10px 0"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><div><b style="font-size:16px">' + h(e.title) + '</b> <span class="pill">' + h(STL[e.state] ? STL[e.state][api().ar() ? 0 : 1] : e.state) + '</span></div><div>' + btn + '</div></div>' + bannerHtml(e) +
+        '<div class="sub" style="margin-top:6px">' + h(meta.join(' · ')) + '</div>' + (e.description ? '<div class="sub">' + h(e.description) + '</div>' : '') + '</div>';
     }).join('');
-    return '<div class="card"><h2>' + h(T('الاختبارات', 'Exams')) + '</h2><div class="list">' + (rows || '<div class="empty">' + h(T('لا توجد اختبارات متاحة لك الآن.', 'No exams available to you right now.')) + '<div class="sub" style="margin-top:6px">' + h(T('إن كنت تنتظر اختباراً فتأكد من الإدارة أن الاختبار منشور وأن حسابك مضاف إلى شعبته. وإن ظهرت نافذة تغيير كلمة المرور فأكمل تغييرها أولاً.', 'If you expect an exam, ask the admin to confirm it is published and your account is in its cohort. If a change-password window appears, complete it first.')) + '</div></div>') + '</div></div>';
+    return '<div class="card"><h2>' + h(T('الاختبارات', 'Exams')) + '</h2>' + (rows || '<div class="empty">' + h(T('لا توجد اختبارات متاحة لك الآن.', 'No exams available to you right now.')) + '<div class="sub" style="margin-top:6px">' + h(T('إن كنت تنتظر اختباراً فتأكد من الإدارة أن الاختبار منشور وأن حسابك مضاف إلى شعبته. وإن ظهرت نافذة تغيير كلمة المرور فأكمل تغييرها أولاً.', 'If you expect an exam, ask the admin to confirm it is published and your account is in its cohort. If a change-password window appears, complete it first.')) + '</div></div>') + '</div>';
   }
 
   /* ---- الطالب: الحل ---- */
@@ -92,7 +113,7 @@
   function saveDraft() { var R = X.run; if (!R || !R.st || !R.st.question) return; try { localStorage.setItem(dkey(R), JSON.stringify({ sel: R.sel, text: R.text, sig: R.sig, t0: R.t0, t: Date.now() })); } catch (e) {} }
   function loadDraft(R) { try { var d = JSON.parse(localStorage.getItem(dkey(R)) || 'null'); if (d && Array.isArray(d.sel) && typeof d.text === 'string') { R.sel = d.sel.filter(function (i) { return i < R.st.question.options.length; }); R.text = d.text.slice(0, 600); if (d.sig) R.sig = { paste: d.sig.paste | 0, blur: d.sig.blur | 0, typed_ms: d.sig.typed_ms | 0, keys: d.sig.keys | 0 }; R.t0 = d.t0 || 0; } } catch (e) {} }
   function clearDraft(R) { try { localStorage.removeItem(dkey(R)); } catch (e) {} }
-  function newRun(st, exam) { var R0 = { exam: exam, st: st, sel: [], text: '', sig: { paste: 0, blur: 0, typed_ms: 0, keys: 0 }, t0: 0, t1: 0, qEnd: st.q_left_s == null ? null : Date.now() + st.q_left_s * 1000, tEnd: st.total_left_s == null ? null : Date.now() + st.total_left_s * 1000, sent: false }; loadDraft(R0); return R0; }
+  function newRun(st, exam) { var R0 = { cEnd: exam && exam.closes_at ? Date.parse(exam.closes_at) : null, exam: exam, st: st, sel: [], text: '', sig: { paste: 0, blur: 0, typed_ms: 0, keys: 0 }, t0: 0, t1: 0, qEnd: st.q_left_s == null ? null : Date.now() + st.q_left_s * 1000, tEnd: st.total_left_s == null ? null : Date.now() + st.total_left_s * 1000, sent: false }; loadDraft(R0); return R0; }
   function resetQ(R, st) { R.st = st; R.sel = []; R.text = ''; R.sig = { paste: 0, blur: 0, typed_ms: 0, keys: 0 }; R.t0 = 0; R.t1 = 0; R.sent = false; R.qEnd = st.q_left_s == null ? null : Date.now() + st.q_left_s * 1000; R.tEnd = st.total_left_s == null ? null : Date.now() + st.total_left_s * 1000; loadDraft(R); }
   function runHtml() {
     var R = X.run, st = R.st, q = st.question;
@@ -100,7 +121,7 @@
       var on = R.sel.indexOf(i) > -1;
       return '<label class="xm-opt' + (on ? ' on' : '') + '"><input type="' + (q.multi ? 'checkbox' : 'radio') + '" name="xm-o" data-ex="opt" data-i="' + i + '"' + (on ? ' checked' : '') + '><span><b>' + LET(i) + '.</b> ' + h(o) + '</span></label>';
     }).join('');
-    var timer = '<div class="xm-timer">' + (R.qEnd ? '<span id="xm-qt">⏱ ' + h(T('السؤال: ', 'Question: ')) + mmss((R.qEnd - Date.now()) / 1000) + '</span>' : '') + (R.tEnd ? '<span id="xm-tt">⌛ ' + h(T('الكلي: ', 'Total: ')) + mmss((R.tEnd - Date.now()) / 1000) + '</span>' : '') + '</div>';
+    var timer = '<div class="xm-timer">' + (R.qEnd ? '<span id="xm-qt">⏱ ' + h(T('السؤال: ', 'Question: ')) + mmss((R.qEnd - Date.now()) / 1000) + '</span>' : '') + (R.tEnd ? '<span id="xm-tt">⌛ ' + h(T('الكلي: ', 'Total: ')) + mmss((R.tEnd - Date.now()) / 1000) + '</span>' : '') + (R.cEnd ? '<span id="xm-ct">⏰ ' + h(T('ينتهي موعد الاختبار بعد: ', 'Exam closes in: ')) + mmss((R.cEnd - Date.now()) / 1000) + '</span>' : '') + '</div>';
     var prompt = q.multi ? T('اشرح باختصار سبب اختيارك لهذه الإجابات.', 'Briefly explain why you chose these answers.') : T('اشرح باختصار سبب اختيارك لهذه الإجابة.', 'Briefly explain why you chose this answer.');
     return '<div class="card"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>' + h(R.exam.title) + '</b><span class="sub">' + h(T('السؤال ', 'Question ')) + (st.pos + 1) + ' / ' + st.total + '</span></div>' +
       '<div class="xm-bar"><i style="width:' + Math.round(st.pos / st.total * 100) + '%"></i></div>' + timer +
@@ -119,7 +140,8 @@
       var now = Date.now(), a = $q('#xm-qt'), b = $q('#xm-tt');
       if (a && R.qEnd) { var l = (R.qEnd - now) / 1000; a.textContent = '⏱ ' + T('السؤال: ', 'Question: ') + mmss(l); a.className = l <= 10 ? 'lo' : ''; }
       if (b && R.tEnd) { var l2 = (R.tEnd - now) / 1000; b.textContent = '⌛ ' + T('الكلي: ', 'Total: ') + mmss(l2); b.className = l2 <= 60 ? 'lo' : ''; }
-      if ((R.qEnd && now >= R.qEnd) || (R.tEnd && now >= R.tEnd)) expired();
+      var c2 = $q('#xm-ct'); if (c2 && R.cEnd) { var l3 = (R.cEnd - now) / 1000; c2.textContent = '⏰ ' + T('ينتهي موعد الاختبار بعد: ', 'Exam closes in: ') + mmss(l3); c2.className = l3 <= 120 ? 'lo' : ''; }
+      if ((R.qEnd && now >= R.qEnd) || (R.tEnd && now >= R.tEnd) || (R.cEnd && now >= R.cEnd)) expired();
     }, 500);
   }
   /* عند انتهاء الزمن: أرسل ما كُتب إن كان صالحاً (الخادم يمهل 3 ثوانٍ)، وإلا اطلب حالة الخادم لينتقل */
@@ -130,7 +152,7 @@
   }
   async function advance(st) {
     var R = X.run;
-    if (st.status === 'finished') { stopTick(); await load(); X.view = 'res'; X.res = await rpc('ex_my_results', { p_exam: R.exam.id }); X.run = null; return; }
+    if (st.status === 'finished') { var late = R.exam && R.exam.closes_at && Date.now() >= Date.parse(R.exam.closes_at) - 3000; stopTick(); await load(); X.view = 'res'; X.res = await rpc('ex_my_results', { p_exam: R.exam.id }); X.run = null; X.msg = late ? T('⛔ انتهى موعد الاختبار، وسُلّمت إجاباتك التي أرسلتها تلقائياً.', '⛔ The exam time is over; your submitted answers were handed in automatically.') : ''; return; }
     resetQ(R, st);
   }
   async function submit(auto) {
@@ -564,5 +586,22 @@
   window.addEventListener('blur', lost);
   document.addEventListener('visibilitychange', function () { if (document.hidden) lost(); });
 
-  window.EXAMS = { parseAoa: parseAoa, visible: visible, instr: instr, html: html, load: load, badge: badge, arm: armTick, active: function () { return X.view === 'run'; }, loaded: function () { return X.loaded; } };
+  var cdBusy = false;
+  setInterval(function () {
+    var els = document.querySelectorAll('[data-xm-cd]'); if (!els.length) return;
+    var zero = false;
+    els.forEach(function (el) { var l = Number(el.getAttribute('data-xm-cd')) - Date.now(); el.textContent = cdText(l); if (l <= 0) zero = true; else if (el.getAttribute('data-xm-k') === 'close' && l < 600000) el.style.color = '#b91c1c'; });
+    if (zero && !cdBusy && !X.busy && X.view !== 'run') { cdBusy = true; setTimeout(async function () { try { await load(); if (root() && X.view === 'list') redraw(); else if (api() && api().draw) api().draw(); } catch (e) {} cdBusy = false; }, 1200); }
+  }, 1000);
+  /* شريط تنبيه للطالب أعلى صفحة التواصل: الاختبارات القادمة/المتاحة/المنتهية حديثاً */
+  function noticeHtml() {
+    if (!student() || !X.loaded) return '';
+    var now = Date.now(), L = (X.list || []).filter(function (e) {
+      if (e.state === 'upcoming' || e.state === 'open' || e.state === 'in_progress') return true;
+      return e.state === 'closed' && !e.attempt_id && e.closes_at && now - Date.parse(e.closes_at) < 3 * 86400000;
+    }).slice(0, 3);
+    if (!L.length) return '';
+    return '<div class="card" style="margin:0 0 10px;border-color:var(--accent,#0b8a97)"><b>📝 ' + h(T('اختباراتك', 'Your exams')) + '</b>' + L.map(function (e) { return '<div style="margin-top:6px"><b>' + h(e.title) + '</b>' + bannerHtml(e) + '</div>'; }).join('') + '<button class="btn sm pri" style="margin-top:8px" data-act="go" data-v="ex">' + h(T('فتح الاختبارات', 'Open exams')) + '</button></div>';
+  }
+  window.EXAMS = { noticeHtml: noticeHtml, parseAoa: parseAoa, visible: visible, instr: instr, html: html, load: load, badge: badge, arm: armTick, active: function () { return X.view === 'run'; }, loaded: function () { return X.loaded; } };
 })();

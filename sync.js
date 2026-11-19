@@ -102,9 +102,14 @@
     try { window.PERMS = JSON.parse(localStorage.getItem(pk) || 'null'); } catch (e) { window.PERMS = null; }
   }
   async function loadCtx() {
-    await loadCtx0(); await loadPerms(); await loadIv();
+    await loadCtx0(); await loadPerms(); await loadIv(); await loadRs();
   }
   /* المقابلات: دوري (إدارة / مقيّم / مرشح) — null إن لم يُثبَّت iv.sql */
+  /* أبحاث الماجستير: مجموعاتي (null إن لم يُشغَّل research.sql) */
+  async function loadRs() {
+    window.RSG = null; if (!window.CTX || (window.CTX.external)) return;
+    try { var r = await sb.rpc('rs_my_groups'); if (!r.error && Array.isArray(r.data)) window.RSG = r.data; } catch (e) {}
+  }
   async function loadIv() {
     window.IV = null; if (!window.CTX) return;
     try { var r = await sb.rpc('iv_roles'); if (!r.error && r.data && (r.data.manage || r.data.evaluator || r.data.candidate || r.data.entrant)) window.IV = r.data; } catch (e) {}
