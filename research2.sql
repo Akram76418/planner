@@ -112,10 +112,34 @@ language sql stable security definer set search_path = public set row_security =
   order by s.due_date, g.name, p.full_name
 $$;
 
+
+-- إعادة ترتيب مراحل الطالب (المشرف): نقل مرحلة خطوة للأعلى/للأسفل، أو ترتيب الكل حسب الموعد
+create or replace function public.rs_ms_move(p_id bigint, p_dir integer) returns void
+language plpgsql security definer set search_path = public set row_security = off as $$
+declare s rs_milestones; ids bigint[]; i integer; j integer; tmp bigint;
+begin
+  select * into s from rs_milestones where id = p_id; if not found then return; end if;
+  if not public.rs_is_sup(s.group_id) then raise exception 'not allowed'; end if;
+  select array_agg(id order by pos, id) into ids from rs_milestones where group_id = s.group_id and student_id = s.student_id;
+  i := array_position(ids, p_id); j := i + case when coalesce(p_dir, 0) < 0 then -1 else 1 end;
+  if j < 1 or j > array_length(ids, 1) then return; end if;
+  tmp := ids[i]; ids[i] := ids[j]; ids[j] := tmp;
+  for i in 1..array_length(ids, 1) loop update rs_milestones set pos = i where id = ids[i]; end loop;
+end $$;
+
+create or replace function public.rs_ms_sort_by_date(p_group bigint, p_student uuid) returns void
+language plpgsql security definer set search_path = public set row_security = off as $$
+begin
+  if not public.rs_is_sup(p_group) then raise exception 'not allowed'; end if;
+  update rs_milestones m set pos = x.rn from (
+    select id, row_number() over (order by due_date nulls last, pos, id) rn from rs_milestones where group_id = p_group and student_id = p_student
+  ) x where m.id = x.id;
+end $$;
+
 do $$
 declare f text;
 begin
-  foreach f in array array['rs_cmt_list(bigint)', 'rs_cmt_add(bigint,text,text)', 'rs_cmt_status(bigint,text)', 'rs_cmt_delete(bigint)', 'rs_cmt_mark_seen(bigint)', 'rs_my_groups()', 'rs_reminders(integer)'] loop
+  foreach f in array array['rs_cmt_list(bigint)', 'rs_cmt_add(bigint,text,text)', 'rs_cmt_status(bigint,text)', 'rs_cmt_delete(bigint)', 'rs_cmt_mark_seen(bigint)', 'rs_my_groups()', 'rs_reminders(integer)', 'rs_ms_move(bigint,integer)', 'rs_ms_sort_by_date(bigint,uuid)'] loop
     execute format('revoke execute on function public.%s from public, anon', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;
