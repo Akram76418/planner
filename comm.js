@@ -18,6 +18,9 @@
   function role() { return ctx().role; }
   function isAdmin() { return role() === 'admin'; }
   function CAN(k) { return typeof window.CAN === 'function' ? window.CAN(k) : isAdmin(); }
+  function isExt() { return role() === 'student' && !!ctx().external; }      /* طالب شعبة خارجية: محادثة مع محاضريه + إعلانات شعبته فقط */
+  function extAnn() { if (role() !== 'professor') return false; var c = (ST.cohorts || []).filter(function (x) { return x.id === ST.cohort; })[0]; return !!(c && c.is_external); }
+  function canAnn() { return CAN('ann') || extAnn(); }
   function isStaff() { return role() === 'admin' || role() === 'professor' || role() === 'staff'; }
   function toast_(m) { if (typeof toast === 'function') toast(m); }
   function $c(s) { return document.querySelector(s); }
@@ -43,7 +46,7 @@
   /* ---------- entry points used by app.html ---------- */
   window.commView = function () { return '<div id="cm-root"></div>'; };
   window.commMount = function () {
-    if (!ST.tab) ST.tab = role() === 'student' ? 'home' : 'dm';
+    if (!ST.tab || (isExt() && ['dm', 'ann', 'me'].indexOf(ST.tab) < 0)) ST.tab = (role() === 'student' && !isExt()) ? 'home' : 'dm';
     draw();
     if (!ST.loaded) { ST.loaded = true; boot(); }
     clearInterval(ST.timer); ST.timer = setInterval(poll, 8000);
@@ -152,6 +155,7 @@
   function badge(n) { return n > 0 ? '<span class="cm-b">' + n + '</span>' : ''; }
   function tabs() {
     var chU = 0; Object.keys(ST.unread).forEach(function (k) { if (k.indexOf('ch:') === 0) chU += ST.unread[k]; });
+    if (isExt()) return '<div class="cm-tabs">' + [['dm', T('المحادثات', 'Chats'), ST.dmUnread], ['ann', T('إعلانات الشعبة', 'Cohort announcements'), ST.unread.ann || 0], ['me', T('حسابي', 'My account'), 0]].map(function (x) { return '<button class="btn' + (ST.tab === x[0] ? ' pri' : '') + '" data-act="cm-tab" data-t="' + x[0] + '">' + h(x[1]) + badge(x[2]) + '</button>'; }).join('') + '</div>';
     var t = role() === 'student' ? [['home', T('الرئيسية', 'Home'), 0]] : [];
     t.push(['dm', T('المحادثات', 'Chats'), ST.dmUnread]);
     if (isStaff()) t.push(['staff', T('قنوات الموظفين', 'Staff channels'), chU]);
@@ -231,8 +235,8 @@
     if (isStaff()) sel = '<label>' + h(T('الشعبة', 'Cohort')) + ' <select id="cm-coh" data-cm="coh">' + ST.cohorts.filter(function (c) { return c.is_active; }).map(function (c) { return '<option value="' + c.id + '"' + (c.id === ST.cohort ? ' selected' : '') + '>' + h(c.name) + '</option>'; }).join('') + '</select></label>';
     else if (!ST.cohort) return '<div class="card"><div class="empty">' + h(T('لم تُسنَد إلى شعبة بعد. تواصل مع الإدارة.', 'You are not assigned to a cohort yet. Contact the administration.')) + '</div></div>';
     else sel = '<b>' + h(ctx().cohort_name || '') + '</b>';
-    var post = CAN('ann') ? '<div style="margin:10px 0;padding-bottom:10px;border-bottom:1px solid var(--bd)">' + annPick() + '<input id="cm-title" placeholder="' + h(T('عنوان الإعلان (اختياري)', 'Title (optional)')) + '" data-cm="title" style="width:100%;margin:6px 0">' + composer(T('نص الإعلان…', 'Announcement…')) + '</div>' : '';
-    return '<div class="card">' + sel + '<p class="sub">' + h(T('الإعلانات من الإدارة فقط، ولا يمكن الرد عليها.', 'Announcements come from the administration only; replies are not possible.')) + '</p>' +
+    var post = canAnn() ? '<div style="margin:10px 0;padding-bottom:10px;border-bottom:1px solid var(--bd)">' + (CAN('ann') ? annPick() : '<div class="sub">' + h(T('إعلان إلى شعبتك الخارجية: يراه طلبتها فقط.', 'Announcement to your external cohort: only its students see it.')) + '</div>') + '<input id="cm-title" placeholder="' + h(T('عنوان الإعلان (اختياري)', 'Title (optional)')) + '" data-cm="title" style="width:100%;margin:6px 0">' + composer(T('نص الإعلان…', 'Announcement…')) + '</div>' : '';
+    return '<div class="card">' + sel + '<p class="sub">' + h(isExt() ? T('إعلانات محاضريك وإدارة الاختبارات. للرد راسل محاضرك من «المحادثات».', 'Announcements from your lecturers. To reply, message them from Chats.') : T('الإعلانات من الإدارة فقط، ولا يمكن الرد عليها.', 'Announcements come from the administration only; replies are not possible.')) + '</p>' +
       post + '<div class="cm-msgs">' + (ST.items.map(annMsg).join('') || '<div class="empty">' + h(T('لا إعلانات', 'No announcements')) + '</div>') + '</div></div>';
   }
 
@@ -552,8 +556,8 @@
         var r = await sb().from('comm_channel_messages').insert(Object.assign({ channel: ST.chan, body: body || (u2 ? u2.file_name : '') }, u2 || {}));
         if (r.error) throw r.error;
         ST.draft = ''; ST.file = null; await loadTab();
-      } else if (ST.tab === 'ann' && CAN('ann') && ST.cohort) {
-        var tgt = annTargets(); if (!tgt.length) throw new Error(T('اختر شعبة واحدة على الأقل', 'Select at least one cohort'));
+      } else if (ST.tab === 'ann' && canAnn() && ST.cohort) {
+        var tgt = CAN('ann') ? annTargets() : [ST.cohort]; if (!tgt.length) throw new Error(T('اختر شعبة واحدة على الأقل', 'Select at least one cohort'));
         if (tgt.length > 1 && !window.confirm(T('سيُرسل الإعلان إلى ' + tgt.length + ' شعبة. متابعة؟', 'This will be sent to ' + tgt.length + ' cohorts. Continue?'))) { ST.busy = false; return draw(); }
         var rows3 = [];
         for (var ci = 0; ci < tgt.length; ci++) {
@@ -719,6 +723,7 @@
   function annMsg(m) {
     var base = msgHtml(m, false, true), extra = '';
     if (m.pinned) extra += '<div><span class="pill warn">📌 ' + h(T('مثبّت', 'Pinned')) + '</span></div>';
+    if (!CAN('ann') && extAnn() && m.id && m.sender_id === me()) extra += '<div class="sub"><button class="btn sm bad" data-act="cm-ann-del" data-id="' + m.id + '" data-confirm="1">🗑 ' + h(T('حذف', 'Delete')) + '</button></div>';
     if (CAN('ann') && m.id) {
       var coh = ST.cohorts.filter(function (c) { return c.id === ST.cohort; })[0], mem = coh ? Number(coh.members) : 0;
       extra += '<div class="sub">👁 ' + h(T('اطّلع ' + (m.readers || 0) + ' من ' + mem, 'Seen by ' + (m.readers || 0) + ' of ' + mem)) + ' · <button class="btn sm" data-act="cm-pin" data-id="' + m.id + '" data-p="' + (m.pinned ? 0 : 1) + '">' + h(m.pinned ? T('إلغاء التثبيت', 'Unpin') : T('📌 تثبيت', '📌 Pin')) + '</button> <button class="btn sm bad" data-act="cm-ann-del" data-id="' + m.id + '" data-confirm="1">🗑 ' + h(T('حذف', 'Delete')) + '</button></div>';

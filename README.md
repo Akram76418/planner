@@ -1,9 +1,52 @@
-# grade-justification (تصحيح هجين مجاني)
-1. نفّذ supabase/exams.sql في SQL Editor.
-2. الأسرار (Project Settings ← Edge Functions ← Secrets، أو CLI):
-   `supabase secrets set LLM_API_KEY=مفتاح_مزوّدك_المجاني CRON_SECRET=نص_عشوائي_طويل`
-3. انشر: `supabase functions deploy grade-justification --no-verify-jwt`
-4. من التطبيق (حساب المدير الرئيسي) ← التواصل ← الاختبارات ← ⚙ إعدادات النموذج: الرابط (…/chat/completions) واسم النموذج والحد اليومي.
-   بدون هذه الإعدادات يعمل التصحيح بالقواعد فقط، والملتبس يصل إلى لوحة المراجعة.
-5. (اختياري) جدولة إعادة المحاولة: التعليمات في آخر exams.sql.
-اختبار محلي: `node --experimental-strip-types --no-warnings test.mts` — وتشغيل العيّنات بمفتاحك: run-samples.mts
+# My Daily Planner | منظّم أعمالي اليومية
+
+تطبيق PWA يعمل دون إنترنت (IndexedDB + Service Worker) ويدعم حسابات منفصلة ومزامنة بين الأجهزة عبر Supabase.
+
+## الملفات
+| الملف | الوظيفة |
+|---|---|
+| `index.html` | التطبيق كاملاً (واجهة عربية/إنجليزية، فاتح/داكن، تقويم، مواعيد، أجندة، متابعات، مهام، تقارير) |
+| `sync.js` | الحسابات، قائمة انتظار التغييرات، المزامنة، التعارضات، Realtime |
+| `config.js` | إعدادات الاتصال (فارغة = وضع محلي) |
+| `sw.js`, `manifest.json`, `icon-*.png` | PWA وتخزين الملفات الأساسية وعرض إشعارات Push |
+| `supabase/schema.sql` | الجداول وصلاحيات RLS ودالة الحفظ الآمنة |
+| `supabase/functions/send-reminders` | دالة الخادم لإرسال التذكيرات عبر Web Push |
+| `app.html`, `build.py` | مصدر الواجهة وأداة بناء `index.html` (`python3 build.py`) |
+
+## التشغيل المحلي
+```
+python3 -m http.server 8080
+```
+افتح `http://localhost:8080`. بدون تعديل `config.js` يعمل التطبيق محلياً على هذا الجهاز فقط.
+
+## إعداد الحسابات والمزامنة (Supabase، يتطلب حساباً مجانياً)
+1. أنشئ مشروعاً في supabase.com.
+2. من SQL Editor نفّذ محتوى `supabase/schema.sql`.
+3. من Authentication > Providers فعّل Email. من Authentication > URL Configuration ضع رابط موقعك المنشور في Site URL (لازم لرابط استعادة كلمة المرور).
+4. من Project Settings > API انسخ Project URL و `anon` public key إلى `config.js`. لا تضع مفتاح `service_role` في أي ملف للواجهة.
+5. انشر المجلد على استضافة HTTPS (Netlify، Vercel، Cloudflare Pages، GitHub Pages). الـ PWA والإشعارات لا تعمل إلا عبر HTTPS (أو localhost).
+6. عند تغيير `config.js` أو `sync.js` بعد النشر ارفع قيمة `VERSION` في `sw.js` حتى يحدّث المتصفح الملفات المخزنة.
+
+كل حساب يرى بياناته فقط: سياسة RLS على جدول `records` تقيّد الصفوف بـ `auth.uid()`، وقاعدة IndexedDB على الجهاز منفصلة لكل حساب.
+
+## إشعارات الخادم (Web Push، اختياري)
+1. `npx web-push generate-vapid-keys` ثم ضع المفتاح العام في `config.js` (`VAPID_PUBLIC_KEY`).
+2. انشر الدالة: `supabase functions deploy send-reminders --no-verify-jwt`.
+3. أضف الأسرار: `supabase secrets set VAPID_PUBLIC_KEY=... VAPID_PRIVATE_KEY=... VAPID_SUBJECT=mailto:you@example.com CRON_SECRET=<نص عشوائي>`.
+4. جدولها كل دقيقة (pg_cron + pg_net) باستدعاء الدالة مع الترويسة `x-cron-secret`.
+5. في التطبيق: الإعدادات > تفعيل إشعارات الخادم.
+
+## حدود الإشعارات (بصراحة)
+- لا يمكن لأي تطبيق ويب جدولة إشعار محلي موثوق والتطبيق مغلق دون خادم. التذكير الفائت يظهر في لوحة التحكم عند الفتح.
+- مع الاتصال: Web Push من الخادم يصل والمتصفح مغلق على أندرويد وسطح المكتب (والمتصفح يعمل في الخلفية). على iPhone يعمل فقط بعد إضافة التطبيق إلى الشاشة الرئيسية (iOS 16.4+).
+- دون إنترنت والتطبيق مغلق أو الجهاز مطفأ: لا ضمان. الحل الأصلي هو لف التطبيق بـ Capacitor واستخدام Local Notifications (غير مضمّن هنا).
+- التنبيه الصوتي والاهتزاز يعتمدان على الجهاز والأذونات.
+
+## البيانات والنسخ الاحتياطي
+البيانات المحلية تُحذف إذا مسحت بيانات الموقع من المتصفح أو أزلت التطبيق. استخدم الإعدادات > تصدير نسخة (JSON) بانتظام. الحسابات المتزامنة تحتفظ بنسخة على الخادم.
+
+## قواعد المزامنة
+كل تغيير يُحفظ محلياً فوراً ويُضاف إلى قائمة انتظار، ثم يُرسل عند الاتصال عبر دالة `upsert_record` (لا تكرار للسجلات). عند تعديل السجل نفسه من جهازين تفوز آخر تعديل بحسب وقت التعديل، وتُحفظ النسخة الخاسرة في سجل تعارضات محلي. الحذف يُنقل كعلامة حذف. المزامنة تتطلب اتصالاً بالإنترنت.
+
+## تخصيص نسخة مستقلة
+غيّر الاسم في `manifest.json` والمتغيرات اللونية في أعلى `<style>` داخل `app.html`، ثم `python3 build.py`.

@@ -582,6 +582,14 @@
   }
   window.addEventListener('offline', function () { netBanner(true); });
   window.addEventListener('online', function () { netBanner(false); });
+  /* تشخيص: أي خطأ جافاسكربت أثناء صفحة الاختبار يظهر نصّه للطالب (لا أدوات مطوّر على الآيفون) دون مسح إجابته */
+  function showJsErr(msg, where) {
+    var r = root(); if (!r) return;
+    var b = $q('#xm-jserr'); if (!b) { b = document.createElement('p'); b.id = 'xm-jserr'; b.className = 'pill bad'; b.style.cssText = 'display:block;direction:ltr;text-align:left;word-break:break-all;white-space:pre-wrap'; r.insertBefore(b, r.firstChild); }
+    b.textContent = '⚠ ' + String(msg).slice(0, 300) + (where ? ' @ ' + String(where).slice(-60) : '');
+  }
+  window.addEventListener('error', function (e) { try { if (root()) showJsErr(e.message, (e.filename || '') + ':' + (e.lineno || '') + ':' + (e.colno || '')); } catch (x) {} });
+  window.addEventListener('unhandledrejection', function (e) { try { if (root()) showJsErr((e.reason && e.reason.message) || e.reason, 'promise'); } catch (x) {} });
   function lost() { if (X.view === 'run' && X.run) X.run.sig.blur++; }
   window.addEventListener('blur', lost);
   document.addEventListener('visibilitychange', function () { if (document.hidden) lost(); });
