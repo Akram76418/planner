@@ -10,6 +10,19 @@
   var outbox = {}, shadow = {}, cursor = '1970-01-01T00:00:00Z', timer = null, pulling = false, chan = null;
   var KINDS = ['appts', 'tasks', 'follows', 'reports', 'settings'];
   var LAST_USER_KEY = 'planner_last_user';
+  /* خروج مضمون: لا ينتظر الشبكة أكثر من ثانيتين، ويمسح الجلسة المحلية بنفسه ثم يعيد التحميل (حتى لو تعثّر الاتصال) */
+  function hardSignOut() {
+    var done = false;
+    function fin() {
+      if (done) return; done = true;
+      try { localStorage.removeItem(LAST_USER_KEY); } catch (e) {}
+      try { Object.keys(localStorage).forEach(function (k) { if (/^sb-.*-auth-token/.test(k)) localStorage.removeItem(k); }); } catch (e) {}
+      try { sessionStorage.clear(); } catch (e) {}
+      user = null; location.reload();
+    }
+    try { Promise.resolve(sb.auth.signOut({ scope: 'local' })).then(fin, fin); } catch (e) { fin(); }
+    setTimeout(fin, 1500);
+  }
 
   var AUTH_T = {
     ar: { title: 'منظّم أعمالي اليومية', login: 'تسجيل الدخول', signup: 'إنشاء حساب بالبريد', request: 'طلب تسجيل (طلبة / موظفون)', forgot: 'نسيت كلمة المرور', email: 'البريد الإلكتروني', ident: 'البريد الإلكتروني أو الرقم الأكاديمي / الوظيفي', pass: 'كلمة المرور', local: 'المتابعة دون حساب (على هذا الجهاز فقط)', back: 'رجوع', sendReset: 'إرسال رابط الاستعادة', newPass: 'كلمة مرور جديدة', setPass: 'حفظ كلمة المرور', checkMail: 'تحقق من بريدك الإلكتروني لإكمال الخطوة.', short: 'كلمة المرور 8 أحرف على الأقل', bad: 'تحقق من البريد وكلمة المرور', hint: 'يمكنك فتح التطبيق من أجهزة متعددة بالحساب نفسه. كل حساب مستقل عن الحسابات الأخرى.' },
@@ -139,7 +152,7 @@
           '<div class="pill bad"' + (msg ? '' : ' hidden') + '>' + h(msg || '') + '</div>' +
           '<button class="btn pri" type="submit" style="justify-content:center">' + (ar ? 'حفظ ومتابعة' : 'Save and continue') + '</button>' +
           '<button class="btn sm" type="button" id="fc-out">' + (ar ? 'تسجيل الخروج' : 'Sign out') + '</button></form>';
-        el.querySelector('#fc-out').onclick = async function () { try { await sb.auth.signOut(); } catch (e) {} try { localStorage.removeItem(LAST_USER_KEY); } catch (e) {} location.reload(); };
+        el.querySelector('#fc-out').onclick = function () { hardSignOut(); };
         el.querySelector('form').onsubmit = async function (e) {
           e.preventDefault();
           var a = el.querySelector('#fc-1').value, b = el.querySelector('#fc-2').value;
@@ -377,7 +390,7 @@
       toast(lang() === 'ar' ? 'تمت الإزالة' : 'Removed'); loadUsers();
     },
     'auth-open': function () { authResolve = function () { location.reload(); }; authScreen('login'); },
-    'sign-out': async function () { try { await sb.rpc('comm_log_event', { p_kind: 'logout', p_ua: navigator.userAgent }); } catch (e) {} try { await sb.auth.signOut(); } catch (e) {} try { localStorage.removeItem(LAST_USER_KEY); } catch (e) {} location.reload(); },
+    'sign-out': function () { try { sb.rpc('comm_log_event', { p_kind: 'logout', p_ua: navigator.userAgent }); } catch (e) {} hardSignOut(); },
     'push-enable': async function () {
       try {
         if (!('serviceWorker' in navigator) || !('PushManager' in window)) return toast('Push not supported here');
