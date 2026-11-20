@@ -30,7 +30,7 @@
     '.wb-q{padding:8px 0;border-top:1px dashed var(--line)}.wb-q:first-child{border-top:0}.wb-bar{height:10px;background:rgba(127,127,127,.2);border-radius:99px;overflow:hidden;margin:3px 0}.wb-bar i{display:block;height:100%;background:var(--accent,#0b8a97)}' +
     '.wb-stars button{font-size:22px;background:none;border:0;cursor:pointer;opacity:.35}.wb-stars button.on{opacity:1}.wb-form{display:grid;gap:8px}.wb-form label{display:grid;gap:3px;font-size:13px}.wb-form input,.wb-form textarea,.wb-form select{width:100%}' +
     '#wb-recbox{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:12px}#wb-recbox .box{background:var(--bg,#fff);color:var(--fg,inherit);border-radius:16px;width:min(560px,100%);max-height:94vh;overflow:auto;padding:14px}' +
-    '#wb-recbox video{width:100%;max-height:46vh;background:#000;border-radius:10px;display:block}#wb-recbox .rdot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#dc2626;margin-inline-end:6px;animation:wbp 1s infinite}@keyframes wbp{50%{opacity:.25}}' +
+    '#wb-recbox .box{font-size:13px}#wb-recbox .pill{white-space:normal;text-align:start}#wb-recbox.mini{inset:auto;bottom:12px;inset-inline-end:12px;background:none;padding:0;display:block;width:auto;height:auto}#wb-recbox.mini .box{width:270px;padding:10px;box-shadow:0 6px 24px rgba(0,0,0,.45);pointer-events:auto}#wb-recbox video{width:100%;max-height:46vh;background:#000;border-radius:10px;display:block}#wb-recbox .rdot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#dc2626;margin-inline-end:6px;animation:wbp 1s infinite}@keyframes wbp{50%{opacity:.25}}' +
     '#wb-cert{position:fixed;inset:0;z-index:95;background:rgba(0,0,0,.65);overflow:auto;padding:12px}#wb-cert .bar{display:flex;gap:8px;justify-content:center;margin-bottom:10px;flex-wrap:wrap}' +
     '.wb-cr{background:#fff;color:#111;width:min(900px,100%);margin:0 auto;padding:34px 40px;border:10px double #0b6e78;text-align:center;box-sizing:border-box;font-family:Tahoma,Arial,sans-serif}.wb-cr h1{margin:8px 0;font-size:34px;color:#0b6e78}.wb-cr .nm{font-size:30px;font-weight:700;margin:14px 0;border-bottom:2px solid #999;display:inline-block;padding:0 24px}.wb-cr p{font-size:18px;line-height:2;margin:6px 0}.wb-cr .sg{display:flex;justify-content:space-around;margin-top:34px;font-size:15px}.wb-cr .sg div{border-top:1px solid #333;padding-top:6px;min-width:180px}' +
     '@media print{body>*:not(#wb-cert){display:none!important}#wb-cert{position:static!important;background:#fff!important;padding:0!important}#wb-cert .bar{display:none!important}@page{size:landscape;margin:8mm}}';
@@ -273,13 +273,15 @@
   function recRender() {
     var c = document.getElementById('wb-rc'); if (!c) return;
     var v = document.getElementById('wb-rv'), S = REC.state, audioOnly = REC.mode === 'audio';
-    if (v) { if (S === 'recording' || S === 'paused') { if (v.srcObject !== REC.stream) v.srcObject = REC.stream; v.muted = true; v.controls = false; v.style.display = audioOnly ? 'none' : ''; try { v.play(); } catch (e) {} } else if (S === 'done') { v.srcObject = null; v.src = REC.url; v.muted = false; v.controls = true; v.style.display = ''; } else { v.srcObject = null; v.removeAttribute('src'); v.style.display = 'none'; } }
+    var mini = REC.mode === 'screen' && (S === 'recording' || S === 'paused'), bx = document.getElementById('wb-recbox'); if (bx) bx.classList.toggle('mini', mini);
+    if (v) { if (S === 'ready' || ((S === 'recording' || S === 'paused') && !mini)) { if (v.srcObject !== REC.stream) v.srcObject = REC.stream; v.muted = true; v.controls = false; v.style.display = audioOnly ? 'none' : ''; try { v.play(); } catch (e) {} } else if (mini) { v.style.display = 'none'; } else if (S === 'done') { v.srcObject = null; v.src = REC.url; v.muted = false; v.controls = true; v.style.display = ''; } else { v.srcObject = null; v.removeAttribute('src'); v.style.display = 'none'; } }
     var modes = '<div class="wb-row">' + [['cam', '📹 ' + T('كاميرا + ميكروفون', 'Camera + mic')], ['audio', '🎙 ' + T('صوت فقط', 'Audio only')]].concat(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia ? [['screen', '🖥 ' + T('الشاشة / PowerPoint + ميكروفون', 'Screen / PowerPoint + mic')]] : []).map(function (m) { return '<button class="btn sm' + (REC.mode === m[0] ? ' pri' : '') + '" data-act="wb-rec-mode" data-m="' + m[0] + '">' + h(m[1]) + '</button>'; }).join('') + '</div>';
     var big = REC.blob && REC.blob.size > MAXB;
     c.innerHTML = (REC.msg ? '<div class="pill bad" style="display:block;margin:8px 0">' + h(REC.msg) + '</div>' : '') +
       (S === 'idle' ? (REC.rescue ? '<div class="wb-card" style="border-color:#d97706"><b>⚠ ' + h(T('يوجد تسجيل غير مكتمل على هذا الجهاز (', 'An unfinished recording exists on this device (')) + fsize(REC.rescue) + ')</b><div class="wb-row"><button class="btn pri" data-act="wb-rec-rescue">' + h(T('استرجاعه', 'Recover')) + '</button><button class="btn sm bad" data-act="wb-rec-discard">' + h(T('حذفه', 'Discard')) + '</button></div></div>' : '') + modes +
-          (REC.mode === 'screen' ? '<div class="pill warn" style="display:block;margin:8px 0;line-height:1.8">' + h(T('عند ظهور نافذة المشاركة اختر «الشاشة بأكملها» (الأسهل) أو «نافذة» ثم PowerPoint. لا تختر «علامة تبويب» لأن PowerPoint ليس تبويباً. ابدأ عرض الشرائح بعد بدء التسجيل. للتحكم بالإيقاف المؤقت من أثناء العرض تظهر نافذة صغيرة عائمة (Chrome/Edge على الكمبيوتر).', 'In the share picker choose “Entire screen” (easiest) or “Window” then PowerPoint — not “Tab”. Start the slideshow after recording starts. A small floating controller (Chrome/Edge desktop) lets you pause while presenting.')) + '</div>' : '') +
-          '<div class="sub" style="margin:8px 0">' + h(T('لا يوجد حد زمني. المحاضرة الطويلة تُحفظ تدريجياً في الجهاز، فلا تضيع إن أُغلقت الصفحة بالخطأ. للمحاضرات الطويلة نزّل الملف على جهازك (الإرسال للمنظّم حتى 60 ميغابايت فقط).', 'No time limit. Long recordings are saved progressively on this device. For long lectures download the file (sending to organizer is limited to 60 MB).')) + '</div><button class="btn pri" style="font-size:17px;padding:10px 18px" data-act="wb-rec-start">⏺ ' + h(T('بدء التسجيل', 'Start recording')) + '</button>' :
+          (REC.mode === 'screen' ? '<div class="pill warn" style="display:block;margin:8px 0;line-height:1.8">' + h(T('اضغط «اختيار الشاشة»، ثم من نافذة المتصفح اختر «الشاشة بأكملها» (الأسهل) أو «نافذة» لملف معيّن. لا تختر «علامة تبويب» للملفات خارج المتصفح. بعد المعاينة اضغط «بدء التسجيل». أثناء التسجيل تظهر نافذة صغيرة عائمة للإيقاف المؤقت والإنهاء (Chrome/Edge على الكمبيوتر).', 'Press “Pick screen”, then in the browser dialog choose “Entire screen” (easiest) or a “Window”. Avoid “Tab” for files outside the browser. After the preview press “Start recording”. A floating mini-controller appears while recording (Chrome/Edge desktop).')) + '</div>' : '') +
+          '<div class="sub" style="margin:8px 0">' + h(T('لا يوجد حد زمني. المحاضرة الطويلة تُحفظ تدريجياً في الجهاز، فلا تضيع إن أُغلقت الصفحة بالخطأ. للمحاضرات الطويلة نزّل الملف على جهازك (الإرسال للمنظّم حتى 60 ميغابايت فقط).', 'No time limit. Long recordings are saved progressively on this device. For long lectures download the file (sending to organizer is limited to 60 MB).')) + '</div><button class="btn pri" style="font-size:17px;padding:10px 18px" data-act="wb-rec-start">' + (REC.mode === 'screen' ? '🖥 ' + h(T('اختيار الشاشة / النافذة', 'Pick screen / window')) : '⏺ ' + h(T('بدء التسجيل', 'Start recording'))) + '</button>' :
+S === 'ready' ? '<div class="pill ok" style="display:block;margin:8px 0;line-height:1.8">' + h(T('✓ تمت مشاركة الشاشة. المعاينة أعلاه هي ما سيُسجَّل. اضغط «بدء التسجيل» ثم انتقل إلى الملف أو العرض الذي تريد شرحه.', '✓ Screen shared. The preview above is what will be recorded. Press “Start recording”, then switch to the file you want to present.')) + '</div><div class="wb-row"><button class="btn pri" style="font-size:17px;padding:10px 18px" data-act="wb-rec-begin">⏺ ' + h(T('بدء التسجيل', 'Start recording')) + '</button><button class="btn" data-act="wb-rec-repick">🔄 ' + h(T('اختيار شاشة/نافذة أخرى', 'Pick another screen/window')) + '</button><button class="btn sm" data-act="wb-rec-cancel">' + h(T('إلغاء', 'Cancel')) + '</button></div>' :
         S === 'recording' || S === 'paused' ? '<div style="margin:10px 0;font-size:20px">' + (S === 'recording' ? '<span class="rdot"></span>' : '⏸ ') + '<b id="wb-tm">' + tmStr() + '</b> <span class="sub">' + h(S === 'paused' ? T('متوقف مؤقتاً', 'Paused') : T('جارٍ التسجيل', 'Recording')) + '</span></div>' + ctrlBtns() :
         '<div class="sub" style="margin:8px 0">' + h(T('المدة ', 'Length ')) + tmStr() + ' · ' + fsize(REC.blob && REC.blob.size) + ' · .' + REC.ext + '</div><div class="wb-row"><button class="btn pri" data-act="wb-rec-dl">⬇ ' + h(T('تنزيل على الجهاز', 'Download')) + '</button>' + (REC.ev && !big ? '<button class="btn" data-act="wb-rec-send">📤 ' + h(T('إرسال إلى المنظّم', 'Send to organizer')) + '</button>' : '') + '<button class="btn" data-act="wb-rec-again">↺ ' + h(T('تسجيل جديد', 'New recording')) + '</button></div>' +
           (big && REC.ev ? '<div class="sub" style="margin-top:6px">' + h(T('الحجم أكبر من 60 ميغابايت فلا يمكن إرساله عبر التطبيق؛ نزّله على جهازك.', 'Larger than 60 MB: download it instead of sending.')) + '</div>' : '') +
@@ -315,6 +317,17 @@
         stream = new MediaStream(tracks);
       } else stream = await navigator.mediaDevices.getUserMedia(audioOnly ? { audio: true } : { audio: true, video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } } });
       REC.stream = stream; REC.audio = audioOnly;
+      stream.getTracks().forEach(function (t) { t.onended = function () { if (REC.state === 'recording' || REC.state === 'paused') recStop(); else if (REC.state === 'ready') { recCleanup(false); REC.state = 'idle'; REC.msg = T('توقفت مشاركة الشاشة. اختر من جديد.', 'Screen sharing stopped. Pick again.'); recRender(); } }; });
+      if (screen) { REC.state = 'ready'; recRender(); } else recBegin();
+    } catch (e) {
+      recCleanup(false);
+      REC.msg = e && /NotAllowed|Permission/i.test(e.name + e.message) ? T('لم تسمح للتطبيق بالكاميرا/الميكروفون/مشاركة الشاشة. اسمح من إعدادات المتصفح (وعلى ماك: إعدادات النظام ← الخصوصية والأمان ← تسجيل الشاشة ← فعّل Chrome) ثم أعد المحاولة.', 'Permission denied (camera/mic/screen). Allow it in browser settings (on Mac: System Settings → Privacy & Security → Screen Recording → enable Chrome) and retry.') : e && /NotFound|Devices/i.test(e.name + e.message) ? T('لا توجد كاميرا أو ميكروفون على هذا الجهاز.', 'No camera or microphone found.') : (e && e.message) || String(e);
+      REC.state = 'idle'; recRender();
+    }
+  }
+  async function recBegin() {
+    try {
+      var audioOnly = REC.audio, screen = REC.mode === 'screen', stream = REC.stream; if (!stream) return;
       var mime = pickMime(audioOnly), opts = { videoBitsPerSecond: screen ? 1000000 : 500000, audioBitsPerSecond: 64000 }; if (mime) opts.mimeType = mime;
       var mr; try { mr = new MediaRecorder(stream, opts); } catch (e) { mr = new MediaRecorder(stream); }
       REC.mr = mr; REC.chunks = []; REC.mime = (mr.mimeType || mime || (audioOnly ? 'audio/webm' : 'video/webm')).split(';')[0]; REC.ext = extOf(REC.mime, audioOnly); REC.saved = false; REC.rescue = 0;
@@ -327,17 +340,12 @@
         try { REC.ac && REC.ac.close(); } catch (e) {} try { if (REC.lock) { REC.lock.release(); REC.lock = null; } } catch (e) {} window.onbeforeunload = null;
         idbMeta(); REC.state = REC.blob.size ? 'done' : 'idle'; if (!REC.blob.size) REC.msg = T('لم يُسجَّل شيء. حاول مرة أخرى.', 'Nothing was recorded. Try again.'); recRender();
       };
-      stream.getTracks().forEach(function (t) { t.onended = function () { if (REC.state === 'recording' || REC.state === 'paused') recStop(); }; });
       mr.start(2000); REC.state = 'recording'; REC.secs = 0;
       try { if (navigator.wakeLock) REC.lock = await navigator.wakeLock.request('screen'); } catch (e) {}
       window.onbeforeunload = function (e) { e.preventDefault(); e.returnValue = ''; return ''; };
       REC.timer = setInterval(function () { if (REC.state !== 'recording') return; REC.secs++; if (REC.secs % 30 === 0) idbMeta(); var c = document.getElementById('wb-tm'); if (c) c.textContent = tmStr(); pipSync(); }, 1000);
       recRender(); if (screen) pipOpen();
-    } catch (e) {
-      recCleanup(false);
-      REC.msg = e && /NotAllowed|Permission/i.test(e.name + e.message) ? T('لم تسمح للتطبيق بالكاميرا/الميكروفون/مشاركة الشاشة. اسمح من إعدادات المتصفح ثم أعد المحاولة.', 'Permission denied (camera/mic/screen). Allow it in browser settings and retry.') : e && /NotFound|Devices/i.test(e.name + e.message) ? T('لا توجد كاميرا أو ميكروفون على هذا الجهاز.', 'No camera or microphone found.') : (e && e.message) || String(e);
-      REC.state = 'idle'; recRender();
-    }
+    } catch (e) { recCleanup(false); REC.msg = (e && e.message) || String(e); REC.state = 'idle'; recRender(); }
   }
   function recPause() {
     try {
@@ -438,6 +446,9 @@
     'wb-rec-discard': function () { idbClear(); REC.rescue = 0; recRender(); },
     'wb-rec-mode': function (el) { REC.mode = el.dataset.m; recRender(); },
     'wb-rec-start': function () { recStart(); },
+    'wb-rec-begin': function () { recBegin(); },
+    'wb-rec-repick': function () { recCleanup(false); REC.state = 'idle'; recStart(); },
+    'wb-rec-cancel': function () { recCleanup(false); REC.state = 'idle'; REC.msg = ''; recRender(); },
     'wb-rec-stop': function () { recStop(); },
     'wb-rec-again': function () { if (!REC.saved && !window.confirm(T('لم تنزّل التسجيل الحالي. بدء تسجيل جديد سيحذفه. متابعة؟', 'Current recording not downloaded; a new one replaces it. Continue?'))) return; recCleanup(true); REC.state = 'idle'; REC.msg = ''; REC.saved = false; recRender(); },
     'wb-rec-dl': function () { if (REC.blob) { saveBlob(recName(), REC.blob); REC.saved = true; } },
