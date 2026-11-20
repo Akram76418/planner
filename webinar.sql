@@ -175,6 +175,7 @@ begin
   if not public.wb_can_see(p_id) then raise exception 'not allowed'; end if;
   if coalesce(p_on, true) then
     if exists (select 1 from wb_events where id = p_id and cancelled) then raise exception 'أُلغي هذا الويبنار'; end if;
+    if exists (select 1 from wb_events where id = p_id and now() > starts_at + make_interval(mins => duration_min)) then raise exception 'انتهى هذا الويبنار'; end if;
     insert into wb_regs (event_id, user_id) values (p_id, auth.uid()) on conflict do nothing;
   else
     delete from wb_regs where event_id = p_id and user_id = auth.uid() and joined_at is null;
@@ -192,6 +193,7 @@ begin
   if not public.wb_is_mgr(p_id) and not (now() >= e.starts_at - interval '15 minutes' and now() <= e.starts_at + make_interval(mins => e.duration_min) + interval '60 minutes') then
     raise exception 'الرابط يُفتح قبل الموعد بـ 15 دقيقة'; end if;
   if e.link is null then raise exception 'لم يُضَف رابط البث بعد'; end if;
+  if public.wb_is_mgr(p_id) then return e.link; end if;   -- المنظّم لا يُحتسب ضمن الحضور
   insert into wb_regs (event_id, user_id, joined_at) values (p_id, auth.uid(), now())
     on conflict (event_id, user_id) do update set joined_at = coalesce(wb_regs.joined_at, now());
   return e.link;

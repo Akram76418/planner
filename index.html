@@ -810,7 +810,7 @@ function render(){
   const VIEWS=views();if(!VIEWS.includes(UI.view))UI.view=VIEWS[0];
   const signedIn=!!(window.PLANNER_AUTH&&window.PLANNER_AUTH.user&&window.PLANNER_AUTH.user());
   const curNav=UI.view==='logs'?'settings':UI.view;
-  const navHtml=VIEWS.filter(v=>v!=='logs').map(v=>`<button data-act="go" data-v="${v}" ${curNav===v?'aria-current="page"':''}>${ic(v)}<span>${t(v)}</span>${v==='rs'&&window.RSG?(()=>{const n=window.RSG.reduce((x,g)=>x+(+g.unread||0)+(+g.cmt_new||0)+(+g.overdue||0)+(+g.soon||0),0);return n>0?`<span class="rs-nb">${n>99?'99+':n}</span>`:''})():''}</button>`).join('');
+  const navHtml=VIEWS.filter(v=>v!=='logs').map(v=>`<button data-act="go" data-v="${v}" ${curNav===v?'aria-current="page"':''}>${ic(v)}<span>${t(v)}</span>${v==='wb'&&window.WBN>0?`<span class="rs-nb">${window.WBN>99?'99+':window.WBN}</span>`:''}${v==='rs'&&window.RSG?(()=>{const n=window.RSG.reduce((x,g)=>x+(+g.unread||0)+(+g.cmt_new||0)+(+g.overdue||0)+(+g.soon||0),0);return n>0?`<span class="rs-nb">${n>99?'99+':n}</span>`:''})():''}</button>`).join('');
   $('#side').innerHTML=`<div class="brand"><img src="logo.png" alt="" width="46" height="46" style="border-radius:50%;background:#fff;padding:2px;display:block;margin-bottom:8px">${esc(window.COMM_ONLY?t('comm'):t('app'))}<small>${esc(window.COMM_ONLY?'':t('appEn'))}</small></div><div class="nav">${navHtml}</div>`;
   $('#bottom').innerHTML=VIEWS.filter(v=>v!=='logs'&&v!=='ledger'&&v!=='book'&&((v!=='iv'&&v!=='ex'&&v!=='rs'&&v!=='wb')||window.COMM_ONLY)).map(v=>`<button data-act="go" data-v="${v}" ${UI.view===v?'aria-current="page"':''}>${ic(v,22)}<span>${esc(t(v).split(' ')[0])}</span></button>`).join('');
   $('#mtitle').textContent=t(UI.view);
