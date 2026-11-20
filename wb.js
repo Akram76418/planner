@@ -2,7 +2,7 @@
    البث نفسه عبر رابط خارجي (Zoom/Meet/Teams/Jitsi) يظهر للمسجّلين عند الموعد. تعتمد على supabase/webinar.sql. */
 (function () {
   'use strict';
-  var BUCKET = 'webinar-files', MAXB = 60 * 1024 * 1024, MAXSEC = 600;
+  var BUCKET = 'webinar-files', MAXB = 60 * 1024 * 1024, MAXSEC = 14400;
   var P = function () { return window.PLANNER_AUTH || null; };
   function sb() { return P() && P().sb(); }
   function ar() { return P() ? P().lang() === 'ar' : true; }
@@ -165,7 +165,7 @@
   /* ── التسجيلات ── */
   function recTab(e) {
     var can = e.allow_recordings || isMgr(e);
-    return '<div class="wb-card"><div class="sub">' + h(can ? T('سجّل نفسك صوتاً وصورة (حتى 10 دقائق) وأرسله إلى المنظّم، أو نزّله على جهازك.', 'Record yourself (up to 10 min) and send it to the organizer, or download it.') : T('هذا الويبنار لا يستقبل تسجيلات، ويمكنك التسجيل للتنزيل على جهازك فقط.', 'This webinar does not accept submissions; you can record for download only.')) + '</div>' +
+    return '<div class="wb-card"><div class="sub">' + h(can ? T('سجّل صوتاً وصورة أو شاشة العرض (بلا حد زمني) ونزّله على جهازك، أو أرسل المقاطع القصيرة (حتى 60 ميغابايت) إلى المنظّم.', 'Record audio/video or your screen (no time limit) and download it, or send short clips (≤60 MB) to the organizer.') : T('هذا الويبنار لا يستقبل تسجيلات، ويمكنك التسجيل للتنزيل على جهازك فقط.', 'This webinar does not accept submissions; you can record for download only.')) + '</div>' +
       '<div class="wb-row"><button class="btn pri" data-act="wb-rec-open" data-ev="' + (can ? e.id : '') + '">🎙 ' + h(T('تسجيل جديد', 'New recording')) + '</button></div></div>' +
       '<div class="wb-card">' + (W.recs.map(function (r) {
         return '<div class="wb-q"><b>' + h(r.file_name) + '</b> <span class="sub">' + (isMgr(e) && r.author ? h(r.author) + ' · ' : '') + fsize(r.size_bytes) + ' · ' + (r.seconds || 0) + h(T('ث', 's')) + ' · ' + h(fshort(r.created_at)) + '</span>' +
@@ -225,8 +225,14 @@
     try { var api = window.COMM_API; W.cohorts = ((api && (await api.rpc('comm_list_cohorts'))) || []).filter(function (c) { return c.is_active !== false; }); } catch (e) { W.cohorts = []; }
   }
 
-  /* ───────── المسجّل (صوت/صورة) ───────── */
-  var REC = { ev: null, mode: 'cam', stream: null, extra: [], mr: null, chunks: [], blob: null, url: null, timer: null, secs: 0, state: 'idle', msg: '', ext: 'webm' };
+  /* ───────── المسجّل (صوت/صورة): بلا حد زمني، إيقاف مؤقت، حفظ احتياطي في الجهاز ───────── */
+  var REC = { ev: null, mode: 'cam', stream: null, extra: [], mr: null, chunks: [], blob: null, url: null, timer: null, secs: 0, state: 'idle', msg: '', ext: 'webm', mime: '', audio: false, saved: false, rescue: 0, lock: null, pip: null };
+  function idb() { return new Promise(function (res, rej) { try { var r = indexedDB.open('wb-rec', 1); r.onupgradeneeded = function () { r.result.createObjectStore('c', { autoIncrement: true }); r.result.createObjectStore('m'); }; r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); }; } catch (e) { rej(e); } }); }
+  function idbDo(store, mode, fn) { return idb().then(function (db) { return new Promise(function (res, rej) { var tx = db.transaction(store, mode), out = fn(tx); tx.oncomplete = function () { res(out && out.result); db.close(); }; tx.onerror = tx.onabort = function () { rej(tx.error); db.close(); }; }); }); }
+  function idbAdd(b) { return idbDo('c', 'readwrite', function (tx) { tx.objectStore('c').add(b); }).catch(function () {}); }
+  function idbMeta() { return idbDo('m', 'readwrite', function (tx) { tx.objectStore('m').put({ type: REC.mime, ext: REC.ext, audio: REC.audio, secs: REC.secs }, 'meta'); }).catch(function () {}); }
+  function idbClear() { return idb().then(function (db) { var tx = db.transaction(['c', 'm'], 'readwrite'); tx.objectStore('c').clear(); tx.objectStore('m').clear(); tx.oncomplete = function () { db.close(); }; }).catch(function () {}); }
+  function idbLoad() { return idb().then(function (db) { return new Promise(function (res) { var tx = db.transaction(['c', 'm'], 'readonly'), c = tx.objectStore('c').getAll(), m = tx.objectStore('m').get('meta'); tx.oncomplete = function () { db.close(); res({ chunks: c.result || [], meta: m.result || null }); }; tx.onerror = function () { res({ chunks: [], meta: null }); }; }); }).catch(function () { return { chunks: [], meta: null }; }); }
   function pickMime(audioOnly) {
     if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
     var c = audioOnly ? ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'] : ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
@@ -234,75 +240,130 @@
     return '';
   }
   function extOf(type, audio) { return /mp4/.test(type) ? (audio ? 'm4a' : 'mp4') : /ogg/.test(type) ? 'ogg' : 'webm'; }
+  function tmStr() { return p2(Math.floor(REC.secs / 3600)) + ':' + p2(Math.floor(REC.secs / 60) % 60) + ':' + p2(REC.secs % 60); }
   function recOpen(ev) {
-    recCleanup(true); REC.ev = ev || null; REC.mode = 'cam'; REC.state = 'idle'; REC.msg = '';
+    recCleanup(true); REC.ev = ev || null; REC.mode = 'cam'; REC.state = 'idle'; REC.msg = ''; REC.saved = false; REC.rescue = 0;
     var b = document.getElementById('wb-recbox'); if (b) b.remove();
     b = document.createElement('div'); b.id = 'wb-recbox'; b.dir = ar() ? 'rtl' : 'ltr';
     b.innerHTML = '<div class="box"><div class="wb-h" style="justify-content:space-between"><b>🎙 ' + h(T('مسجّل صوت وصورة', 'Audio/video recorder')) + '</b><button class="btn sm" data-act="wb-rec-close">✕</button></div><video id="wb-rv" playsinline></video><div id="wb-rc"></div></div>';
     document.body.appendChild(b); recRender();
+    idbLoad().then(function (d) { if (REC.state === 'idle' && d.chunks.length && d.meta) { REC.rescue = d.chunks.reduce(function (s, x) { return s + x.size; }, 0); recRender(); } });
   }
   function recCleanup(full) {
     clearInterval(REC.timer); REC.timer = null;
     try { if (REC.mr && REC.mr.state !== 'inactive') { REC.mr.onstop = null; REC.mr.stop(); } } catch (e) {}
     [REC.stream].concat(REC.extra || []).forEach(function (s) { try { s && s.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} });
     REC.stream = null; REC.extra = []; REC.mr = null;
+    try { if (REC.lock) { REC.lock.release(); REC.lock = null; } } catch (e) {}
+    try { if (REC.pip) { REC.pip.close(); REC.pip = null; } } catch (e) {}
+    window.onbeforeunload = null;
     if (full) { if (REC.url) { try { URL.revokeObjectURL(REC.url); } catch (e) {} } REC.url = null; REC.blob = null; REC.chunks = []; REC.secs = 0; }
+  }
+  function recClose() {
+    if ((REC.state === 'recording' || REC.state === 'paused') && !window.confirm(T('التسجيل جارٍ وسيُنهى الآن. متابعة؟', 'Recording is in progress and will end. Continue?'))) return;
+    if (REC.state === 'recording' || REC.state === 'paused') { var keep = REC.mr; try { REC.mr && (REC.mr.onstop = null); } catch (e) {} }
+    if (REC.state === 'done' && !REC.saved && !window.confirm(T('لم تنزّل التسجيل ولم ترسله. إغلاق الآن؟ (تبقى نسخة احتياطية في هذا الجهاز لاسترجاعها)', 'Not downloaded or sent yet. Close? (A backup copy stays on this device for recovery)'))) return;
+    if (REC.saved) idbClear();
+    recCleanup(true); var b = document.getElementById('wb-recbox'); if (b) b.remove();
+  }
+  function ctrlBtns() {
+    var P = REC.state === 'paused';
+    return '<div class="wb-row" style="margin-top:10px"><button class="btn' + (P ? ' pri' : '') + '" style="font-size:17px;padding:10px 18px" data-act="wb-rec-pause">' + (P ? '▶ ' + h(T('استئناف', 'Resume')) : '⏸ ' + h(T('إيقاف مؤقت', 'Pause'))) + '</button><button class="btn bad" style="font-size:17px;padding:10px 18px" data-act="wb-rec-stop">⏹ ' + h(T('إنهاء وحفظ', 'Finish & save')) + '</button></div>';
   }
   function recRender() {
     var c = document.getElementById('wb-rc'); if (!c) return;
     var v = document.getElementById('wb-rv'), S = REC.state, audioOnly = REC.mode === 'audio';
-    if (v) { if (S === 'recording') { v.srcObject = REC.stream; v.muted = true; v.controls = false; v.style.display = audioOnly ? 'none' : ''; try { v.play(); } catch (e) {} } else if (S === 'done') { v.srcObject = null; v.src = REC.url; v.muted = false; v.controls = true; v.style.display = ''; } else { v.srcObject = null; v.removeAttribute('src'); v.style.display = 'none'; } }
-    var modes = '<div class="wb-row">' + [['cam', '📹 ' + T('كاميرا + ميكروفون', 'Camera + mic')], ['audio', '🎙 ' + T('صوت فقط', 'Audio only')]].concat(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia ? [['screen', '🖥 ' + T('الشاشة + ميكروفون', 'Screen + mic')]] : []).map(function (m) { return '<button class="btn sm' + (REC.mode === m[0] ? ' pri' : '') + '" data-act="wb-rec-mode" data-m="' + m[0] + '">' + h(m[1]) + '</button>'; }).join('') + '</div>';
-    var mm = Math.floor(REC.secs / 60), ss = REC.secs % 60, tm = p2(mm) + ':' + p2(ss);
+    if (v) { if (S === 'recording' || S === 'paused') { if (v.srcObject !== REC.stream) v.srcObject = REC.stream; v.muted = true; v.controls = false; v.style.display = audioOnly ? 'none' : ''; try { v.play(); } catch (e) {} } else if (S === 'done') { v.srcObject = null; v.src = REC.url; v.muted = false; v.controls = true; v.style.display = ''; } else { v.srcObject = null; v.removeAttribute('src'); v.style.display = 'none'; } }
+    var modes = '<div class="wb-row">' + [['cam', '📹 ' + T('كاميرا + ميكروفون', 'Camera + mic')], ['audio', '🎙 ' + T('صوت فقط', 'Audio only')]].concat(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia ? [['screen', '🖥 ' + T('الشاشة / PowerPoint + ميكروفون', 'Screen / PowerPoint + mic')]] : []).map(function (m) { return '<button class="btn sm' + (REC.mode === m[0] ? ' pri' : '') + '" data-act="wb-rec-mode" data-m="' + m[0] + '">' + h(m[1]) + '</button>'; }).join('') + '</div>';
+    var big = REC.blob && REC.blob.size > MAXB;
     c.innerHTML = (REC.msg ? '<div class="pill bad" style="display:block;margin:8px 0">' + h(REC.msg) + '</div>' : '') +
-      (S === 'idle' ? modes + '<div class="sub" style="margin:8px 0">' + h(T('سيطلب المتصفح إذن الكاميرا والميكروفون. الحد الأقصى 10 دقائق. الجودة معتدلة لتناسب الإنترنت الضعيف.', 'Your browser will ask for camera/mic permission. Max 10 minutes. Moderate quality for slow connections.')) + '</div><button class="btn pri" data-act="wb-rec-start">⏺ ' + h(T('بدء التسجيل', 'Start recording')) + '</button>' :
-        S === 'recording' ? '<div style="margin:10px 0"><span class="rdot"></span><b>' + tm + '</b> / 10:00</div><button class="btn bad" data-act="wb-rec-stop">⏹ ' + h(T('إيقاف', 'Stop')) + '</button>' :
-        '<div class="sub" style="margin:8px 0">' + h(T('المدة ', 'Length ')) + tm + ' · ' + fsize(REC.blob && REC.blob.size) + ' · .' + REC.ext + '</div><div class="wb-row"><button class="btn pri" data-act="wb-rec-dl">⬇ ' + h(T('تنزيل الفيديو', 'Download')) + '</button>' + (REC.ev ? '<button class="btn" data-act="wb-rec-send">📤 ' + h(T('إرسال إلى المنظّم', 'Send to organizer')) + '</button>' : '') + '<button class="btn" data-act="wb-rec-again">↺ ' + h(T('إعادة التسجيل', 'Record again')) + '</button></div>' +
-          (/webm/.test(REC.ext) ? '<div class="sub" style="margin-top:6px">' + h(T('صيغة WebM تعمل في VLC وChrome؛ وإن لم تفتح على جهازك فاستخدم متصفح Chrome.', 'WebM plays in VLC and Chrome; if it won’t open, use Chrome.')) + '</div>' : ''));
+      (S === 'idle' ? (REC.rescue ? '<div class="wb-card" style="border-color:#d97706"><b>⚠ ' + h(T('يوجد تسجيل غير مكتمل على هذا الجهاز (', 'An unfinished recording exists on this device (')) + fsize(REC.rescue) + ')</b><div class="wb-row"><button class="btn pri" data-act="wb-rec-rescue">' + h(T('استرجاعه', 'Recover')) + '</button><button class="btn sm bad" data-act="wb-rec-discard">' + h(T('حذفه', 'Discard')) + '</button></div></div>' : '') + modes +
+          (REC.mode === 'screen' ? '<div class="pill warn" style="display:block;margin:8px 0;line-height:1.8">' + h(T('عند ظهور نافذة المشاركة اختر «الشاشة بأكملها» (الأسهل) أو «نافذة» ثم PowerPoint. لا تختر «علامة تبويب» لأن PowerPoint ليس تبويباً. ابدأ عرض الشرائح بعد بدء التسجيل. للتحكم بالإيقاف المؤقت من أثناء العرض تظهر نافذة صغيرة عائمة (Chrome/Edge على الكمبيوتر).', 'In the share picker choose “Entire screen” (easiest) or “Window” then PowerPoint — not “Tab”. Start the slideshow after recording starts. A small floating controller (Chrome/Edge desktop) lets you pause while presenting.')) + '</div>' : '') +
+          '<div class="sub" style="margin:8px 0">' + h(T('لا يوجد حد زمني. المحاضرة الطويلة تُحفظ تدريجياً في الجهاز، فلا تضيع إن أُغلقت الصفحة بالخطأ. للمحاضرات الطويلة نزّل الملف على جهازك (الإرسال للمنظّم حتى 60 ميغابايت فقط).', 'No time limit. Long recordings are saved progressively on this device. For long lectures download the file (sending to organizer is limited to 60 MB).')) + '</div><button class="btn pri" style="font-size:17px;padding:10px 18px" data-act="wb-rec-start">⏺ ' + h(T('بدء التسجيل', 'Start recording')) + '</button>' :
+        S === 'recording' || S === 'paused' ? '<div style="margin:10px 0;font-size:20px">' + (S === 'recording' ? '<span class="rdot"></span>' : '⏸ ') + '<b id="wb-tm">' + tmStr() + '</b> <span class="sub">' + h(S === 'paused' ? T('متوقف مؤقتاً', 'Paused') : T('جارٍ التسجيل', 'Recording')) + '</span></div>' + ctrlBtns() :
+        '<div class="sub" style="margin:8px 0">' + h(T('المدة ', 'Length ')) + tmStr() + ' · ' + fsize(REC.blob && REC.blob.size) + ' · .' + REC.ext + '</div><div class="wb-row"><button class="btn pri" data-act="wb-rec-dl">⬇ ' + h(T('تنزيل على الجهاز', 'Download')) + '</button>' + (REC.ev && !big ? '<button class="btn" data-act="wb-rec-send">📤 ' + h(T('إرسال إلى المنظّم', 'Send to organizer')) + '</button>' : '') + '<button class="btn" data-act="wb-rec-again">↺ ' + h(T('تسجيل جديد', 'New recording')) + '</button></div>' +
+          (big && REC.ev ? '<div class="sub" style="margin-top:6px">' + h(T('الحجم أكبر من 60 ميغابايت فلا يمكن إرساله عبر التطبيق؛ نزّله على جهازك.', 'Larger than 60 MB: download it instead of sending.')) + '</div>' : '') +
+          (/webm/.test(REC.ext) ? '<div class="sub" style="margin-top:6px">' + h(T('صيغة WebM تعمل في VLC وChrome؛ ويمكن تحويلها إلى MP4 ببرنامج مجاني مثل HandBrake.', 'WebM plays in VLC and Chrome; convert to MP4 with a free tool like HandBrake.')) + '</div>' : ''));
+    pipSync();
+  }
+  /* نافذة عائمة صغيرة (Chrome/Edge للكمبيوتر) للتحكم أثناء عرض PowerPoint */
+  async function pipOpen() {
+    try {
+      if (!window.documentPictureInPicture) return;
+      var w = await window.documentPictureInPicture.requestWindow({ width: 300, height: 130 }); REC.pip = w;
+      w.document.body.style.cssText = 'margin:0;padding:8px;font-family:Tahoma,Arial;text-align:center;background:#fff;color:#111';
+      w.document.body.innerHTML = '<div id="t" style="font-size:22px;font-weight:700;margin:2px 0 8px">00:00:00</div><button id="p" style="font-size:16px;padding:8px 12px;margin:2px">⏸</button><button id="s" style="font-size:16px;padding:8px 12px;margin:2px;background:#dc2626;color:#fff;border:0;border-radius:6px">⏹</button>';
+      w.document.getElementById('p').onclick = function () { recPause(); }; w.document.getElementById('s').onclick = function () { recStop(); };
+      w.addEventListener('pagehide', function () { REC.pip = null; });
+    } catch (e) { REC.pip = null; }
+  }
+  function pipSync() {
+    try { if (!REC.pip) return; var d = REC.pip.document, t = d.getElementById('t'), p = d.getElementById('p'); if (t) t.textContent = tmStr(); if (p) p.textContent = REC.state === 'paused' ? '▶' : '⏸'; if (REC.state === 'done' || REC.state === 'idle') { REC.pip.close(); REC.pip = null; } } catch (e) {}
   }
   async function recStart() {
     REC.msg = '';
     if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) { REC.msg = T('هذا المتصفح لا يدعم التسجيل. حدّثه أو استخدم Chrome/Safari حديث.', 'This browser cannot record. Update it or use a recent Chrome/Safari.'); return recRender(); }
     try {
-      var audioOnly = REC.mode === 'audio', stream;
-      if (REC.mode === 'screen') {
-        var d = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }), m = null; try { m = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e) {}
-        REC.extra = [d, m].filter(Boolean); stream = new MediaStream(d.getVideoTracks().concat(m ? m.getAudioTracks() : d.getAudioTracks()));
+      var audioOnly = REC.mode === 'audio', stream, screen = REC.mode === 'screen';
+      if (screen) {
+        var d; try { d = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: 'monitor', frameRate: { ideal: 10, max: 15 } }, audio: true, selfBrowserSurface: 'exclude', surfaceSwitching: 'include', monitorTypeSurfaces: 'include' }); } catch (e1) { if (e1 && /NotAllowed|Abort/i.test(e1.name)) throw e1; d = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }); }
+        var m = null; try { m = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e) {}
+        REC.extra = [d, m].filter(Boolean);
+        var tracks = d.getVideoTracks();
+        if (m && d.getAudioTracks().length && window.AudioContext) { try { var ac = new AudioContext(), dest = ac.createMediaStreamDestination(); ac.createMediaStreamSource(m).connect(dest); ac.createMediaStreamSource(new MediaStream(d.getAudioTracks())).connect(dest); tracks = tracks.concat(dest.stream.getAudioTracks()); REC.ac = ac; } catch (e) { tracks = tracks.concat(m.getAudioTracks()); } }
+        else tracks = tracks.concat(m ? m.getAudioTracks() : d.getAudioTracks());
+        stream = new MediaStream(tracks);
       } else stream = await navigator.mediaDevices.getUserMedia(audioOnly ? { audio: true } : { audio: true, video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } } });
-      REC.stream = stream;
-      var mime = pickMime(audioOnly), opts = { videoBitsPerSecond: 500000, audioBitsPerSecond: 64000 }; if (mime) opts.mimeType = mime;
+      REC.stream = stream; REC.audio = audioOnly;
+      var mime = pickMime(audioOnly), opts = { videoBitsPerSecond: screen ? 1000000 : 500000, audioBitsPerSecond: 64000 }; if (mime) opts.mimeType = mime;
       var mr; try { mr = new MediaRecorder(stream, opts); } catch (e) { mr = new MediaRecorder(stream); }
-      REC.mr = mr; REC.chunks = [];
-      mr.ondataavailable = function (ev) { if (ev.data && ev.data.size) REC.chunks.push(ev.data); };
+      REC.mr = mr; REC.chunks = []; REC.mime = (mr.mimeType || mime || (audioOnly ? 'audio/webm' : 'video/webm')).split(';')[0]; REC.ext = extOf(REC.mime, audioOnly); REC.saved = false; REC.rescue = 0;
+      await idbClear(); idbMeta();
+      mr.ondataavailable = function (ev) { if (ev.data && ev.data.size) { REC.chunks.push(ev.data); idbAdd(ev.data); } };
       mr.onstop = function () {
-        var type = ((mr.mimeType || mime || (audioOnly ? 'audio/webm' : 'video/webm')) + '').split(';')[0];
-        REC.blob = new Blob(REC.chunks, { type: type }); REC.ext = extOf(type, audioOnly);
+        var type = REC.mime; REC.blob = new Blob(REC.chunks, { type: type });
         if (REC.url) { try { URL.revokeObjectURL(REC.url); } catch (e) {} } REC.url = URL.createObjectURL(REC.blob);
         clearInterval(REC.timer); [REC.stream].concat(REC.extra).forEach(function (s) { try { s && s.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} });
-        REC.state = REC.blob.size ? 'done' : 'idle'; if (!REC.blob.size) REC.msg = T('لم يُسجَّل شيء. حاول مرة أخرى.', 'Nothing was recorded. Try again.'); recRender();
+        try { REC.ac && REC.ac.close(); } catch (e) {} try { if (REC.lock) { REC.lock.release(); REC.lock = null; } } catch (e) {} window.onbeforeunload = null;
+        idbMeta(); REC.state = REC.blob.size ? 'done' : 'idle'; if (!REC.blob.size) REC.msg = T('لم يُسجَّل شيء. حاول مرة أخرى.', 'Nothing was recorded. Try again.'); recRender();
       };
-      stream.getTracks().forEach(function (t) { t.onended = function () { if (REC.state === 'recording') recStop(); }; });
-      mr.start(1000); REC.state = 'recording'; REC.secs = 0;
-      REC.timer = setInterval(function () { REC.secs++; if (REC.secs >= MAXSEC) recStop(); else { var c = document.querySelector('#wb-rc b'); if (c) c.textContent = p2(Math.floor(REC.secs / 60)) + ':' + p2(REC.secs % 60); } }, 1000);
-      recRender();
+      stream.getTracks().forEach(function (t) { t.onended = function () { if (REC.state === 'recording' || REC.state === 'paused') recStop(); }; });
+      mr.start(2000); REC.state = 'recording'; REC.secs = 0;
+      try { if (navigator.wakeLock) REC.lock = await navigator.wakeLock.request('screen'); } catch (e) {}
+      window.onbeforeunload = function (e) { e.preventDefault(); e.returnValue = ''; return ''; };
+      REC.timer = setInterval(function () { if (REC.state !== 'recording') return; REC.secs++; if (REC.secs % 30 === 0) idbMeta(); var c = document.getElementById('wb-tm'); if (c) c.textContent = tmStr(); pipSync(); }, 1000);
+      recRender(); if (screen) pipOpen();
     } catch (e) {
       recCleanup(false);
-      REC.msg = e && /NotAllowed|Permission/i.test(e.name + e.message) ? T('لم تسمح للتطبيق بالكاميرا/الميكروفون. اسمح من إعدادات المتصفح ثم أعد المحاولة.', 'Camera/mic permission was denied. Allow it in browser settings and retry.') : e && /NotFound|Devices/i.test(e.name + e.message) ? T('لا توجد كاميرا أو ميكروفون على هذا الجهاز.', 'No camera or microphone found.') : (e && e.message) || String(e);
+      REC.msg = e && /NotAllowed|Permission/i.test(e.name + e.message) ? T('لم تسمح للتطبيق بالكاميرا/الميكروفون/مشاركة الشاشة. اسمح من إعدادات المتصفح ثم أعد المحاولة.', 'Permission denied (camera/mic/screen). Allow it in browser settings and retry.') : e && /NotFound|Devices/i.test(e.name + e.message) ? T('لا توجد كاميرا أو ميكروفون على هذا الجهاز.', 'No camera or microphone found.') : (e && e.message) || String(e);
       REC.state = 'idle'; recRender();
     }
   }
+  function recPause() {
+    try {
+      if (!REC.mr) return;
+      if (REC.state === 'recording' && REC.mr.state === 'recording') { REC.mr.pause(); REC.state = 'paused'; }
+      else if (REC.state === 'paused') { REC.mr.resume(); REC.state = 'recording'; }
+      recRender();
+    } catch (e) { REC.msg = (e && e.message) || String(e); recRender(); }
+  }
   function recStop() { try { if (REC.mr && REC.mr.state !== 'inactive') REC.mr.stop(); } catch (e) {} }
+  async function recRescue() {
+    var d = await idbLoad(); if (!d.chunks.length || !d.meta) { REC.rescue = 0; return recRender(); }
+    REC.mime = d.meta.type || 'video/webm'; REC.ext = d.meta.ext || 'webm'; REC.audio = !!d.meta.audio; REC.secs = d.meta.secs || 0;
+    REC.blob = new Blob(d.chunks, { type: REC.mime }); if (REC.url) { try { URL.revokeObjectURL(REC.url); } catch (e) {} } REC.url = URL.createObjectURL(REC.blob); REC.state = 'done'; REC.rescue = 0; REC.saved = false; recRender();
+  }
   function recName() { return 'recording-' + stamp() + '.' + REC.ext; }
   async function recSend() {
     if (!REC.blob || !REC.ev) return;
-    if (REC.blob.size > MAXB) { REC.msg = T('الحجم أكبر من 60 ميغابايت. سجّل مدة أقصر أو نزّله فقط.', 'Larger than 60 MB. Record less or download only.'); return recRender(); }
+    if (REC.blob.size > MAXB) { REC.msg = T('الحجم أكبر من 60 ميغابايت. نزّله على جهازك.', 'Larger than 60 MB. Download it instead.'); return recRender(); }
     var c = document.getElementById('wb-rc'); if (c) c.innerHTML = '<div class="sub">' + h(T('جارٍ الرفع… لا تغلق الصفحة.', 'Uploading… keep this page open.')) + '</div>';
     var path = 'w' + REC.ev + '/' + myId() + '/' + Date.now() + '.' + REC.ext;
     try {
       var up = await sb().storage.from(BUCKET).upload(path, REC.blob, { contentType: REC.blob.type, upsert: false }); if (up.error) throw up.error;
       try { await rpc('wb_rec_add', { p_event: REC.ev, p_path: path, p_name: recName(), p_mime: REC.blob.type, p_size: REC.blob.size, p_seconds: REC.secs }); }
       catch (e) { try { await sb().storage.from(BUCKET).remove([path]); } catch (x) {} throw e; }
-      W.msg = h(T('✅ أُرسل تسجيلك إلى المنظّم.', '✅ Your recording was sent to the organizer.')); var b = document.getElementById('wb-recbox'); if (b) b.remove(); recCleanup(true);
+      W.msg = h(T('✅ أُرسل تسجيلك إلى المنظّم.', '✅ Your recording was sent to the organizer.')); REC.saved = true; idbClear(); var b = document.getElementById('wb-recbox'); if (b) b.remove(); recCleanup(true);
       if (W.id) { W.tab = 'rec'; go(loadTab); } else redraw();
     } catch (e) { REC.msg = (e && e.message || String(e)) + (/wb_|bucket|not found|policy/i.test(e && e.message) ? ' — ' + T('تأكد من تشغيل webinar.sql.', 'Make sure webinar.sql was run.') : ''); recRender(); }
   }
@@ -371,12 +432,15 @@
     'wb-cert-png': function () { var cr = document.querySelector('#wb-cert .wb-cr'); if (!cr || !window.lgReceiptPng) return; window.lgReceiptPng('<div style="background:#fff;padding:12px">' + cr.outerHTML + '</div>').then(function (u) { var a = document.createElement('a'); a.href = u; a.download = 'certificate.png'; document.body.appendChild(a); a.click(); a.remove(); }).catch(function (e) { W.err = (e && e.message) || String(e); redraw(); }); },
     'wb-cert-close': function () { var o = document.getElementById('wb-cert'); if (o) o.remove(); },
     'wb-rec-open': function (el) { recOpen(el && el.dataset && el.dataset.ev ? Number(el.dataset.ev) : null); },
-    'wb-rec-close': function () { recCleanup(true); var b = document.getElementById('wb-recbox'); if (b) b.remove(); },
+    'wb-rec-close': function () { recClose(); },
+    'wb-rec-pause': function () { recPause(); },
+    'wb-rec-rescue': function () { recRescue(); },
+    'wb-rec-discard': function () { idbClear(); REC.rescue = 0; recRender(); },
     'wb-rec-mode': function (el) { REC.mode = el.dataset.m; recRender(); },
     'wb-rec-start': function () { recStart(); },
     'wb-rec-stop': function () { recStop(); },
-    'wb-rec-again': function () { recCleanup(true); REC.state = 'idle'; REC.msg = ''; recRender(); },
-    'wb-rec-dl': function () { if (REC.blob) saveBlob(recName(), REC.blob); },
+    'wb-rec-again': function () { if (!REC.saved && !window.confirm(T('لم تنزّل التسجيل الحالي. بدء تسجيل جديد سيحذفه. متابعة؟', 'Current recording not downloaded; a new one replaces it. Continue?'))) return; recCleanup(true); REC.state = 'idle'; REC.msg = ''; REC.saved = false; recRender(); },
+    'wb-rec-dl': function () { if (REC.blob) { saveBlob(recName(), REC.blob); REC.saved = true; } },
     'wb-rec-send': function () { recSend(); }
   };
   window.EXTRA_ACT = Object.assign(window.EXTRA_ACT || {}, ACTS);
