@@ -42,6 +42,7 @@
     '.xm-opt input{margin-top:5px}.xm-timer{display:flex;gap:12px;flex-wrap:wrap;font-weight:700}.xm-timer span{background:var(--card-2,rgba(127,127,127,.12));padding:4px 10px;border-radius:99px}.xm-timer .lo{background:var(--bad,#c0392b);color:#fff}' +
     '.xm-just{width:100%;min-height:110px}.xm-bar{height:6px;background:var(--card-2,rgba(127,127,127,.2));border-radius:99px;overflow:hidden;margin:6px 0}.xm-bar i{display:block;height:100%;background:var(--accent,#2563eb)}' +
     '.xm-rv{border:1px solid var(--bd,#ccc);border-radius:12px;padding:12px;margin:10px 0}.xm-rv.nr{border-color:#d97706}.xm-flag{display:inline-block;background:#fde68a;color:#78350f;border-radius:99px;font-size:12px;padding:1px 8px;margin:2px}' +
+    '.xm-nav{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.xm-nb{min-width:38px;height:38px;padding:0 6px;border-radius:8px;border:1px solid var(--bd,#999);background:transparent;color:inherit;position:relative;cursor:pointer;font-weight:700}.xm-nb.ok{background:rgba(21,128,61,.22);border-color:#15803d}.xm-nb.part{background:rgba(217,119,6,.22);border-color:#d97706}.xm-nb.cur{outline:3px solid var(--accent,#2563eb);outline-offset:1px}.xm-nb.fl::after{content:"🚩";position:absolute;top:-9px;inset-inline-end:-5px;font-size:12px}.xm-leg{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.xm-leg .xm-nb{min-width:18px;height:18px;display:inline-block;cursor:default}.xm-fq .xm-q{margin:8px 0}' +
     '.xm-ok{color:#15803d}.xm-no{color:#b91c1c}.xm-kv{font-size:13px;color:var(--muted)}.xm-ed .row{align-items:flex-start}.xm-chips{display:flex;flex-wrap:wrap;gap:6px}.xm-chips label{border:1px solid var(--bd,#ccc);border-radius:99px;padding:3px 10px;cursor:pointer}';
   document.head.appendChild(css);
 
@@ -113,9 +114,10 @@
   function saveDraft() { var R = X.run; if (!R || !R.st || !R.st.question) return; try { localStorage.setItem(dkey(R), JSON.stringify({ sel: R.sel, text: R.text, sig: R.sig, t0: R.t0, t: Date.now() })); } catch (e) {} }
   function loadDraft(R) { try { var d = JSON.parse(localStorage.getItem(dkey(R)) || 'null'); if (d && Array.isArray(d.sel) && typeof d.text === 'string') { R.sel = d.sel.filter(function (i) { return i < R.st.question.options.length; }); R.text = d.text.slice(0, 600); if (d.sig) R.sig = { paste: d.sig.paste | 0, blur: d.sig.blur | 0, typed_ms: d.sig.typed_ms | 0, keys: d.sig.keys | 0 }; R.t0 = d.t0 || 0; } } catch (e) {} }
   function clearDraft(R) { try { localStorage.removeItem(dkey(R)); } catch (e) {} }
-  function newRun(st, exam) { var R0 = { cEnd: exam && exam.closes_at ? Date.parse(exam.closes_at) : null, exam: exam, st: st, sel: [], text: '', sig: { paste: 0, blur: 0, typed_ms: 0, keys: 0 }, t0: 0, t1: 0, qEnd: st.q_left_s == null ? null : Date.now() + st.q_left_s * 1000, tEnd: st.total_left_s == null ? null : Date.now() + st.total_left_s * 1000, sent: false }; loadDraft(R0); return R0; }
+  function newRun(st, exam) { if (st.mode === 'free') return newFree(st, exam); var R0 = { cEnd: exam && exam.closes_at ? Date.parse(exam.closes_at) : null, exam: exam, st: st, sel: [], text: '', sig: { paste: 0, blur: 0, typed_ms: 0, keys: 0 }, t0: 0, t1: 0, qEnd: st.q_left_s == null ? null : Date.now() + st.q_left_s * 1000, tEnd: st.total_left_s == null ? null : Date.now() + st.total_left_s * 1000, sent: false }; loadDraft(R0); return R0; }
   function resetQ(R, st) { R.st = st; R.sel = []; R.text = ''; R.sig = { paste: 0, blur: 0, typed_ms: 0, keys: 0 }; R.t0 = 0; R.t1 = 0; R.sent = false; R.qEnd = st.q_left_s == null ? null : Date.now() + st.q_left_s * 1000; R.tEnd = st.total_left_s == null ? null : Date.now() + st.total_left_s * 1000; loadDraft(R); }
   function runHtml() {
+    if (X.run.free) return freeHtml();
     var R = X.run, st = R.st, q = st.question;
     var opts = (q.options || []).map(function (o, i) {
       var on = R.sel.indexOf(i) > -1;
@@ -131,10 +133,11 @@
       '<p class="sub">' + h(T('لا رجوع للأسئلة السابقة بعد الإرسال، واللصق في خانة التبرير غير مسموح.', 'You cannot go back after submitting, and pasting into the box is disabled.')) + '</p>' +
       '<button class="btn pri" data-act="xm-submit"' + (X.busy ? ' disabled' : '') + '>' + h(st.pos + 1 >= st.total ? T('إرسال وإنهاء', 'Submit & finish') : T('إرسال والتالي', 'Submit & next')) + '</button></div>';
   }
-  function stopTick() { clearInterval(X.tick); X.tick = null; }
+  function stopTick() { clearInterval(X.tick); X.tick = null; clearInterval(X.retry); X.retry = null; }
   function armTick() {
     stopTick();
     if (X.view !== 'run' || !X.run) return;
+    if (X.run.free) { setSv(X.run); clearInterval(X.retry); X.retry = setInterval(function () { var R = X.run; if (R && R.free) Object.keys(R.dirty).forEach(function (k) { flush(R, Number(k)); }); }, 8000 + Math.floor(Math.random() * 3000)); }
     X.tick = setInterval(function () {
       var R = X.run; if (!R || X.view !== 'run' || X.busy) return;
       var now = Date.now(), a = $q('#xm-qt'), b = $q('#xm-tt');
@@ -147,6 +150,7 @@
   /* عند انتهاء الزمن: أرسل ما كُتب إن كان صالحاً (الخادم يمهل 3 ثوانٍ)، وإلا اطلب حالة الخادم لينتقل */
   function expired() {
     var R = X.run; if (!R || R.sent || (R.noAuto && Date.now() < R.noAuto)) return; R.sent = true; stopTick();
+    if (R.free) return void expiredFree();
     if (R.sel.length && R.text.trim().length >= 5) return void submit(true);
     go(async function () { await advance(await rpc('ex_current', { p_attempt: R.st.attempt_id })); });
   }
@@ -170,6 +174,88 @@
       }
       clearDraft(R); grade(r.justification_id);
       await advance(r.next);
+    });
+  }
+
+  /* ───────── النمط الحر (على طريقة مودل): لوحة أسئلة، تنقل حر، تعليم للمراجعة، حفظ تلقائي، وأكثر من سؤال في الشاشة ───────── */
+  function lkey(R) { return 'xmf_' + R.st.attempt_id; }
+  function persistFree(R) { try { var o = {}; Object.keys(R.dirty).forEach(function (k) { o[k] = R.ans[k]; }); if (Object.keys(o).length) localStorage.setItem(lkey(R), JSON.stringify(o)); else localStorage.removeItem(lkey(R)); } catch (e) {} }
+  function newFree(st, exam) {
+    var R = { free: true, exam: exam, st: st, qs: st.questions || [], ans: {}, dirty: {}, sv: {}, page: 0, view: 'q', ps: Math.max(1, Math.min(50, st.page_size || 1)), sent: false,
+      cEnd: exam && exam.closes_at ? Date.parse(exam.closes_at) : null, tEnd: st.total_left_s == null ? null : Date.now() + st.total_left_s * 1000 };
+    R.qs.forEach(function (q) { var d = (st.drafts || {})[q.id]; R.ans[q.id] = { sel: d && d.sel ? d.sel.slice() : [], text: d && d.text ? String(d.text) : '', flag: !!(d && d.flag), sig: { paste: 0, blur: 0, typed_ms: 0, keys: 0 }, t0: 0, t1: 0, v: 0 }; });
+    try { var loc = JSON.parse(localStorage.getItem(lkey(R)) || 'null'); if (loc) Object.keys(loc).forEach(function (k) { var o = loc[k]; if (R.ans[k] && o && Array.isArray(o.sel)) { R.ans[k].sel = o.sel.filter(function (i) { return i >= 0; }); R.ans[k].text = String(o.text || '').slice(0, 600); R.ans[k].flag = !!o.flag; if (o.sig) R.ans[k].sig = { paste: o.sig.paste | 0, blur: o.sig.blur | 0, typed_ms: o.sig.typed_ms | 0, keys: o.sig.keys | 0 }; R.ans[k].t0 = o.t0 || 0; R.ans[k].t1 = o.t1 || 0; R.dirty[k] = 1; } }); } catch (e) {}
+    setTimeout(function () { Object.keys(R.dirty).forEach(function (k) { flush(R, Number(k)); }); }, 300);
+    return R;
+  }
+  function qState(R, q) { var a = R.ans[q.id] || {}, s = (a.sel || []).length, t = (a.text || '').trim().length; return s && t >= 5 ? 'ok' : (s || t) ? 'part' : ''; }
+  function pageOf(R) { return [R.page * R.ps, Math.min(R.qs.length, (R.page + 1) * R.ps)]; }
+  function pages(R) { return Math.max(1, Math.ceil(R.qs.length / R.ps)); }
+  function touch(R, qid) { var a = R.ans[qid]; a.v++; R.dirty[qid] = 1; persistFree(R); clearTimeout(a.tm); a.tm = setTimeout(function () { flush(R, qid); }, 700); setSv(R); }
+  function setSv(R) {
+    var el = $q('#xm-sv'); if (!el) return; var n = Object.keys(R.dirty).length, bad = Object.keys(R.sv).some(function (k) { return R.sv[k].err && R.dirty[k]; });
+    el.textContent = n ? (bad ? '⚠ ' + T('لم تُحفظ بعض الإجابات بعد (سيُعاد المحاولة تلقائياً)', 'Some answers are not saved yet (retrying)') : '⏳ ' + T('جارٍ الحفظ…', 'Saving…')) : '✓ ' + T('كل إجاباتك محفوظة', 'All answers saved'); el.className = 'sub ' + (bad ? 'xm-no' : n ? '' : 'xm-ok');
+  }
+  async function flush(R, qid) {
+    var S = R.sv[qid] = R.sv[qid] || {}; if (S.busy) { S.again = true; return S.p; }
+    S.busy = true;
+    S.p = (async function () {
+      do {
+        S.again = false; var a = R.ans[qid]; if (!R.dirty[qid]) break; var ver = a.v;
+        try {
+          var r = await rpc('ex_free_save', { p_attempt: R.st.attempt_id, p_question: qid, p_selected: a.sel.slice().sort(function (x, y) { return x - y; }), p_text: a.text, p_flag: !!a.flag, p_signals: { paste: a.sig.paste, blur: a.sig.blur, typed_ms: a.t0 ? Math.max(0, (a.t1 || Date.now()) - a.t0) : 0, keys: a.sig.keys } });
+          S.err = null; if (a.v === ver) delete R.dirty[qid]; else S.again = true; persistFree(R);
+          if (r && r.finished && !R.sent) { R.sent = true; stopTick(); go(async function () { await advance(await rpc('ex_current', { p_attempt: R.st.attempt_id })); }); }
+        } catch (e) { S.err = e; break; }
+      } while (S.again);
+      S.busy = false; setSv(R);
+    })();
+    return S.p;
+  }
+  async function flushAll(R) {
+    for (var t = 0; t < 3; t++) { var ids = Object.keys(R.dirty); if (!ids.length && !Object.keys(R.sv).some(function (k) { return R.sv[k].busy; })) return true; await Promise.all(ids.map(function (k) { return flush(R, Number(k)); })); await Promise.all(Object.keys(R.sv).map(function (k) { return R.sv[k].p; })); }
+    return !Object.keys(R.dirty).length;
+  }
+  function freeNav(R) {
+    var pr = pageOf(R);
+    return '<div class="xm-nav" id="xm-nav">' + R.qs.map(function (q, i) { var a = R.ans[q.id] || {}; return '<button class="xm-nb ' + qState(R, q) + (i >= pr[0] && i < pr[1] && R.view === 'q' ? ' cur' : '') + (a.flag ? ' fl' : '') + '" data-act="xm-goto" data-i="' + i + '" data-q="' + q.id + '">' + (i + 1) + '</button>'; }).join('') + '</div>' +
+      '<div class="sub xm-leg"><span class="xm-nb ok">&nbsp;</span> ' + h(T('مكتمل', 'Complete')) + ' <span class="xm-nb part">&nbsp;</span> ' + h(T('ناقص', 'Incomplete')) + ' <span class="xm-nb">&nbsp;</span> ' + h(T('بلا إجابة', 'Unanswered')) + ' 🚩 ' + h(T('معلَّم للمراجعة', 'Flagged')) + '</div>';
+  }
+  function updNav(R) { var pr = pageOf(R); document.querySelectorAll('#xm-nav .xm-nb').forEach(function (b) { var i = Number(b.dataset.i), q = R.qs[i]; if (!q) return; var a = R.ans[q.id] || {}; b.className = 'xm-nb ' + qState(R, q) + (i >= pr[0] && i < pr[1] && R.view === 'q' ? ' cur' : '') + (a.flag ? ' fl' : ''); }); }
+  function freeQ(R, q, i) {
+    var a = R.ans[q.id], opts = (q.options || []).map(function (o, k) { var on = a.sel.indexOf(k) > -1; return '<label class="xm-opt' + (on ? ' on' : '') + '"><input type="' + (q.multi ? 'checkbox' : 'radio') + '" name="xm-o-' + q.id + '" data-ex="fopt" data-q="' + q.id + '" data-i="' + k + '"' + (on ? ' checked' : '') + '><span><b>' + LET(k) + '.</b> ' + h(o) + '</span></label>'; }).join('');
+    return '<div class="card xm-fq" id="xm-q-' + q.id + '" style="margin:10px 0"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><b>' + h(T('السؤال ', 'Question ')) + (i + 1) + ' / ' + R.qs.length + '</b><button class="btn sm' + (a.flag ? ' pri' : '') + '" data-act="xm-flag" data-q="' + q.id + '">🚩 ' + h(a.flag ? T('إلغاء التعليم', 'Unflag') : T('علّم للمراجعة', 'Flag for review')) + '</button></div>' +
+      '<div class="xm-q">' + h(q.stem) + '</div>' + (q.multi ? '<p class="sub">' + h(T('يمكن اختيار أكثر من إجابة.', 'You may select more than one answer.')) + '</p>' : '') + opts +
+      '<label style="display:block;margin-top:12px"><b>' + h(q.multi ? T('اشرح باختصار سبب اختيارك لهذه الإجابات.', 'Briefly explain why you chose these answers.') : T('اشرح باختصار سبب اختيارك لهذه الإجابة.', 'Briefly explain why you chose this answer.')) + '</b><textarea class="xm-just" maxlength="600" data-ex="ftxt" data-q="' + q.id + '" placeholder="' + h(T('اكتب تبريرك بكلماتك (5 إلى 600 حرف)', 'Write your reasoning in your own words (5–600 characters)')) + '">' + h(a.text) + '</textarea></label><div class="sub" style="text-align:end"><span id="xm-cnt-' + q.id + '">' + a.text.length + ' / 600</span></div></div>';
+  }
+  function freeHtml() {
+    var R = X.run, top = '<div class="card"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>' + h(R.exam.title) + '</b><span id="xm-sv" class="sub"></span></div>' +
+      '<div class="xm-timer">' + (R.tEnd ? '<span id="xm-tt">⌛ ' + h(T('الوقت المتبقي: ', 'Time left: ')) + mmss((R.tEnd - Date.now()) / 1000) + '</span>' : '') + (R.cEnd ? '<span id="xm-ct">⏰ ' + h(T('ينتهي موعد الاختبار بعد: ', 'Exam closes in: ')) + mmss((R.cEnd - Date.now()) / 1000) + '</span>' : '') + '</div>' + freeNav(R) + '</div>';
+    if (R.view === 'review') {
+      var rows = R.qs.map(function (q, i) { var c = qState(R, q), a = R.ans[q.id]; return '<button class="row click" data-act="xm-goto" data-i="' + i + '"><div class="main"><div class="t"><b>' + (i + 1) + '.</b> ' + h(q.stem.length > 90 ? q.stem.slice(0, 90) + '…' : q.stem) + '</div></div><span class="pill ' + (c === 'ok' ? 'ok' : 'warn') + '">' + h(c === 'ok' ? T('مكتمل', 'Complete') : c === 'part' ? T('ناقص (يحتاج اختياراً وتبريراً)', 'Incomplete') : T('بلا إجابة', 'Unanswered')) + '</span>' + (a.flag ? ' 🚩' : '') + '</button>'; }).join('');
+      var ok = R.qs.filter(function (q) { return qState(R, q) === 'ok'; }).length, fl = R.qs.filter(function (q) { return R.ans[q.id].flag; }).length;
+      return top + '<div class="card" style="margin-top:8px"><h3>' + h(T('مراجعة قبل التسليم', 'Review before submitting')) + '</h3><p class="sub">' + h(T('مكتمل: ', 'Complete: ')) + ok + ' / ' + R.qs.length + (fl ? ' · 🚩 ' + fl : '') + '</p><div class="list">' + rows + '</div><div class="tabs" style="margin-top:10px"><button class="btn" data-act="xm-fback">' + h(T('العودة للأسئلة', 'Back to questions')) + '</button><button class="btn pri" data-act="xm-fsubmit"' + (X.busy ? ' disabled' : '') + '>' + h(T('تسليم الاختبار نهائياً', 'Submit exam')) + '</button></div><p class="sub">' + h(T('بعد التسليم لا يمكن تعديل الإجابات.', 'You cannot change answers after submitting.')) + '</p></div>';
+    }
+    var pr = pageOf(R), last = R.page >= pages(R) - 1, body = R.qs.slice(pr[0], pr[1]).map(function (q, k) { return freeQ(R, q, pr[0] + k); }).join('');
+    return top + body + '<div class="card" style="margin-top:8px"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" data-act="xm-prev"' + (R.page <= 0 ? ' disabled' : '') + '>→ ' + h(T('السابق', 'Previous')) + '</button><span class="sub">' + h(T('الصفحة ', 'Page ')) + (R.page + 1) + ' / ' + pages(R) + '</span>' + (last ? '<button class="btn pri" data-act="xm-review">' + h(T('مراجعة وتسليم', 'Review & submit')) + '</button>' : '<button class="btn pri" data-act="xm-next">' + h(T('التالي', 'Next')) + ' ←</button>') + '</div><p class="sub">' + h(T('إجاباتك تُحفظ تلقائياً ويمكنك الرجوع وتعديلها قبل التسليم النهائي. اللصق في خانة التبرير غير مسموح.', 'Answers save automatically and you can go back and change them before the final submit. Pasting into the reasoning box is disabled.')) + '</p></div>';
+  }
+  function gotoPage(R, p, qid) { R.view = 'q'; R.page = Math.max(0, Math.min(pages(R) - 1, p)); X.err = ''; redraw(); setTimeout(function () { var el = qid ? document.getElementById('xm-q-' + qid) : null; if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' }); else { var r = root(); if (r && r.scrollIntoView) r.scrollIntoView({ block: 'start' }); } setSv(R); }, 0); }
+  async function expiredFree() {
+    var R = X.run; if (!R) return; try { await Promise.race([flushAll(R), new Promise(function (res) { setTimeout(res, 3500); })]); } catch (e) {}
+    go(async function () { await advance(await rpc('ex_current', { p_attempt: R.st.attempt_id })); });
+  }
+  async function submitFree() {
+    var R = X.run; if (!R) return;
+    var inc = R.qs.filter(function (q) { return qState(R, q) !== 'ok'; }).length;
+    if (!window.confirm((inc ? T('لديك ' + inc + ' سؤالاً غير مكتمل. ', 'You have ' + inc + ' incomplete question(s). ') : '') + T('بعد التسليم لا يمكن تعديل الإجابات. تسليم الآن؟', 'You cannot change answers after submitting. Submit now?'))) return;
+    R.sent = true; stopTick();
+    await go(async function () {
+      var ok = await flushAll(R);
+      if (!ok) { R.sent = false; armTick(); throw new Error(T('تعذّر حفظ إجاباتك، تحقق من الاتصال ثم أعد المحاولة.', 'Could not save your answers. Check your connection and try again.')); }
+      var r = await rpc('ex_free_submit', { p_attempt: R.st.attempt_id }), ids = (r && r.ids) || [];
+      try { localStorage.removeItem(lkey(R)); } catch (e) {}
+      (async function () { for (var i = 0; i < ids.length; i += 3) await Promise.all(ids.slice(i, i + 3).map(function (id) { return db().functions.invoke('grade-justification', { body: { justification_id: id } }).catch(function () {}); })); })();
+      await advance({ status: 'finished' });
     });
   }
   /* التصحيح فور الإرسال، وأي فشل لا يمنع الطالب (يبقى «قيد المراجعة» ويُعاد من لوحة المدرّس) */
@@ -268,6 +354,8 @@
       '<label>' + h(T('يُغلق في (اختياري)', 'Closes at (optional)')) + '<input id="xm-close" type="datetime-local" value="' + h(dtv(e.closes_at)) + '"></label>' +
       '<label>' + h(T('المدة الكلية بالدقائق (اتركها فارغة لعدم التحديد)', 'Total minutes (blank = none)')) + '<input id="xm-dur" inputmode="numeric" value="' + h(e.duration_min || '') + '"></label>' +
       '<label>' + h(T('زمن كل سؤال بالثواني (اتركه فارغاً لعدم التحديد)', 'Seconds per question (blank = none)')) + '<input id="xm-pq" inputmode="numeric" value="' + h(e.per_question_sec || '') + '"></label>' +
+      '<label>' + h(T('نمط التنقل بين الأسئلة', 'Question navigation')) + '<select id="xm-nav" data-ex="nav"' + (e.locked ? ' disabled' : '') + '><option value="seq"' + (e.nav_mode !== 'free' ? ' selected' : '') + '>' + h(T('تسلسلي: سؤال بسؤال ولا رجوع للسابق', 'Sequential: one by one, no going back')) + '</option><option value="free"' + (e.nav_mode === 'free' ? ' selected' : '') + '>' + h(T('تنقل حر (مثل مودل): لوحة أسئلة، رجوع وتعديل، تعليم للمراجعة', 'Free navigation (Moodle-style): question panel, go back, flag')) + '</option></select></label>' +
+      (e.nav_mode === 'free' ? '<label>' + h(T('عدد الأسئلة في الشاشة الواحدة (1 إلى 50)', 'Questions per screen (1–50)')) + '<input id="xm-ps" inputmode="numeric" value="' + h(e.page_size || 1) + '"></label><div class="sub">' + h(T('في التنقل الحر لا يُطبَّق زمن كل سؤال، ويبقى الزمن الكلي وموعد الإغلاق فقط. لا يمكن تغيير النمط بعد أن يبدأ أي طالب.', 'Free mode ignores per-question time; only total time and the close time apply. The mode cannot be changed once a student has started.')) + '</div>' : '') +
       '<label>' + h(T('وزن الاختيار', 'Choice weight')) + '<input id="xm-wc" inputmode="decimal" value="' + h(e.choice_weight == null ? 1 : e.choice_weight) + '"></label>' +
       '<label>' + h(T('وزن التبرير', 'Justification weight')) + '<input id="xm-wj" inputmode="decimal" value="' + h(e.just_weight == null ? 1 : e.just_weight) + '"></label>' +
       '<label>' + h(T('عرض النتيجة للطالب', 'Result visibility')) + '<select id="xm-fm"><option value="after_release"' + (e.feedback_mode !== 'immediate' ? ' selected' : '') + '>' + h(T('بعد أن أطلقها أنا (موصى به)', 'After I release it (recommended)')) + '</option><option value="immediate"' + (e.feedback_mode === 'immediate' ? ' selected' : '') + '>' + h(T('فور التسليم', 'Right after submitting')) + '</option></select></label></div>' +
@@ -280,7 +368,7 @@
     var e = E.exam, v = function (id) { var x = $q('#' + id); return x ? x.value : ''; };
     e.title = v('xm-title'); e.description = v('xm-desc'); e.feedback_mode = v('xm-fm') || 'after_release';
     e.opens_at = v('xm-open') ? new Date(v('xm-open')).toISOString() : null; e.closes_at = v('xm-close') ? new Date(v('xm-close')).toISOString() : null;
-    e.duration_min = num(v('xm-dur'), null); e.per_question_sec = num(v('xm-pq'), null); e.choice_weight = num(v('xm-wc'), 1); e.just_weight = num(v('xm-wj'), 1);
+    e.duration_min = num(v('xm-dur'), null); e.per_question_sec = num(v('xm-pq'), null); if ($q('#xm-nav')) e.nav_mode = v('xm-nav') || 'seq'; if ($q('#xm-ps')) e.page_size = num(v('xm-ps'), 1); if (e.nav_mode === 'free') e.per_question_sec = null; e.choice_weight = num(v('xm-wc'), 1); e.just_weight = num(v('xm-wj'), 1);
     e.cohort_ids = Array.prototype.map.call(document.querySelectorAll('[data-ex="coh"]:checked'), function (c) { return Number(c.value); });
     E.qs.forEach(function (q, qi) {
       var box = document.querySelector('.xm-rv[data-qi="' + qi + '"]'); if (!box) return;
@@ -294,7 +382,7 @@
   async function openEditor(id) {
     var E = { exam: { cohort_ids: [], choice_weight: 1, just_weight: 1, feedback_mode: 'after_release' }, qs: [] };
     if (id) {
-      var r = await db().from('ex_exams').select('*').eq('id', id).single(); if (r.error) throw new Error(r.error.message); E.exam = r.data;
+      var r = await db().from('ex_exams').select('*').eq('id', id).single(); if (r.error) throw new Error(r.error.message); E.exam = r.data; E.hadNav = 'nav_mode' in r.data;
       var q = await db().from('ex_questions').select('*, justification_rubrics(*)').eq('exam_id', id).order('pos').order('id'); if (q.error) throw new Error(q.error.message);
       E.qs = (q.data || []).map(function (x) { var rb = x.justification_rubrics; rb = Array.isArray(rb) ? rb[0] : rb; rb = rb || {}; return { id: x.id, stem: x.stem, options: x.options, correct: x.correct_options, multi: x.multi_select, category: x.category || '', time_sec: x.time_sec || '', key: rb.key_reasoning || '', concepts: conceptsToText(rb.concepts, rb.required_concepts) }; });
     } else E.qs = [blankQ()];
@@ -417,7 +505,9 @@
       if (!q.multi && q.correct.length > 1) throw new Error(T('السؤال ' + n + ': فعّل «أكثر من إجابة» أو اترك إجابة واحدة', 'Question ' + n + ': enable multi-select or keep one answer'));
       var ts = num(q.time_sec, null); if (ts != null && (ts < 10 || ts > 7200)) throw new Error(T('السؤال ' + n + ': الزمن من 10 إلى 7200 ثانية', 'Question ' + n + ': seconds must be 10–7200'));
     });
+    if (e.nav_mode === 'free' && (!(e.page_size >= 1 && e.page_size <= 50) || Math.floor(e.page_size) !== e.page_size)) throw new Error(T('عدد الأسئلة في الشاشة من 1 إلى 50', 'Questions per screen must be 1–50'));
     var body = { title: e.title.trim(), description: (e.description || '').trim() || null, cohort_ids: e.cohort_ids, opens_at: e.opens_at, closes_at: e.closes_at, duration_min: e.duration_min, per_question_sec: e.per_question_sec, choice_weight: e.choice_weight, just_weight: e.just_weight, feedback_mode: e.feedback_mode };
+    if (e.nav_mode === 'free' || E.hadNav) { body.nav_mode = e.nav_mode === 'free' ? 'free' : 'seq'; body.page_size = e.nav_mode === 'free' ? e.page_size : 1; }
     var r = e.id ? await db().from('ex_exams').update(body).eq('id', e.id).select('id').single() : await db().from('ex_exams').insert(body).select('id').single();
     if (r.error) throw new Error(r.error.message); e.id = r.data.id;
     var keep = [];
@@ -468,6 +558,7 @@
   }
   async function loadReview() {
     var V = X.rv;
+    try { await rpc('ex_free_sweep', { p_exam: V.exam.id }); } catch (e) {}   // ينهي محاولات النمط الحر المنتهية دون تسليم (إن كان ملف exams-free.sql مُشغَّلاً)
     V.rows = (await rpc('ex_review_list', { p_exam: V.exam.id, p_status: V.fs || null, p_q: V.fq ? Number(V.fq) : null, p_student: V.fst || null })) || [];
     V.table = (await rpc('ex_results_table', { p_exam: V.exam.id })) || [];
   }
@@ -509,6 +600,13 @@
       X.run = newRun(st, exam); X.view = 'run';
     }); },
     'xm-submit': function () { submit(false); },
+    'xm-goto': function (el) { var R = X.run; if (!R || !R.free) return; var i = Number(el.dataset.i); gotoPage(R, Math.floor(i / R.ps), R.qs[i] && R.qs[i].id); },
+    'xm-prev': function () { var R = X.run; if (R && R.free) gotoPage(R, R.page - 1); },
+    'xm-next': function () { var R = X.run; if (R && R.free) gotoPage(R, R.page + 1); },
+    'xm-flag': function (el) { var R = X.run; if (!R || !R.free) return; var q = Number(el.dataset.q), a = R.ans[q]; a.flag = !a.flag; touch(R, q); el.className = 'btn sm' + (a.flag ? ' pri' : ''); el.textContent = '🚩 ' + (a.flag ? T('إلغاء التعليم', 'Unflag') : T('علّم للمراجعة', 'Flag for review')); updNav(R); },
+    'xm-review': function () { var R = X.run; if (!R || !R.free) return; R.view = 'review'; flushAll(R); redraw(); var r = root(); if (r && r.scrollIntoView) r.scrollIntoView({ block: 'start' }); setTimeout(function () { setSv(R); }, 0); },
+    'xm-fback': function () { var R = X.run; if (R && R.free) gotoPage(R, R.page); },
+    'xm-fsubmit': function () { submitFree(); },
     'xm-res': function (el) { go(async function () { X.res = await rpc('ex_my_results', { p_exam: Number(el.dataset.id) }); X.view = 'res'; }); },
     'xm-new': function () { go(function () { return openEditor(null); }); },
     'xm-edit': function (el) { go(function () { return openEditor(Number(el.dataset.id)); }); },
@@ -559,6 +657,14 @@
 
   document.addEventListener('change', function (e) {
     var t = e.target, k = t.dataset && t.dataset.ex; if (!k) return;
+    if (k === 'nav' && X.view === 'edit') { collect(); redraw(); return; }
+    if (k === 'fopt' && X.run && X.run.free) {
+      var R2 = X.run, qid = Number(t.dataset.q), i2 = Number(t.dataset.i), a2 = R2.ans[qid], q2 = R2.qs.filter(function (x) { return x.id === qid; })[0];
+      if (!a2 || !q2) return;
+      if (q2.multi) { var p2 = a2.sel.indexOf(i2); if (t.checked && p2 < 0) a2.sel.push(i2); else if (!t.checked && p2 > -1) a2.sel.splice(p2, 1); } else a2.sel = [i2];
+      var card = document.getElementById('xm-q-' + qid); if (card) card.querySelectorAll('.xm-opt').forEach(function (l) { var c = l.querySelector('input'); l.classList.toggle('on', !!(c && c.checked)); });
+      touch(R2, qid); updNav(R2); return;
+    }
     if (k === 'opt' && X.run) {
       var R = X.run, i = Number(t.dataset.i);
       if (R.st.question.multi) { var p = R.sel.indexOf(i); if (t.checked && p < 0) R.sel.push(i); else if (!t.checked && p > -1) R.sel.splice(p, 1); } else R.sel = [i];
@@ -568,12 +674,17 @@
   });
   document.addEventListener('change', function (e) { var t = e.target; if (t && t.dataset && t.dataset.xm === 'qimport') { var f = t.files && t.files[0]; t.value = ''; importFile(f); } });
   document.addEventListener('input', function (e) {
+    var t0 = e.target;
+    if (t0 && t0.dataset && t0.dataset.ex === 'ftxt' && X.run && X.run.free) {
+      var R3 = X.run, q3 = Number(t0.dataset.q), a3 = R3.ans[q3], n3 = Date.now(); if (!a3) return; a3.text = t0.value.slice(0, 600); if (!a3.t0) a3.t0 = n3; a3.t1 = n3; a3.sig.keys++;
+      touch(R3, q3); var c3 = document.getElementById('xm-cnt-' + q3); if (c3) c3.textContent = a3.text.length + ' / 600'; updNav(R3); return;
+    }
     var t = e.target; if (!t.dataset || t.dataset.ex !== 'txt' || !X.run) return;
     var R = X.run, now = Date.now(); R.text = t.value; if (!R.t0) R.t0 = now; R.t1 = now; R.sig.keys++;
     saveDraft();
     var c = $q('#xm-cnt'); if (c) c.textContent = t.value.length + ' / 600';
   });
-  function noPaste(e) { var t = e.target; if (t && t.id === 'xm-txt' && X.run) { e.preventDefault(); X.run.sig.paste++; } }
+  function noPaste(e) { var t = e.target; if (t && t.dataset && t.dataset.ex === 'ftxt' && X.run && X.run.free) { e.preventDefault(); var a = X.run.ans[Number(t.dataset.q)]; if (a) { a.sig.paste++; touch(X.run, Number(t.dataset.q)); } return; } if (t && t.id === 'xm-txt' && X.run) { e.preventDefault(); X.run.sig.paste++; } }
   document.addEventListener('paste', noPaste); document.addEventListener('drop', noPaste);
   function netBanner(on) {
     var r = root(), b = $q('#xm-net'); if (!r || X.view !== 'run') return;
@@ -590,7 +701,7 @@
   }
   window.addEventListener('error', function (e) { try { if (root()) showJsErr(e.message, (e.filename || '') + ':' + (e.lineno || '') + ':' + (e.colno || '')); } catch (x) {} });
   window.addEventListener('unhandledrejection', function (e) { try { if (root()) showJsErr((e.reason && e.reason.message) || e.reason, 'promise'); } catch (x) {} });
-  function lost() { if (X.view === 'run' && X.run) X.run.sig.blur++; }
+  function lost() { var R = X.run; if (X.view !== 'run' || !R) return; if (R.free) { var pr = pageOf(R); R.qs.slice(pr[0], pr[1]).forEach(function (q) { R.ans[q.id].sig.blur++; R.dirty[q.id] = R.dirty[q.id] || 1; }); persistFree(R); } else R.sig.blur++; }
   window.addEventListener('blur', lost);
   document.addEventListener('visibilitychange', function () { if (document.hidden) lost(); });
 
