@@ -62,6 +62,7 @@
   }
   function sigOf(a) { return a.length + ':' + (a.length ? a[a.length - 1].id : 0) + ':' + a.filter(function (m) { return m.deleted; }).length; }
   async function loadFiles() { R.files = (await rpc('rs_files_list', { p_group: R.g.id })) || []; await loadCmts(); if (isMem() && R.g.cmt_new > 0) { try { await rpc('rs_cmt_mark_seen', { p_group: R.g.id }); R.g.cmt_new = 0; } catch (e) {} } }
+  async function loadMsFiles() { R.files = (await rpc('rs_files_list', { p_group: R.g.id })) || []; await loadCmts(); }
   async function loadMs() { R.ms = (await rpc('rs_ms_list', { p_group: R.g.id })) || []; }
   function isSup() { return R.g && (R.g.my_role === 'supervisor' || R.g.my_role === 'admin'); }
   function isMem() { return R.g && R.g.my_role !== 'admin'; }
@@ -115,7 +116,7 @@
     else {
       body = (m.body ? '<div class="rs-t">' + h(m.body) + '</div>' : '');
       if (m.file_path) body += isImg(m.file_name) ? '<img class="rs-img" data-rs-img="' + h(m.file_path) + '" data-act="rs-dl" data-p="' + h(m.file_path) + '" data-n="' + h(m.file_name) + '" alt="' + h(m.file_name) + '">' : '';
-      if (m.file_path) body += '<button class="rs-file" data-act="rs-dl" data-p="' + h(m.file_path) + '" data-n="' + h(m.file_name) + '"><span>' + icon(m.file_name) + '</span><span dir="auto">' + h(m.file_name) + ' · ' + fsize(m.file_size) + '</span><span>⬇</span></button>';
+      if (m.file_path) body += '<button class="rs-file" data-act="rs-dl" data-p="' + h(m.file_path) + '" data-n="' + h(m.file_name) + '"><span>' + icon(m.file_name) + '</span><span dir="auto">' + h(m.file_name) + ' · ' + fsize(m.file_size) + '</span><span>⬇</span></button>' + (isMem() ? '<button class="btn sm" data-act="rs-m2ms" data-id="' + m.id + '">📌 ' + h(T('إرفاق بمرحلة', 'Attach to milestone')) + '</button>' : '');
     }
     return '<div class="rs-m ' + (me ? 'me' : 'other') + '"><div class="rs-b"><div class="rs-n">' + (me ? h(T('أنا', 'Me')) : h(m.sender_name || '')) + ' · ' + h(fdt(m.created_at)) + '</div>' + body + '</div>' + (can ? '<button class="btn sm" title="' + h(T('حذف', 'Delete')) + '" data-act="rs-mdel" data-id="' + m.id + '" data-confirm="1" data-confirm-text="' + h(T('تأكيد؟', 'Sure?')) + '">✕</button>' : '') + '</div>';
   }
@@ -146,15 +147,26 @@
   }
 
   /* ---- الملفات ---- */
+  function fileCard(l, me) {
+    var top = l[0];
+    return '<div class="card" style="margin:8px 0"><div style="display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap"><b>' + icon(top.file_name) + ' ' + h(top.title) + '</b>' + (top.milestone_id ? ' <span class="pill">📌 ' + h(T('ملف مرحلة', 'Milestone file')) + '</span>' : '') + (isMem() ? '<button class="btn sm" data-act="rs-fver" data-ms="' + (top.milestone_id || '') + '" data-t="' + h(top.title) + '">⬆ ' + h(T('نسخة جديدة', 'New version')) + '</button>' : '') + '</div>' +
+      (isImg(top.file_name) ? '<img class="rs-img" data-rs-img="' + h(top.file_path) + '" data-act="rs-dl" data-p="' + h(top.file_path) + '" data-n="' + h(top.file_name) + '" alt="">' : '') +
+      (carryHtml(l)) + l.map(function (f) { return '<div class="rs-ver"><span class="pill">v' + f.version + '</span><button class="rs-file" style="margin:0" data-act="rs-dl" data-p="' + h(f.file_path) + '" data-n="' + h(f.file_name) + '"><span dir="auto">' + h(f.file_name) + ' · ' + fsize(f.file_size) + '</span><span>⬇</span></button><span class="sub">' + h(f.uploader_name || '') + ' · ' + h(fdt(f.created_at)) + '</span>' + (f.note ? '<span class="sub">— ' + h(f.note) + '</span>' : '') + ((f.uploader === me || isSup()) ? '<button class="btn sm bad" data-act="rs-fdel" data-id="' + f.id + '" data-confirm="1" data-confirm-text="' + h(T('تأكيد الحذف؟', 'Delete?')) + '">✕</button>' : '') + cmtBtn(f) + '</div>' + (R.copen === f.id ? cmtPanel(f) : ''); }).join('') + '</div>';
+  }
   function filesHtml() {
-    var by = {}, order = [], q = R.fq.trim().toLowerCase();
-    R.files.forEach(function (f) { var k = f.title.toLowerCase(); if (!by[k]) { by[k] = []; order.push(k); } by[k].push(f); });
-    var me = myId();
-    var groups = order.filter(function (k) { return !q || k.indexOf(q) > -1 || by[k].some(function (f) { return (f.file_name || '').toLowerCase().indexOf(q) > -1; }); }).map(function (k) {
-      var l = by[k], top = l[0];
-      return '<div class="card" style="margin:8px 0"><div style="display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap"><b>' + icon(top.file_name) + ' ' + h(top.title) + '</b>' + (isMem() ? '<button class="btn sm" data-act="rs-fver" data-t="' + h(top.title) + '">⬆ ' + h(T('نسخة جديدة', 'New version')) + '</button>' : '') + '</div>' +
-        (isImg(top.file_name) ? '<img class="rs-img" data-rs-img="' + h(top.file_path) + '" data-act="rs-dl" data-p="' + h(top.file_path) + '" data-n="' + h(top.file_name) + '" alt="">' : '') +
-        (carryHtml(l)) + l.map(function (f) { return '<div class="rs-ver"><span class="pill">v' + f.version + '</span><button class="rs-file" style="margin:0" data-act="rs-dl" data-p="' + h(f.file_path) + '" data-n="' + h(f.file_name) + '"><span dir="auto">' + h(f.file_name) + ' · ' + fsize(f.file_size) + '</span><span>⬇</span></button><span class="sub">' + h(f.uploader_name || '') + ' · ' + h(fdt(f.created_at)) + '</span>' + (f.note ? '<span class="sub">— ' + h(f.note) + '</span>' : '') + ((f.uploader === me || isSup()) ? '<button class="btn sm bad" data-act="rs-fdel" data-id="' + f.id + '" data-confirm="1" data-confirm-text="' + h(T('تأكيد الحذف؟', 'Delete?')) + '">✕</button>' : '') + cmtBtn(f) + '</div>' + (R.copen === f.id ? cmtPanel(f) : ''); }).join('') + '</div>';
+    var q = R.fq.trim().toLowerCase(), me = myId(), secs = {}, sorder = [];
+    // الأحدث رفعاً أولاً؛ التجميع: الطالب (حسب مراحله) ثم عنوان الملف
+    var files = R.files.slice().sort(function (a, b) { return a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : b.id - a.id; });
+    files.forEach(function (f) {
+      if (q && f.title.toLowerCase().indexOf(q) < 0 && (f.file_name || '').toLowerCase().indexOf(q) < 0 && (f.ms_student_name || '').toLowerCase().indexOf(q) < 0) return;
+      var sk = f.milestone_id && f.ms_student_id ? 's' + f.ms_student_id : 'gen';
+      if (!secs[sk]) { secs[sk] = { name: sk === 'gen' ? '' : (f.ms_student_name || ''), by: {}, order: [] }; sorder.push(sk); }
+      var S = secs[sk], k = f.title.toLowerCase() + (f.milestone_id ? '|m' + f.milestone_id : '');
+      if (!S.by[k]) { S.by[k] = []; S.order.push(k); } S.by[k].push(f);
+    });
+    var groups = sorder.map(function (sk) {
+      var S = secs[sk];
+      return '<div style="margin:12px 0 4px"><b>' + (sk === 'gen' ? '📂 ' + h(T('ملفات عامة', 'General files')) : '🎓 ' + h(S.name || T('طالب', 'Student'))) + '</b></div>' + S.order.map(function (k) { return fileCard(S.by[k], me); }).join('');
     }).join('');
     return '<div class="card" style="margin:0 0 8px">' + (isMem() ? '<button class="btn pri" data-act="rs-fup">⬆ ' + h(T('رفع ملفات (Word / Excel / PDF / صور)', 'Upload files (Word / Excel / PDF / images)')) + '</button> ' : '') + '<button class="btn" data-act="rs-fcsv" ' + (R.files.length ? '' : 'disabled') + '>⬇ ' + h(T('تصدير قائمة الملفات (Excel)', 'Export file list (Excel)')) + '</button> <button class="btn" data-act="rs-ccsv" ' + (R.cmts.length ? '' : 'disabled') + '>💬⬇ ' + h(T('تصدير ملاحظات المشرف (Excel)', 'Export comments (Excel)')) + '</button> <button class="btn" data-act="rs-cdoc" ' + (R.cmts.length ? '' : 'disabled') + '>💬⬇ ' + h(T('(Word)', '(Word)')) + '</button>' +
       '<div class="sub">' + h(T('رفع ملف بنفس العنوان يُنشئ نسخة جديدة (v2، v3…) وتبقى النسخ القديمة. يمكنك اختيار عدة ملفات دفعة واحدة.', 'Uploading a file with the same title creates a new version. You can select several files at once.')) + '</div><input id="rs-fq" type="search" placeholder="' + h(T('بحث في الملفات…', 'Search files…')) + '" value="' + h(R.fq) + '" style="width:100%;margin-top:6px"></div>' + (groups || '<div class="empty">' + h(T('لا ملفات بعد.', 'No files yet.')) + '</div>');
@@ -190,6 +202,20 @@
   function cmtHead() { return [T('الملف', 'File'), T('النسخة', 'Version'), T('الموضع', 'Location'), T('التعليق', 'Comment'), T('الكاتب', 'Author'), T('التاريخ', 'Date'), T('الحالة', 'Status')]; }
 
   /* ---- المراحل ---- */
+  function msFiles(id) { return R.files.filter(function (f) { return f.milestone_id === id; }).sort(function (a, b) { return b.version - a.version; }); }
+  function msFileBox(m) {
+    var fs = msFiles(m.id), mine = isMem() && (m.student_id === myId() || isSup()), me = myId(), out = '';
+    if (!fs.length) out += '<div class="sub">' + (isSup() && m.status === 'review' ? '<span style="color:#dc2626">⚠ ' + h(T('لا ملف مرفق بهذه المرحلة', 'No file attached to this milestone')) + '</span>' : '📎 ' + h(T('لا ملف مرفق', 'No file attached'))) + '</div>';
+    else out += fs.map(function (f, i) {
+      return '<div class="rs-ver"><span class="pill">v' + f.version + (i === 0 ? ' ★' : '') + '</span><button class="rs-file" style="margin:0" data-act="rs-dl" data-p="' + h(f.file_path) + '" data-n="' + h(f.file_name) + '"><span dir="auto">' + h(f.file_name) + ' · ' + fsize(f.file_size) + '</span><span>⬇</span></button><span class="sub">' + h(f.uploader_name || '') + ' · ' + h(fdt(f.created_at)) + '</span>' + (f.note ? '<span class="sub">— ' + h(f.note) + '</span>' : '') + cmtBtn(f) + ((f.uploader === me || isSup()) ? '<button class="btn sm" data-act="rs-mfunlink" data-id="' + f.id + '" title="' + h(T('فك الربط (يبقى في المكتبة)', 'Unlink (stays in library)')) + '">⛓ ✕</button>' : '') + '</div>' + (R.copen === f.id ? cmtPanel(f) : '');
+    }).join('');
+    if (mine) {
+      var free = R.files.filter(function (f) { return !f.milestone_id && (f.uploader === me || isSup()); }), seen = {}, opts = free.filter(function (f) { var k = f.title.toLowerCase(); return seen[k] ? false : (seen[k] = 1); });
+      out += '<div class="tabs" style="margin-top:4px"><button class="btn sm pri" data-act="rs-mfup" data-id="' + m.id + '">⬆ ' + h(fs.length ? T('نسخة جديدة من ملف المرحلة', 'New version of milestone file') : T('رفع ملف المرحلة', 'Upload milestone file')) + '</button>' +
+        (opts.length ? '<select id="rs-ml-' + m.id + '" style="max-width:180px"><option value="">' + h(T('ربط ملف من المكتبة…', 'Link from library…')) + '</option>' + opts.map(function (f) { return '<option value="' + f.id + '">' + h(f.title + ' (v' + f.version + ')') + '</option>'; }).join('') + '</select><button class="btn sm" data-act="rs-mflink" data-id="' + m.id + '">🔗 ' + h(T('ربط', 'Link')) + '</button>' : '') + '</div>';
+    }
+    return '<div class="rs-msf" style="margin-top:6px">' + out + '</div>';
+  }
   var STL = { todo: ['لم تبدأ', 'To do'], doing: ['قيد العمل', 'In progress'], review: ['بانتظار المشرف', 'Awaiting supervisor'], done: ['معتمدة', 'Approved'] };
   function msHtml() {
     var by = {}, order = [], td = today();
@@ -203,7 +229,7 @@
         if (m.status === 'done' && !isSup()) stSel = '<span class="rs-st-done">✓ ' + h(STL.done[ar() ? 0 : 1]) + '</span>';
         return '<div class="rs-ms' + (lateRow ? ' late' : '') + '"><div>' + (isSup() ? '<span style="white-space:nowrap"><button class="btn sm" data-act="rs-mmove" data-id="' + m.id + '" data-d="-1" title="' + h(T('أعلى', 'Up')) + '"' + (ix === 0 ? ' disabled' : '') + '>▲</button><button class="btn sm" data-act="rs-mmove" data-id="' + m.id + '" data-d="1" title="' + h(T('أسفل', 'Down')) + '"' + (ix === l.length - 1 ? ' disabled' : '') + '>▼</button></span> ' : '') + '<span class="sub">' + (ix + 1) + '.</span> <b class="rs-st-' + m.status + '">' + h(m.title) + '</b> ' + (isSup() ? '<button class="btn sm" data-act="rs-mdel2" data-id="' + m.id + '" data-confirm="1" data-confirm-text="' + h(T('تأكيد؟', 'Sure?')) + '">✕</button>' : '') +
           '<div class="sub rs-due">' + h(T('الموعد: ', 'Due: ')) + (isSup() ? '<input type="date" data-rs="mdue" data-id="' + m.id + '" value="' + h(m.due_date || '') + '">' : h(fdate(m.due_date))) + (lateRow ? ' ⏰ ' + h(T('متأخرة', 'late')) : (m.status !== 'done' && m.due_date && daysTo(m.due_date) <= 3 ? ' ⏳ ' + h(daysTo(m.due_date) === 0 ? T('اليوم', 'today') : T('بعد ' + daysTo(m.due_date) + ' يوماً', 'in ' + daysTo(m.due_date) + ' day(s)')) : '')) + (m.approved_at ? ' · ✓ ' + h(fdate((m.approved_at || '').slice(0, 10))) : '') + '</div>' +
-          (m.sup_note ? '<div class="sub">💬 ' + h(m.sup_note) + '</div>' : '') + '</div><div style="display:flex;gap:4px;align-items:center">' + stSel + (isSup() && m.status !== 'done' ? '<button class="btn sm pri" data-act="rs-mok" data-id="' + m.id + '">✔ ' + h(T('اعتماد', 'Approve')) + '</button>' : '') + '</div></div>';
+          (m.sup_note ? '<div class="sub">💬 ' + h(m.sup_note) + '</div>' : '') + msFileBox(m) + '</div><div style="display:flex;gap:4px;align-items:center">' + stSel + (isSup() && m.status !== 'done' ? '<button class="btn sm pri" data-act="rs-mok" data-id="' + m.id + '">✔ ' + h(T('اعتماد', 'Approve')) + '</button>' : '') + '</div></div>';
       }).join('');
       var tools = isSup() ? '<div class="tabs rs-addms" style="margin-top:6px">' + (l.length > 1 ? '<button class="btn sm" data-act="rs-msort" data-u="' + s.user_id + '">⇅ ' + h(T('ترتيب حسب الموعد', 'Sort by due date')) + '</button>' : '') + (l.length ? '' : '<button class="btn sm" data-act="rs-mtpl" data-u="' + s.user_id + '">⚡ ' + h(T('إضافة مراحل رسالة الماجستير الافتراضية', 'Add default thesis milestones')) + '</button>') + '<input id="rs-mt-' + s.user_id + '" placeholder="' + h(T('مرحلة جديدة…', 'New milestone…')) + '" style="flex:1;min-width:140px"><input type="date" id="rs-md-' + s.user_id + '"><button class="btn sm" data-act="rs-madd2" data-u="' + s.user_id + '">+ ' + h(T('إضافة', 'Add')) + '</button></div>' : '';
       return '<div class="card" style="margin:8px 0"><div style="display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap"><b>🎓 ' + h(s.full_name) + '</b><span class="sub">' + done + ' / ' + l.length + ' · ' + pc + '%' + (late ? ' · <span style="color:#dc2626">⏰ ' + late + ' ' + h(T('متأخرة', 'late')) + '</span>' : '') + '</span></div><div class="rs-bar" style="margin:6px 0"><i style="width:' + pc + '%"></i></div>' + rows + tools + '</div>';
@@ -282,7 +308,7 @@
     'rs-gedit-off': function () { R.gedit = false; redraw(); },
     'rs-gupd': function () { var n = (($q('#rs-gname') || {}).value || '').trim(); if (!n) { R.err = T('الاسم مطلوب', 'Name required'); return redraw(); } go(async function () { await rpc('rs_group_update', { p_id: R.g.id, p_name: n, p_desc: (($q('#rs-gdesc') || {}).value || '').trim(), p_archived: !!($q('#rs-garch') || {}).checked }); var id = R.g.id; await loadGroups(); R.g = R.groups.filter(function (g) { return g.id === id; })[0]; R.gedit = false; R.msg = T('حُفظت الإعدادات', 'Saved'); }); },
     'rs-gdel': function () { go(async function () { var paths = (await rpc('rs_group_delete', { p_id: R.g.id })) || []; for (var i = 0; i < paths.length; i += 100) { try { await sb().storage.from(BUCKET).remove(paths.slice(i, i + 100)); } catch (e) {} } R.g = null; await loadGroups(); R.msg = T('حُذفت المجموعة', 'Group deleted'); }); },
-    'rs-tab': function (el) { var t = el.dataset.t; go(async function () { R.tab = t; R.msg = ''; if (t === 'files') await loadFiles(); else if (t === 'ms') { await loadMs(); } else if (t === 'chat' && isMem()) { await loadThreads(); await loadMsgs(true); } }); },
+    'rs-tab': function (el) { var t = el.dataset.t; go(async function () { R.tab = t; R.msg = ''; if (t === 'files') await loadFiles(); else if (t === 'ms') { await loadMs(); await loadMsFiles(); } else if (t === 'chat' && isMem()) { await loadThreads(); await loadMsgs(true); } }); },
     'rs-thread': function (el) { var id = Number(el.dataset.id); if (!id) return; go(async function () { R.tid = id; await loadMsgs(true); await loadThreads(); R.attach = null; }); },
     'rs-dm': function (el) { var u = el.dataset.u; go(async function () { R.tid = await rpc('rs_direct_open', { p_group: R.g.id, p_other: u }); await loadThreads(); await loadMsgs(true); R.attach = null; }); },
     'rs-pick': function () { pickFiles(false, function (fs) { var f = fs[0], e = okFile(f); if (e) { R.err = e; return redraw(); } R.attach = f; R.err = ''; var a = $q('#rs-att'); if (a) a.innerHTML = attHtml(); else redraw(); }); },
@@ -312,9 +338,30 @@
       });
     },
     'rs-fver': function (el) {
-      var title = el.dataset.t;
-      pickFiles(false, function (fs) { go(async function () { var f = fs[0], e = okFile(f); if (e) throw new Error(e); var note = window.prompt(T('ملاحظة على هذه النسخة (اختياري):', 'Note for this version (optional):'), '') || null, path = await upload('g' + R.g.id, f); try { await rpc('rs_file_add', { p_group: R.g.id, p_title: title, p_note: note, p_path: path, p_name: f.name, p_type: EXT[fext(f.name)] || f.type, p_size: f.size }); } catch (e2) { try { await sb().storage.from(BUCKET).remove([path]); } catch (e3) {} throw e2; } await loadFiles(); R.msg = T('أُضيفت نسخة جديدة', 'New version added'); }); });
+      var title = el.dataset.t, msid = Number(el.dataset.ms) || null;
+      pickFiles(false, function (fs) { go(async function () { var f = fs[0], e = okFile(f); if (e) throw new Error(e); var note = window.prompt(T('ملاحظة على هذه النسخة (اختياري):', 'Note for this version (optional):'), '') || null, path = await upload('g' + R.g.id, f); try { await rpc('rs_file_add', { p_group: R.g.id, p_title: title, p_note: note, p_path: path, p_name: f.name, p_type: EXT[fext(f.name)] || f.type, p_size: f.size, p_milestone: msid }); } catch (e2) { try { await sb().storage.from(BUCKET).remove([path]); } catch (e3) {} throw e2; } await loadFiles(); R.msg = T('أُضيفت نسخة جديدة', 'New version added'); }); });
     },
+    'rs-mfup': function (el) {
+      var id = Number(el.dataset.id), m = R.ms.filter(function (x) { return x.id === id; })[0]; if (!m) return;
+      pickFiles(false, function (fs) { go(async function () { var f = fs[0], e = okFile(f); if (e) throw new Error(e); var note = window.prompt(T('ملاحظة على هذه النسخة (اختياري):', 'Note for this version (optional):'), '') || null, path = await upload('g' + R.g.id, f); try { await rpc('rs_file_add', { p_group: R.g.id, p_title: m.title, p_note: note, p_path: path, p_name: f.name, p_type: EXT[fext(f.name)] || f.type, p_size: f.size, p_milestone: id }); } catch (e2) { try { await sb().storage.from(BUCKET).remove([path]); } catch (e3) {} throw e2; } await loadMsFiles(); R.msg = T('رُفع ملف المرحلة', 'Milestone file uploaded'); }); });
+    },
+    'rs-mflink': function (el) { var id = Number(el.dataset.id), v = Number((($q('#rs-ml-' + id) || {}).value) || 0); if (!v) { R.err = T('اختر ملفاً من القائمة', 'Pick a file'); return redraw(); } go(async function () { await rpc('rs_file_link', { p_file: v, p_milestone: id }); await loadMsFiles(); R.msg = T('رُبط الملف بالمرحلة', 'File linked'); }); },
+    'rs-m2ms': function (el) {
+      var id = Number(el.dataset.id), m = R.msgs.filter(function (x) { return x.id === id; })[0]; if (!m || !m.file_path) return;
+      go(async function () {
+        if (!R.ms.length) await loadMs();
+        var l = R.ms.filter(function (x) { return isSup() || x.student_id === myId(); }); if (!l.length) throw new Error(T('لا مراحل متاحة. يضيفها المشرف من تبويب المراحل.', 'No milestones yet.'));
+        var txt = l.map(function (x, i) { return (i + 1) + '. ' + (isSup() ? (x.student_name || '') + ' — ' : '') + x.title; }).join('\n');
+        var n = window.prompt(T('اكتب رقم المرحلة لإرفاق الملف بها:\n', 'Enter the milestone number:\n') + txt, '1'); if (n === null) return;
+        var ms = l[Number(n) - 1]; if (!ms) throw new Error(T('رقم غير صحيح', 'Invalid number'));
+        var u = await signed(m.file_path), r = await fetch(u); if (!r.ok) throw new Error(T('تعذّر قراءة الملف', 'Could not read file'));
+        var f = new File([await r.blob()], m.file_name, { type: EXT[fext(m.file_name)] || m.file_type || 'application/octet-stream' }), path = await upload('g' + R.g.id, f);
+        try { await rpc('rs_file_add', { p_group: R.g.id, p_title: ms.title, p_note: m.body ? String(m.body).slice(0, 200) : null, p_path: path, p_name: m.file_name, p_type: EXT[fext(m.file_name)] || m.file_type, p_size: m.file_size || f.size, p_milestone: ms.id }); }
+        catch (e) { try { await sb().storage.from(BUCKET).remove([path]); } catch (e2) {} throw e; }
+        R.msg = T('أُرفق الملف بالمرحلة «' + ms.title + '»', 'Attached to the milestone');
+      });
+    },
+    'rs-mfunlink': function (el) { go(async function () { await rpc('rs_file_link', { p_file: Number(el.dataset.id), p_milestone: null }); await loadMsFiles(); }); },
     'rs-fdel': function (el) { go(async function () { var p = await rpc('rs_file_delete', { p_id: Number(el.dataset.id) }); if (p) { try { await sb().storage.from(BUCKET).remove([p]); } catch (e) {} } await loadFiles(); }); },
     'rs-fcsv': function () { saveBlob('research-files.csv', csvBlob([[T('العنوان', 'Title'), T('النسخة', 'Version'), T('اسم الملف', 'File'), T('الحجم KB', 'Size KB'), T('رفعه', 'Uploader'), T('التاريخ', 'Date'), T('ملاحظة', 'Note')]].concat(R.files.map(function (f) { return [f.title, f.version, f.file_name, Math.round((f.file_size || 0) / 1024), f.uploader_name, f.created_at, f.note || '']; })))); },
     'rs-cmt': function (el) { var id = Number(el.dataset.id); R.copen = R.copen === id ? null : id; R.cdraft = ''; R.cplace = ''; redraw(); },
