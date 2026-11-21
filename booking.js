@@ -111,7 +111,8 @@
         '<div class="tabs"><button class="btn sm" data-act="bk-offren">' + h(T('حفظ الاسم', 'Save name')) + '</button> <button class="btn sm" data-act="bk-offarc" data-confirm="1" data-confirm-text="' + (o.archived ? 'اضغط لتأكيد الاسترجاع' : 'اضغط لتأكيد الأرشفة') + '">' + h(o.archived ? T('استرجاع من الأرشيف', 'Restore') : T('أرشفة', 'Archive')) + '</button></div>' : '') + '</div>';
   }
   function tabsBar() {
-    var t = [['groups', T('المجموعات', 'Groups')], ['topics', T('المواضيع', 'Topics')], ['sched', T('الجدول', 'Schedule')], ['pw', T('كلمات المرور', 'Passwords')], ['imp', T('استيراد', 'Import')]];
+    var lk = !!(cur() && cur().cohort_id);
+    var t = [['groups', T('المجموعات', 'Groups')], ['topics', T('المواضيع', 'Topics')], ['sched', T('الجدول', 'Schedule')]].concat(lk ? [] : [['pw', T('كلمات المرور', 'Passwords')]]).concat([['imp', T('استيراد', 'Import')]]);
     return '<div class="cm-tabs" style="margin:10px 0">' + t.map(function (x) { return '<button class="btn sm' + (B.tab === x[0] ? ' pri' : '') + '" data-act="bk-tab" data-t="' + x[0] + '">' + h(x[1]) + '</button>'; }).join('') + '</div>';
   }
   function groupCard(g) {
@@ -163,7 +164,7 @@
     var el = document.getElementById('bk-root'); if (!el) return;
     if (!can()) { el.innerHTML = '<div class="card"><div class="empty">' + h(T('هذه الصفحة للإدارة فقط', 'Admin only')) + '</div></div>'; return; }
     el.innerHTML = offBar() + noticeBanner() + (B.err ? '<p class="pill bad">' + h(B.err) + '</p>' : '') + (B.msg ? '<p class="pill ' + (B.msgBad ? 'bad' : 'ok') + '">' + h(B.msg) + '</p>' : '') + (B.busy ? '<p class="sub">…</p>' : '') +
-      (cur() ? tabsBar() + (B.tab === 'groups' ? groupsPane() : B.tab === 'topics' ? topicsPane() : B.tab === 'pw' ? pwPane() : B.tab === 'imp' ? impPane() : schedPane()) : '');
+      (cur() ? tabsBar() + ((B.tab === 'pw' && cur().cohort_id) ? groupsPane() : B.tab === 'groups' ? groupsPane() : B.tab === 'topics' ? topicsPane() : B.tab === 'pw' ? pwPane() : B.tab === 'imp' ? impPane() : schedPane()) : '');
   }
 
 
