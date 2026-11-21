@@ -1,7 +1,7 @@
 /* Service worker: يعمل التطبيق دون إنترنت، ويتحدّث تلقائياً عند توفر الاتصال. ارفع VERSION عند تغيير أي ملف. */
-const VERSION = 'planner-v88';
+const VERSION = 'planner-v89';
 const CDN_CACHE = 'planner-cdn';          // مكتبات الخارج والخطوط: لا تُحذف عند تحديث النسخة حتى يعمل التطبيق دون نت دائماً
-const SHELL = ['./', './index.html', './config.js', './sync.js', './comm.js', './exams.js', './rs.js', './wb.js', './ext.js', './logs.js', './ledger.js', './takaful.js', './booking.js', './iv.js', './logo.png', './manifest.json', './icon-192.png', './icon-512.png'];
+const SHELL = ['./', './index.html', './config.js', './sync.js', './comm.js', './exams.js', './rs.js', './wb.js', './bks.js', './ext.js', './logs.js', './ledger.js', './takaful.js', './booking.js', './iv.js', './logo.png', './manifest.json', './icon-192.png', './icon-512.png'];
 const CDN_PRE = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js', 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Readex+Pro:wght@500;600&display=swap'];
 const CDN = ['https://cdn.jsdelivr.net/', 'https://fonts.googleapis.com/', 'https://fonts.gstatic.com/'];
 const NET_WAIT = 4000;                    // ننتظر الشبكة 4 ثوانٍ كحد أقصى ثم نعرض النسخة المحفوظة

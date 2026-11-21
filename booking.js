@@ -15,7 +15,7 @@
   function norm(s) { return String(s || '').replace(/[ً-ٟـ]/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, ' ').trim().toLowerCase(); }
   function okUrl(u) { return /^https?:\/\/\S+$/i.test(u || ''); }
 
-  var B = { offs: [], off: 0, topics: [], groups: [], loaded: false, busy: false, err: '', msg: '', tab: 'groups', q: '', filt: 'all', edit: null, tEdit: null, offPanel: false, pw: null, closeMsg: '', itop: '', igrp: '' };
+  var B = { offs: [], off: 0, topics: [], groups: [], loaded: false, busy: false, err: '', msg: '', tab: 'groups', q: '', filt: 'all', edit: null, tEdit: null, offPanel: false, pw: null, closeMsg: '', itop: '', igrp: '', cohorts: [], members: [], notices: [] };
   try { B.off = Number(localStorage.getItem('bk_off')) || 0; } catch (e) {}
 
   window.bookView = function () { return '<div id="bk-root"></div>'; };
@@ -41,7 +41,10 @@
         var t = await sb().from('book_topics').select('*').eq('offering_id', B.off).order('no', { ascending: true }).limit(2000); if (t.error) throw t.error;
         var g = await sb().from('book_groups').select('*').eq('offering_id', B.off).order('group_no', { ascending: true }).limit(2000); if (g.error) throw g.error;
         B.topics = t.data || []; B.groups = g.data || [];
+        try { var mm = await sb().rpc('bk_admin_members', { p_off: B.off }); B.members = mm.error ? [] : (mm.data || []); } catch (x) { B.members = []; }
       }
+      try { var nn = await sb().rpc('bk_admin_notices', { p_limit: 40 }); B.notices = nn.error ? [] : (nn.data || []); setBadge(B.notices.filter(function (n) { return !n.seen; }).length); } catch (x) { B.notices = []; }
+      if (!B.cohorts.length) { try { var cc = await sb().rpc('comm_list_cohorts'); B.cohorts = cc.error ? [] : (cc.data || []); } catch (x) {} }
       B.loaded = true;
     } catch (e) {
       B.err = (e && e.message) || String(e);
@@ -62,11 +65,40 @@
       (B.offs.length ? '<div class="form"><label>' + h(T('الفصل الدراسي', 'Semester')) + '<select data-bk="sem">' + sems.map(function (s) { return '<option' + (s === sem ? ' selected' : '') + ' value="' + h(s) + '">' + h(s) + '</option>'; }).join('') + '</select></label>' +
         '<label>' + h(T('المساق', 'Course')) + '<select data-bk="crs">' + courses.map(function (c) { return '<option value="' + c.id + '"' + (c.id === B.off ? ' selected' : '') + '>' + h(c.course + (c.archived ? ' — ' + T('مؤرشف', 'archived') : '')) + '</option>'; }).join('') + '</select></label></div>' : '<p class="sub">' + h(T('لا توجد مساقات بعد. أضف أول مساق.', 'No courses yet. Add one.')) + '</p>') +
       (o ? '<div class="sub" style="margin:8px 0 4px">' + h(T('تم حجز ' + taken + ' من ' + n, taken + ' of ' + n + ' booked')) + '</div><div style="height:7px;border-radius:5px;background:rgba(127,127,127,.2)"><div style="height:7px;border-radius:5px;background:var(--accent,#0b8a97);width:' + (n ? Math.round(taken * 100 / n) : 0) + '%"></div></div>' : '') +
-      (o ? closeBar(o) : '') +
+      (o ? closeBar(o) + cohortBox(o) : '') +
       (o && o.archived ? '<p class="pill warn" style="margin-top:8px">🗄 ' + h(T('مساق مؤرشف: للعرض فقط. استرجعه من الأرشيف للتعديل.', 'Archived: read-only. Restore it to edit.')) + '</p>' : '') +
       '<div class="tabs" style="margin-top:8px"><button class="btn sm pri" data-act="bk-offpanel">' + h(B.offPanel ? T('إخفاء إدارة المساقات', 'Hide course tools') : T('+ مساق / إدارة المساقات', '+ Course / manage')) + '</button>' +
       (o ? ' <button class="btn sm" data-act="bk-export">⬇ Excel</button> <button class="btn sm bad" data-act="bk-reset" data-confirm="1" data-confirm-text="اضغط لتأكيد التصفير">' + h(T('تصفير الحجوزات', 'Reset bookings')) + '</button>' : '') + '</div>' +
       (B.offPanel ? offPanel() : '') + '</div>';
+  }
+  function membersOf(gid) { return B.members.filter(function (m) { return m.group_id === gid; }); }
+  function setBadge(n) {
+    window.BKN = n;
+    var b = document.querySelector('#side [data-v="book"]'); if (!b) return; var o = b.querySelector('.rs-nb'); if (o) o.remove();
+    if (n > 0) { var sp = document.createElement('span'); sp.className = 'rs-nb'; sp.textContent = n > 99 ? '99+' : String(n); b.appendChild(sp); }
+  }
+  setInterval(function () { if (!can() || document.hidden || !sb()) return; sb().rpc('bk_admin_notice_count').then(function (r) { if (!r.error) setBadge(Number(r.data) || 0); }, function () {}); }, 120000);
+  setTimeout(function () { if (can() && sb()) sb().rpc('bk_admin_notice_count').then(function (r) { if (!r.error) setBadge(Number(r.data) || 0); }, function () {}); }, 6000);
+  function noticeBanner() {
+    var un = B.notices.filter(function (n) { return !n.seen; });
+    if (!un.length) return '';
+    return '<div class="card" style="border:2px solid #d97706;margin:8px 0"><b>🔔 ' + h(T('إشعارات المجموعات', 'Group notices')) + ' (' + un.length + ')</b>' + un.slice(0, 12).map(function (n) {
+      return '<div class="sub" style="margin-top:4px">' + (n.kind === 'full' ? '✅ ' + h(T('اكتمل عدد المجموعة ', 'Group full: ') + n.group_no) + ' — ' + h(n.course) + ' (' + n.members + '/' + (n.cap || '∞') + ')' : '⚠ ' + h((n.user_name || '') + T(' حاول الانضمام إلى المجموعة المكتملة ', ' tried to join the full group ') + n.group_no) + ' — ' + h(n.course)) + ' <span class="sub">' + h(new Date(n.created_at).toLocaleString(ar() ? 'ar' : 'en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })) + '</span></div>';
+    }).join('') + '<div style="margin-top:8px"><button class="btn sm pri" data-act="bk-nseen">' + h(T('تم الاطلاع', 'Mark as seen')) + '</button></div></div>';
+  }
+  function cohortBox(o) {
+    var c = B.cohorts.filter(function (x) { return x.id === o.cohort_id; })[0];
+    return '<div class="card" style="margin-top:8px"><b>👥 ' + h(T('ربط بالشعبة وسعة المجموعة', 'Cohort link & group size')) + '</b>' +
+      '<div class="sub">' + h(o.cohort_id ? T('يدخل الطلبة بحساباتهم داخل التطبيق ويختارون مجموعتهم. الشعبة: ', 'Students join with their accounts. Cohort: ') + (c ? c.name : '#' + o.cohort_id) : T('غير مربوط بشعبة: يعمل بنظام كلمات مرور المجموعات القديم (الصفحة العامة).', 'Not linked: uses the old group-password page.')) + '</div>' +
+      '<div class="form"><label>' + h(T('الشعبة (كلية أو خارجية)', 'Cohort (college or external)')) + '<select id="bc-coh"><option value="">' + h(T('— بلا ربط (النظام القديم) —', '— none (old system) —')) + '</option>' + B.cohorts.map(function (x) { return '<option value="' + x.id + '"' + (x.id === o.cohort_id ? ' selected' : '') + '>' + h(x.name) + '</option>'; }).join('') + '</select></label>' +
+      '<label>' + h(T('أقصى عدد أعضاء المجموعة', 'Max members per group')) + '<input id="bc-cap" type="number" min="1" max="50" value="' + h(o.group_cap || '') + '" placeholder="' + h(T('بلا حد', 'No limit')) + '"></label></div>' +
+      (ro() ? '' : '<button class="btn sm pri" data-act="bk-coh">' + h(T('حفظ الربط والسعة', 'Save')) + '</button>') + '</div>';
+  }
+  function memHtml(g) {
+    var ms = membersOf(g.id), cap = g.cap || (cur() || {}).group_cap, n = ms.length + (g.students || []).length;
+    return '<div class="sub" style="margin-top:4px">👥 <b>' + n + '</b>' + (cap ? '/' + cap : '') + (cap && n >= cap ? ' <span class="pill ok">' + h(T('مكتملة', 'Full')) + '</span>' : '') + (g.cap ? ' <span class="sub">(' + h(T('سعة خاصة', 'custom cap')) + ')</span>' : '') +
+      (ro() ? '' : ' <button class="btn sm" data-act="bk-gcap" data-n="' + g.group_no + '">' + h(T('تحديد السعة', 'Set cap')) + '</button>') + '</div>' +
+      (ms.length ? '<div class="sub">' + ms.map(function (m) { return h(m.full_name || '—') + (m.university_id ? ' <span dir="ltr">(' + h(m.university_id) + ')</span>' : '') + (ro() ? '' : ' <button class="btn sm bad" data-act="bk-mrem" data-u="' + h(m.user_id) + '" data-confirm="1" data-confirm-text="' + h(T('اضغط لتأكيد الإزالة', 'Press to confirm')) + '">✕</button>'); }).join('، ') + '</div>' : '');
   }
   function offPanel() {
     var o = cur(), sems = []; B.offs.forEach(function (x) { if (sems.indexOf(x.semester) < 0) sems.push(x.semester); });
@@ -88,6 +120,7 @@
     return '<div class="card" style="margin:8px 0"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap"><div><b>' + h(T('مجموعة ', 'Group ')) + g.group_no + '</b> <span class="pill ' + (t ? 'ok' : '') + '">' + h(t ? T('محجوزة', 'Booked') : T('بلا موضوع', 'No topic')) + '</span></div>' +
       (ro() ? '' : '<button class="btn sm" data-act="bk-edit" data-n="' + g.group_no + '">' + h(T('تعديل', 'Edit')) + '</button>') + '</div>' +
       (t ? '<div style="margin-top:6px"><b>#' + t.no + '</b> ' + h(t.title) + '</div>' : '') +
+      memHtml(g) +
       (st.length ? '<div class="sub">' + h(st.join('، ')) + '</div>' : '<div class="sub">' + h(T('لا أسماء بعد', 'No names yet')) + '</div>') +
       '<div class="sub">📅 ' + h(fmtDate(g.lecture_date)) + (g.link ? ' · <a href="' + h(g.link) + '" target="_blank" rel="noopener noreferrer">🔗 ' + h(T('رابط المحاضرة', 'Lecture link')) + '</a>' : '') + '</div></div>';
   }
@@ -129,7 +162,7 @@
   function draw() {
     var el = document.getElementById('bk-root'); if (!el) return;
     if (!can()) { el.innerHTML = '<div class="card"><div class="empty">' + h(T('هذه الصفحة للإدارة فقط', 'Admin only')) + '</div></div>'; return; }
-    el.innerHTML = offBar() + (B.err ? '<p class="pill bad">' + h(B.err) + '</p>' : '') + (B.msg ? '<p class="pill ' + (B.msgBad ? 'bad' : 'ok') + '">' + h(B.msg) + '</p>' : '') + (B.busy ? '<p class="sub">…</p>' : '') +
+    el.innerHTML = offBar() + noticeBanner() + (B.err ? '<p class="pill bad">' + h(B.err) + '</p>' : '') + (B.msg ? '<p class="pill ' + (B.msgBad ? 'bad' : 'ok') + '">' + h(B.msg) + '</p>' : '') + (B.busy ? '<p class="sub">…</p>' : '') +
       (cur() ? tabsBar() + (B.tab === 'groups' ? groupsPane() : B.tab === 'topics' ? topicsPane() : B.tab === 'pw' ? pwPane() : B.tab === 'imp' ? impPane() : schedPane()) : '');
   }
 
@@ -141,7 +174,7 @@
       (o.closed ? '<b>⛔ ' + h(T('الحجز مغلق — الطلبة لا يستطيعون الحجز أو التعديل', 'Booking closed — students cannot book or edit')) + '</b>' + (o.closed_msg ? '<div class="sub">' + h(o.closed_msg) + '</div>' : '') +
         '<div class="tabs" style="margin-top:6px"><button class="btn sm pri" data-act="bk-close" data-v="0" data-confirm="1" data-confirm-text="اضغط لتأكيد إعادة الفتح">✅ ' + h(T('إعادة فتح الحجز', 'Reopen booking')) + '</button></div>'
         : '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input id="bk-cmsg" maxlength="300" placeholder="' + h(T('رسالة للطلبة عند الإغلاق (اختياري)', 'Message to students (optional)')) + '" value="' + h(B.closeMsg) + '" style="flex:1;min-width:200px"> <button class="btn sm bad" data-act="bk-close" data-v="1" data-confirm="1" data-confirm-text="اضغط لتأكيد الإيقاف">⛔ ' + h(T('إيقاف الحجز وإغلاق التعديل', 'Stop booking & lock edits')) + '</button></div>') +
-      '<div class="sub" style="margin-top:6px">' + h(T('رابط الطلبة: ', 'Student link: ')) + '<span dir="ltr">' + h(studentUrl()) + '</span> <button class="btn sm" data-act="bk-copy" data-v="' + h(studentUrl()) + '">' + h(T('نسخ', 'Copy')) + '</button></div></div>';
+      (o.cohort_id ? '<div class="sub" style="margin-top:6px">' + h(T('هذا المساق مربوط بشعبة: يدخل الطلبة من حساباتهم داخل التطبيق (زر «حجز المحاضرة»)، ولا حاجة لرابط أو كلمات مرور.', 'Linked to a cohort: students use their accounts in the app (no link/passwords).')) + '</div></div>' : '<div class="sub" style="margin-top:6px">' + h(T('رابط الطلبة: ', 'Student link: ')) + '<span dir="ltr">' + h(studentUrl()) + '</span> <button class="btn sm" data-act="bk-copy" data-v="' + h(studentUrl()) + '">' + h(T('نسخ', 'Copy')) + '</button></div></div>');
   }
   async function loadPw() {
     var r = await sb().rpc('book_admin_passwords', { p_off: B.off }); if (r.error) throw r.error; B.pw = r.data || [];
@@ -214,7 +247,7 @@
   function exportRows() {
     var rows = [['رقم المجموعة', 'رقم الموضوع', 'عنوان الموضوع', 'اسم الطالب', 'رابط المحاضرة', 'تاريخ المحاضرة']];
     B.groups.forEach(function (g) {
-      var t = topicOf(g.topic_id), names = (g.students && g.students.length) ? g.students : [''];
+      var t = topicOf(g.topic_id), names = (g.students || []).concat(membersOf(g.id).map(function (m) { return (m.full_name || '') + (m.university_id ? ' (' + m.university_id + ')' : ''); })); if (!names.length) names = [''];
       names.forEach(function (n) { rows.push([g.group_no, t ? t.no : '', t ? t.title : 'لم تحجز موضوعاً بعد', n, g.link || '', g.lecture_date || '']); });
     });
     return rows;
@@ -299,6 +332,16 @@
       if (last && ((last.students || []).length || last.topic_id) && !window.confirm(T('سيُحذف أيضاً آخر مجموعة (رقم ' + last.group_no + ') بما فيها من حجز وأسماء لأن عدد المجموعات = عدد المواضيع. متابعة؟', 'The last group (' + last.group_no + ') will also be deleted with its data. Continue?'))) return;
       guard(async function () { var r = await sb().rpc('book_delete_topic', { p_topic: id }); if (r.error) throw r.error; say(T('حُذف الموضوع وأُعيد الترقيم', 'Deleted and renumbered')); await reloadQuiet(); });
     },
+    'bk-coh': function () {
+      var coh = val('bc-coh'), cap = val('bc-cap').trim();
+      guard(async function () { var r = await sb().rpc('bk_admin_set_cohort', { p_off: B.off, p_cohort: coh ? Number(coh) : null, p_cap: cap ? Number(cap) : null }); if (r.error) throw r.error; say(T('تم حفظ الربط والسعة', 'Saved')); await reloadQuiet(); });
+    },
+    'bk-gcap': function (el) {
+      var g = findG(el.dataset.n); if (!g) return; var v = window.prompt(T('أقصى عدد لهذه المجموعة (اتركه فارغاً لاعتماد سعة المساق):', 'Max members for this group (empty = course default):'), g.cap || ''); if (v === null) return;
+      guard(async function () { var r = await sb().rpc('bk_admin_set_group_cap', { p_group: g.id, p_cap: String(v).trim() ? Number(v) : null }); if (r.error) throw r.error; await reloadQuiet(); });
+    },
+    'bk-mrem': function (el) { guard(async function () { var r = await sb().rpc('bk_admin_remove_member', { p_off: B.off, p_user: el.dataset.u }); if (r.error) throw r.error; say(T('أُزيل الطالب من المجموعة', 'Removed')); await reloadQuiet(); }); },
+    'bk-nseen': function () { guard(async function () { var r = await sb().rpc('bk_admin_notices_seen'); if (r.error) throw r.error; setBadge(0); await reloadQuiet(); }); },
     'bk-reset': function () { guard(async function () { var r = await sb().rpc('book_reset', { p_off: B.off }); if (r.error) throw r.error; say(T('مُسحت الحجوزات والأسماء والروابط (التواريخ محفوظة)', 'Bookings cleared (dates kept)')); await reloadQuiet(); }); },
     'bk-offadd': function () {
       var s = val('bo-sem').trim(), c = val('bo-crs').trim(); if (!s || !c) { toast_(T('اكتب الفصل واسم المساق', 'Enter semester and course')); return; }
