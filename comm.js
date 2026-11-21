@@ -82,7 +82,15 @@
     ST.unread = u;
     try { ST.dmUnread = Number(await rpc('communication_unread_total')) || 0; } catch (e) { ST.dmUnread = 0; }
   }
-  async function loadDm() { ST.convs = (await rpc('list_communication_conversations', { folder: 'inbox', page_size: 50 })) || []; }
+  function peerId(c) { return c.counterpart_id || c.other_user_id || c.counterpart_user_id || c.participant_id; }
+  async function loadDm() {
+    ST.convs = (await rpc('list_communication_conversations', { folder: 'inbox', page_size: 50 })) || [];
+    if (isStaff()) {   // شعبة كل طالب بجانب اسمه (لا يتعطل العرض إن لم يُشغَّل ملف SQL)
+      var ids = ST.convs.map(peerId).filter(Boolean); ST.peerCoh = ST.peerCoh || {};
+      if (ids.length) { try { (await rpc('comm_peer_cohorts', { p_ids: ids }) || []).forEach(function (x) { ST.peerCoh[x.user_id] = x.cohorts; }); } catch (e) {} }
+    }
+  }
+  function cohTag(id) { var c = ST.peerCoh && ST.peerCoh[id]; return c ? ' <span class="pill" style="font-weight:400">' + h(c) + '</span>' : ''; }
   async function loadMsgs(keepScroll) {
     var rows = await rpc('comm_dm_messages', { p_conv: ST.conv.id, p_limit: 60 });
     ST.msgs = (rows || []).slice().reverse();
@@ -209,9 +217,9 @@
         '</div><button class="btn sm" data-act="cm-newclose">' + h(T('رجوع', 'Back')) + '</button>';
     } else {
       list = '<button class="btn pri" data-act="cm-new" style="margin-bottom:8px">' + h(T('+ محادثة جديدة', '+ New chat')) + '</button><div class="list cm-list">' +
-        (ST.convs.map(function (c) { return '<button class="row click' + (ST.conv && ST.conv.id === c.id ? ' sel' : '') + '" data-act="cm-open" data-id="' + h(c.id) + '"><div class="main"><div class="t">' + h(dn(c.counterpart_name, c.counterpart_id || c.other_user_id || c.counterpart_user_id || c.participant_id) || '—') + badge(c.unread_count) + '</div><div class="sub">' + h(c.last_message_preview || '') + '</div></div></button>'; }).join('') || '<div class="empty">' + h(T('لا محادثات بعد', 'No chats yet')) + '</div>') + '</div>';
+        (ST.convs.map(function (c) { return '<button class="row click' + (ST.conv && ST.conv.id === c.id ? ' sel' : '') + '" data-act="cm-open" data-id="' + h(c.id) + '"><div class="main"><div class="t">' + h(dn(c.counterpart_name, peerId(c)) || '—') + cohTag(peerId(c)) + badge(c.unread_count) + '</div><div class="sub">' + h(c.last_message_preview || '') + '</div></div></button>'; }).join('') || '<div class="empty">' + h(T('لا محادثات بعد', 'No chats yet')) + '</div>') + '</div>';
     }
-    var main = ST.conv ? '<div class="card"><div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><button class="btn sm" data-act="cm-back">' + h(T('رجوع', 'Back')) + '</button><b>' + h(ST.conv.name || '') + '</b></div><div class="cm-msgs">' +
+    var main = ST.conv ? '<div class="card"><div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><button class="btn sm" data-act="cm-back">' + h(T('رجوع', 'Back')) + '</button><b>' + h(ST.conv.name || '') + '</b>' + cohTag(ST.conv.peer) + '</div><div class="cm-msgs">' +
       ST.msgs.map(function (m) { return msgHtml(m, m.sender_id === me(), false); }).join('') + '</div>' + composer(T('اكتب رسالة…', 'Type a message…')) + '</div>'
       : '<div class="card"><div class="empty">' + h(T('اختر محادثة أو ابدأ محادثة جديدة', 'Pick a chat or start a new one')) + '</div></div>';
     return '<div class="cm-grid' + open + '"><div class="cm-side">' + list + '</div><div class="cm-main">' + main + '</div></div>';
@@ -355,8 +363,8 @@
     'cm-tab': function (el) { ST.tab = el.dataset.t; ST.err = ''; ST.items = []; ST.file = null; ST.draft = ''; draw(); guard(async function () { await loadTab(); if (ST.tab === 'dm') await loadDm(); }); },
     'cm-new': function () { ST.recips = []; ST.q = ''; draw(); searchRecips(); },
     'cm-newclose': function () { ST.recips = null; draw(); },
-    'cm-start': function (el) { guard(async function () { var id = await rpc('ensure_direct_communication_conversation', { target_user_id: el.dataset.id, conversation_subject: null }); ST.recips = null; ST.tab = 'dm'; ST.conv = { id: id, name: el.dataset.n }; ST.msgs = []; await loadMsgs(); await loadDm(); }); },
-    'cm-open': function (el) { var c = ST.convs.filter(function (x) { return x.id === el.dataset.id; })[0]; if (!c) return; guard(async function () { ST.conv = { id: c.id, name: dn(c.counterpart_name, c.counterpart_id || c.other_user_id || c.counterpart_user_id || c.participant_id) }; await loadMsgs(); await loadDm(); await loadUnread(); }); },
+    'cm-start': function (el) { guard(async function () { var id = await rpc('ensure_direct_communication_conversation', { target_user_id: el.dataset.id, conversation_subject: null }); ST.recips = null; ST.tab = 'dm'; ST.conv = { id: id, name: el.dataset.n, peer: el.dataset.id }; ST.msgs = []; await loadMsgs(); await loadDm(); }); },
+    'cm-open': function (el) { var c = ST.convs.filter(function (x) { return x.id === el.dataset.id; })[0]; if (!c) return; guard(async function () { ST.conv = { id: c.id, name: dn(c.counterpart_name, peerId(c)), peer: peerId(c) }; await loadMsgs(); await loadDm(); await loadUnread(); }); },
     'cm-back': function () { ST.conv = null; draw(); },
     'cm-file': function (el) { openFile(el.dataset.p); },
     'cm-pick': function () { picker().click(); },
