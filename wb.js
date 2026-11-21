@@ -102,15 +102,14 @@
     if (s === 'cancel' || s === 'past') return '';
     if (isMgr(e)) return e.link ? '<button class="btn pri" data-act="wb-join" data-id="' + e.id + '">🎥 ' + h(T('فتح رابط البث', 'Open join link')) + '</button>' : '<span class="sub">' + h(T('أضف رابط البث من «تعديل».', 'Add the join link via Edit.')) + '</span>';
     if (e.link_open) out += '<button class="btn pri" data-act="wb-join" data-id="' + e.id + '">🎥 ' + h(T('انضمام الآن', 'Join now')) + '</button>';
-    if (!e.registered) out += '<button class="btn' + (e.link_open ? '' : ' pri') + '" data-act="wb-reg" data-id="' + e.id + '">✅ ' + h(T('سجّلني', 'Register me')) + '</button>';
-    else if (!e.joined) out += '<button class="btn sm" data-act="wb-unreg" data-id="' + e.id + '">' + h(T('إلغاء تسجيلي', 'Cancel my registration')) + '</button>';
+    else out += '<button class="btn" disabled style="opacity:.7">🔒 ' + h(T('ينفتح الرابط عند الموعد', 'Link opens at start time')) + '</button>';
     return out;
   }
   function card(e) {
     var s = status(e);
-    return '<div class="wb-card ' + s + '"><div class="wb-h"><b>' + h(e.title) + '</b> ' + pill(e) + (e.registered ? ' <span class="pill ok">✓ ' + h(T('مسجّل', 'Registered')) + '</span>' : '') + (e.joined ? ' <span class="pill">' + h(T('حضرتَ', 'Attended')) + '</span>' : '') + '</div>' +
+    return '<div class="wb-card ' + s + '"><div class="wb-h"><b>' + h(e.title) + '</b> ' + pill(e) + (e.joined ? ' <span class="pill">' + h(T('حضرتَ', 'Attended')) + '</span>' : '') + '</div>' +
       '<div class="sub" style="margin-top:4px">' + h(untilTxt(e)) + (e.speaker ? '🎤 ' + h(e.speaker) + ' · ' : '') + '🗓 ' + h(fdt(e.starts_at)) + ' · ⏱ ' + e.duration_min + ' ' + h(T('دقيقة', 'min')) + '</div>' +
-      (isMgr(e) ? '<div class="sub">👥 ' + e.regs + ' ' + h(T('مسجّل', 'registered')) + ' · ✔ ' + e.attended + ' ' + h(T('حضر', 'attended')) + ' · ❓ ' + e.questions + '</div>' : '') +
+      (isMgr(e) ? '<div class="sub">✔ ' + e.attended + ' ' + h(T('حضر', 'attended')) + ' · ❓ ' + e.questions + '</div>' : '') +
       '<div class="wb-row">' + regBtns(e) + '<button class="btn" data-act="wb-open" data-id="' + e.id + '">' + h(T('التفاصيل', 'Details')) + '</button></div></div>';
   }
   function eventHtml(e) {
@@ -128,7 +127,7 @@
     (e.cohort_ids || []).forEach(function (id) { var c = (W.cohorts || []).filter(function (x) { return x.id === id; })[0]; aud.push(c ? c.name : T('شعبة #', 'Cohort #') + id); });
     return '<div class="wb-card"><div class="sub">' + (e.speaker ? '🎤 ' + h(e.speaker) + '<br>' : '') + '🗓 ' + h(fdt(e.starts_at)) + ' · ⏱ ' + e.duration_min + ' ' + h(T('دقيقة', 'min')) + (e.creator_name ? '<br>👤 ' + h(T('المنظّم: ', 'Organizer: ')) + h(e.creator_name) : '') + (isMgr(e) && aud.length ? '<br>🎯 ' + h(aud.join('، ')) : '') + '</div>' +
       (e.descr ? '<p class="wb-t">' + h(e.descr) + '</p>' : '') +
-      (e.link_open ? '' : '<div class="sub">' + h(T('رابط البث يظهر قبل الموعد بـ 15 دقيقة للمسجّلين.', 'The join link appears 15 minutes before start for registered people.')) + '</div>') +
+      (e.link_open || isMgr(e) ? '' : '<div class="sub">' + h(e.open_before_min ? T('يُفتح الرابط قبل الموعد بـ ' + e.open_before_min + ' دقيقة.', 'The join link opens ' + e.open_before_min + ' min before start.') : T('يُفتح رابط البث عند موعد البدء، وسيُسجَّل حضورك عند الضغط على «انضمام».', 'The join link opens at the start time; your attendance is recorded when you press “Join”.')) + '</div>') +
       '<div class="wb-row">' + regBtns(e) +
       (safeUrl(e.materials_url) ? '<a class="btn" target="_blank" rel="noopener" href="' + h(e.materials_url) + '">📎 ' + h(T('المرفقات', 'Materials')) + '</a>' : '') +
       (safeUrl(e.record_url) ? '<a class="btn" target="_blank" rel="noopener" href="' + h(e.record_url) + '">▶ ' + h(T('تسجيل الجلسة', 'Session recording')) + '</a>' : '') +
@@ -184,10 +183,10 @@
   /* ── التقييم ── */
   function fbTab(e) {
     var mine = '';
-    if (e.registered) {
+    if (e.joined) {
       var r = W.fbr || e.my_rating || 0;
       mine = '<div class="wb-card"><b>' + h(T('قيّم الويبنار', 'Rate this webinar')) + '</b><div class="wb-stars">' + [1, 2, 3, 4, 5].map(function (i) { return '<button data-act="wb-star" data-r="' + i + '" class="' + (i <= r ? 'on' : '') + '">★</button>'; }).join('') + '</div><textarea id="wb-fbc" rows="3" maxlength="1000" placeholder="' + h(T('ملاحظاتك (اختياري)', 'Comments (optional)')) + '" style="width:100%"></textarea><div class="wb-row"><button class="btn pri" data-act="wb-fbsave"' + (r ? '' : ' disabled') + '>' + h(T('حفظ التقييم', 'Save rating')) + '</button></div></div>';
-    } else mine = '<div class="sub">' + h(T('التقييم للمسجّلين في الويبنار.', 'Rating is for registered people.')) + '</div>';
+    } else mine = '<div class="sub">' + h(T('التقييم لمن حضر الويبنار (بعد الضغط على «انضمام»).', 'Rating is for those who joined the webinar.')) + '</div>';
     var res = '';
     if (isMgr(e)) {
       var n = W.fb.length, avg = n ? (W.fb.reduce(function (s, x) { return s + x.rating; }, 0) / n).toFixed(1) : '—';
@@ -199,7 +198,7 @@
   /* ── الحضور ── */
   function attTab(e) {
     var att = W.att.filter(function (a) { return a.joined_at; }).length;
-    return '<div class="wb-card"><div class="wb-h"><b>👥 ' + W.att.length + ' ' + h(T('مسجّل', 'registered')) + ' · ✔ ' + att + ' ' + h(T('حاضر', 'attended')) + '</b><span style="flex:1"></span><button class="btn sm" data-act="wb-acsv">⬇ ' + h(T('تصدير الحضور (Excel)', 'Export (Excel)')) + '</button></div>' +
+    return '<div class="wb-card"><div class="wb-h"><b>👥 ' + W.att.length + ' ' + h(T('في القائمة', 'listed')) + ' · ✔ ' + att + ' ' + h(T('حاضر', 'attended')) + '</b><span style="flex:1"></span><button class="btn sm" data-act="wb-acsv">⬇ ' + h(T('تصدير الحضور (Excel)', 'Export (Excel)')) + '</button></div>' +
       '<div class="sub">' + h(T('يُسجَّل الحضور عند ضغط «انضمام» من التطبيق. ومن دخل Zoom مباشرة تؤكد حضوره يدوياً بالزر.', 'Attendance is recorded when people press “Join” in the app. Confirm others manually.')) + '</div>' +
       W.att.map(function (a) { return '<div class="wb-q wb-h" style="justify-content:space-between"><span>' + (a.joined_at ? '✔ ' : '○ ') + h(a.full_name || '') + ' <span class="sub">' + h(a.university_id || '') + ' · ' + h(a.acct_role || '') + (a.joined_at ? ' · ' + h(fshort(a.joined_at)) : '') + '</span></span><button class="btn sm' + (a.joined_at ? '' : ' pri') + '" data-act="wb-att" data-u="' + h(a.user_id) + '" data-on="' + (a.joined_at ? 0 : 1) + '">' + h(a.joined_at ? T('إلغاء الحضور', 'Unmark') : T('تأكيد الحضور', 'Mark attended')) + '</button></div>'; }).join('') + '</div>';
   }
@@ -213,6 +212,7 @@
       '<label>' + h(T('الوصف', 'Description')) + '<textarea data-wbf="descr" rows="3" maxlength="4000">' + h(f.descr) + '</textarea></label>' +
       '<label>' + h(T('الموعد *', 'Date & time *')) + '<input type="datetime-local" data-wbf="start" value="' + h(f.start) + '"></label>' +
       '<label>' + h(T('المدة (دقيقة)', 'Duration (min)')) + '<input type="number" min="5" max="720" data-wbf="dur" value="' + h(f.dur) + '"></label>' +
+      '<label>' + h(T('فتح الرابط قبل الموعد بـ (دقيقة، 0 = عند الموعد)', 'Open link minutes before start (0 = at start)')) + '<input type="number" min="0" max="120" data-wbf="openMin" value="' + h(f.openMin) + '"></label>' +
       '<label>' + h(T('رابط البث (Zoom / Meet / Teams / Jitsi)', 'Join link (Zoom / Meet / Teams / Jitsi)')) + '<input dir="ltr" data-wbf="link" value="' + h(f.link) + '" placeholder="https://"></label>' +
       '<div><b style="font-size:13px">' + h(T('الجمهور', 'Audience')) + '</b>' + ck('students', T('كل الطلبة (طلبة الكلية)', 'All college students')) + ck('staff', T('الموظفون وأعضاء هيئة التدريس', 'Staff & faculty')) +
       ((W.cohorts || []).length ? '<div class="sub" style="margin-top:4px">' + h(T('شعب محددة (تشمل الخارجية):', 'Specific cohorts (incl. external):')) + '</div>' + W.cohorts.map(function (c) { return '<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" style="width:auto" data-wbc="' + c.id + '"' + (f.cohorts.indexOf(c.id) > -1 ? ' checked' : '') + '> ' + h(c.name) + (c.is_external ? ' 🌐' : '') + '</label>'; }).join('') : '') + '</div>' +
@@ -223,8 +223,8 @@
   }
   function newForm(e) {
     var d = new Date(Date.now() + 86400000); d.setMinutes(0, 0, 0);
-    return e ? { id: e.id, title: e.title, speaker: e.speaker || '', descr: e.descr || '', start: toLocalInput(e.starts_at), dur: e.duration_min, link: e.link || '', students: !!e.aud_students, staff: !!e.aud_staff, cohorts: (e.cohort_ids || []).slice(), materials: e.materials_url || '', record: e.record_url || '', allowRec: !!e.allow_recordings }
-      : { id: null, title: '', speaker: '', descr: '', start: toLocalInput(d), dur: 60, link: '', students: true, staff: false, cohorts: [], materials: '', record: '', allowRec: false };
+    return e ? { id: e.id, title: e.title, speaker: e.speaker || '', descr: e.descr || '', start: toLocalInput(e.starts_at), dur: e.duration_min, link: e.link || '', students: !!e.aud_students, staff: !!e.aud_staff, cohorts: (e.cohort_ids || []).slice(), materials: e.materials_url || '', record: e.record_url || '', allowRec: !!e.allow_recordings, openMin: e.open_before_min || 0 }
+      : { id: null, title: '', speaker: '', descr: '', start: toLocalInput(d), dur: 60, link: '', students: true, staff: false, cohorts: [], materials: '', record: '', allowRec: false, openMin: 0 };
   }
   async function loadCohorts() {
     if (W.cohorts) return;
@@ -413,14 +413,12 @@ S === 'ready' ? '<div class="pill ok" style="display:block;margin:8px 0;line-hei
       if (f.link && !safeUrl(f.link)) { W.err = T('رابط البث يجب أن يبدأ بـ https://', 'Join link must start with https://'); return redraw(); }
       if (!f.students && !f.staff && !f.cohorts.length) { W.err = T('اختر جمهوراً واحداً على الأقل', 'Pick at least one audience'); return redraw(); }
       go(async function () {
-        var id = await rpc('wb_save', { p_id: f.id, p_title: f.title, p_speaker: f.speaker, p_descr: f.descr, p_starts: new Date(f.start).toISOString(), p_dur: Number(f.dur) || 60, p_link: f.link, p_students: !!f.students, p_staff: !!f.staff, p_cohorts: f.cohorts, p_materials: f.materials, p_record: f.record, p_allow_rec: !!f.allowRec });
+        var id = await rpc('wb_save', { p_id: f.id, p_title: f.title, p_speaker: f.speaker, p_descr: f.descr, p_starts: new Date(f.start).toISOString(), p_dur: Number(f.dur) || 60, p_link: f.link, p_students: !!f.students, p_staff: !!f.staff, p_cohorts: f.cohorts, p_materials: f.materials, p_record: f.record, p_allow_rec: !!f.allowRec, p_open_min: Math.max(0, Math.min(120, Number(f.openMin) || 0)) });
         W.form = null; await loadEvents(); W.id = id; W.tab = 'info'; W.msg = h(T('✅ تم الحفظ.', '✅ Saved.'));
       });
     },
     'wb-cancel': function (el) { go(async function () { await rpc('wb_cancel', { p_id: Number(el.dataset.id), p_cancel: el.dataset.on === '1' }); await loadEvents(); }); },
     'wb-del': function (el) { go(async function () { await rpc('wb_delete', { p_id: Number(el.dataset.id) }); W.id = null; await loadEvents(); }); },
-    'wb-reg': function (el) { go(async function () { await rpc('wb_register', { p_id: Number(el.dataset.id), p_on: true }); await loadEvents(); W.msg = h(T('✅ تم تسجيلك. سيظهر زر الانضمام قبل الموعد بـ 15 دقيقة.', '✅ Registered. The join button appears 15 minutes before start.')); }); },
-    'wb-unreg': function (el) { go(async function () { await rpc('wb_register', { p_id: Number(el.dataset.id), p_on: false }); await loadEvents(); }); },
     'wb-join': function (el) {
       var w = null; try { w = window.open('', '_blank'); } catch (e) {}
       go(async function () {
@@ -487,7 +485,7 @@ S === 'ready' ? '<div class="pill ok" style="display:block;margin:8px 0;line-hei
   var polling = null, tick = 0;
   function sigE(e) { return [e.id, e.link_open, e.cancelled, e.registered, e.joined, e.link ? 1 : 0, e.starts_at, status(e)].join('|'); }
   function updWBN() {
-    var now = Date.now(); window.WBN = (W.ev || []).filter(function (e) { if (e.cancelled || isMgr(e)) return false; var s = new Date(e.starts_at).getTime(), en = s + e.duration_min * 60000; if (en < now || s > now + 7 * 86400000) return false; return now >= s ? !e.joined : !e.registered && s < now + 2 * 86400000; }).length;
+    var now = Date.now(); window.WBN = (W.ev || []).filter(function (e) { if (e.cancelled || isMgr(e)) return false; var s = new Date(e.starts_at).getTime(), en = s + e.duration_min * 60000; if (en < now || s > now + 7 * 86400000) return false; return !e.joined && s < now + 2 * 86400000; }).length;
     var b = $q('#side [data-v="wb"]'); if (!b) return; var o = b.querySelector('.rs-nb'); if (o) o.remove();
     if (window.WBN > 0) { var sp = document.createElement('span'); sp.className = 'rs-nb'; sp.textContent = window.WBN > 99 ? '99+' : String(window.WBN); b.appendChild(sp); }
   }
