@@ -108,6 +108,7 @@ begin
   if e.cancelled and not exists (select 1 from wb_regs where event_id = eid and user_id = auth.uid()) then return false; end if;
   if exists (select 1 from comm_cohort_members m where m.user_id = auth.uid() and m.cohort_id = any (e.cohort_ids)) then return true; end if;
   if e.aud_students and r = 'student' and not public.wb_is_ext(auth.uid()) then return true; end if;
+  if e.aud_external and r = 'student' and public.wb_is_ext(auth.uid()) then return true; end if;
   if e.aud_staff and r in ('professor', 'staff', 'admin') then return true; end if;
   return false;
 end $$;
@@ -115,12 +116,14 @@ end $$;
 -- ───── الفعاليات ─────
 -- فتح الرابط عند الموعد تماماً (يمكن للمنظّم تقديمه بدقائق اختيارياً)، ولا تسجيل ذاتي: كل من في الجمهور يدخل مباشرة ويُسجَّل حضوره عند الضغط
 alter table public.wb_events add column if not exists open_before_min integer not null default 0 check (open_before_min between 0 and 120);
+alter table public.wb_events add column if not exists aud_external boolean not null default false;   -- كل الطلبة الخارجيين (يحدده المنظّم)
 drop function if exists public.wb_list();
 drop function if exists public.wb_save(bigint, text, text, text, timestamptz, integer, text, boolean, boolean, integer[], text, text, boolean);
+drop function if exists public.wb_save(bigint, text, text, text, timestamptz, integer, text, boolean, boolean, integer[], text, text, boolean, integer);
 create or replace function public.wb_list()
 returns table(id bigint, title text, speaker text, descr text, starts_at timestamptz, duration_min integer, link text, aud_students boolean, aud_staff boolean, cohort_ids integer[],
   materials_url text, record_url text, allow_recordings boolean, cancelled boolean, created_by uuid, creator_name text, is_mgr boolean,
-  registered boolean, joined boolean, regs bigint, attended bigint, questions bigint, my_rating integer, link_open boolean, open_before_min integer)
+  registered boolean, joined boolean, regs bigint, attended bigint, questions bigint, my_rating integer, link_open boolean, open_before_min integer, aud_external boolean)
 language sql stable security definer set search_path = public set row_security = off as $$
   select e.id, e.title, e.speaker, e.descr, e.starts_at, e.duration_min,
     case when public.wb_is_mgr(e.id) or (not e.cancelled and now() >= e.starts_at - make_interval(mins => e.open_before_min) and now() <= e.starts_at + make_interval(mins => e.duration_min) + interval '60 minutes') then e.link end,
@@ -130,14 +133,14 @@ language sql stable security definer set search_path = public set row_security =
     (select count(*) from wb_questions q where q.event_id = e.id),
     (select f.rating from wb_feedback f where f.event_id = e.id and f.user_id = auth.uid()),
     (not e.cancelled and now() >= e.starts_at - make_interval(mins => e.open_before_min) and now() <= e.starts_at + make_interval(mins => e.duration_min) + interval '60 minutes'),
-    e.open_before_min
+    e.open_before_min, e.aud_external
   from wb_events e left join wb_regs r on r.event_id = e.id and r.user_id = auth.uid() left join profiles p on p.id = e.created_by
   where auth.uid() is not null and public.wb_can_see(e.id)
   order by e.starts_at desc
 $$;
 
 create or replace function public.wb_save(p_id bigint, p_title text, p_speaker text, p_descr text, p_starts timestamptz, p_dur integer, p_link text,
-  p_students boolean, p_staff boolean, p_cohorts integer[], p_materials text, p_record text, p_allow_rec boolean, p_open_min integer default 0) returns bigint
+  p_students boolean, p_staff boolean, p_cohorts integer[], p_materials text, p_record text, p_allow_rec boolean, p_open_min integer default 0, p_external boolean default false) returns bigint
 language plpgsql security definer set search_path = public set row_security = off as $$
 declare rid bigint; r text := public.current_user_role();
 begin
@@ -146,14 +149,14 @@ begin
   if p_title is null or length(trim(p_title)) < 2 then raise exception 'اكتب عنوان الويبنار'; end if;
   if p_starts is null then raise exception 'حدّد الموعد'; end if;
   if p_id is null then
-    insert into wb_events (title, speaker, descr, starts_at, duration_min, link, aud_students, aud_staff, cohort_ids, materials_url, record_url, allow_recordings, open_before_min, created_by)
+    insert into wb_events (title, speaker, descr, starts_at, duration_min, link, aud_students, aud_staff, cohort_ids, materials_url, record_url, allow_recordings, open_before_min, aud_external, created_by)
     values (trim(p_title), nullif(trim(coalesce(p_speaker, '')), ''), nullif(trim(coalesce(p_descr, '')), ''), p_starts, greatest(5, least(720, coalesce(p_dur, 60))), nullif(trim(coalesce(p_link, '')), ''),
-      coalesce(p_students, false), coalesce(p_staff, false), coalesce(p_cohorts, '{}'), nullif(trim(coalesce(p_materials, '')), ''), nullif(trim(coalesce(p_record, '')), ''), coalesce(p_allow_rec, false), greatest(0, least(120, coalesce(p_open_min, 0))), auth.uid()) returning id into rid;
+      coalesce(p_students, false), coalesce(p_staff, false), coalesce(p_cohorts, '{}'), nullif(trim(coalesce(p_materials, '')), ''), nullif(trim(coalesce(p_record, '')), ''), coalesce(p_allow_rec, false), greatest(0, least(120, coalesce(p_open_min, 0))), coalesce(p_external, false), auth.uid()) returning id into rid;
   else
     if not public.wb_is_mgr(p_id) then raise exception 'not allowed'; end if;
     update wb_events set title = trim(p_title), speaker = nullif(trim(coalesce(p_speaker, '')), ''), descr = nullif(trim(coalesce(p_descr, '')), ''), starts_at = p_starts,
       duration_min = greatest(5, least(720, coalesce(p_dur, 60))), link = nullif(trim(coalesce(p_link, '')), ''), aud_students = coalesce(p_students, false), aud_staff = coalesce(p_staff, false),
-      cohort_ids = coalesce(p_cohorts, '{}'), materials_url = nullif(trim(coalesce(p_materials, '')), ''), record_url = nullif(trim(coalesce(p_record, '')), ''), allow_recordings = coalesce(p_allow_rec, false), open_before_min = greatest(0, least(120, coalesce(p_open_min, 0)))
+      cohort_ids = coalesce(p_cohorts, '{}'), materials_url = nullif(trim(coalesce(p_materials, '')), ''), record_url = nullif(trim(coalesce(p_record, '')), ''), allow_recordings = coalesce(p_allow_rec, false), open_before_min = greatest(0, least(120, coalesce(p_open_min, 0))), aud_external = coalesce(p_external, false)
     where id = p_id returning id into rid;
   end if;
   return rid;
@@ -381,7 +384,7 @@ $$;
 do $$
 declare f text;
 begin
-  foreach f in array array['wb_is_ext(uuid)', 'wb_is_mgr(bigint)', 'wb_can_see(bigint)', 'wb_list()', 'wb_save(bigint,text,text,text,timestamptz,integer,text,boolean,boolean,integer[],text,text,boolean,integer)',
+  foreach f in array array['wb_is_ext(uuid)', 'wb_is_mgr(bigint)', 'wb_can_see(bigint)', 'wb_list()', 'wb_save(bigint,text,text,text,timestamptz,integer,text,boolean,boolean,integer[],text,text,boolean,integer,boolean)',
     'wb_cancel(bigint,boolean)', 'wb_delete(bigint)', 'wb_register(bigint,boolean)', 'wb_join(bigint)', 'wb_attendees(bigint)', 'wb_mark_attended(bigint,uuid,boolean)',
     'wb_q_list(bigint)', 'wb_q_add(bigint,text,boolean)', 'wb_q_vote(bigint)', 'wb_q_answer(bigint,text)', 'wb_q_delete(bigint)',
     'wb_poll_list(bigint)', 'wb_poll_save(bigint,text,text[])', 'wb_poll_vote(bigint,integer)', 'wb_poll_close(bigint,boolean)', 'wb_poll_delete(bigint)',

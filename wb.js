@@ -11,6 +11,7 @@
   function $q(s) { return document.querySelector(s); }
   function myId() { return ((P() && P().user()) || {}).id; }
   function role() { return (window.CTX || {}).role; }
+  function canRec() { return role() !== 'student'; }
   function canCreate() { return role() === 'professor' || (role() === 'admin' && !!window.CAN && window.CAN('wb')); }
   async function rpc(n, a) { var r = await sb().rpc(n, a || {}); if (r.error) throw new Error(r.error.message); return r.data; }
   function fsize(b) { b = Number(b) || 0; return b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
@@ -92,7 +93,7 @@
     var past = W.ev.filter(function (e) { return up.indexOf(e) < 0; });
     return '<div class="wb-h" style="margin:4px 0 8px"><h2 style="margin:0">🎥 ' + h(T('ويبنار', 'Webinars')) + '</h2><span style="flex:1"></span>' +
       (canCreate() ? '<button class="btn pri" data-act="wb-new">＋ ' + h(T('ويبنار جديد', 'New webinar')) + '</button>' : '') +
-      '<button class="btn" data-act="wb-rec-open">🎙 ' + h(T('مسجّل صوت وصورة', 'Audio/video recorder')) + '</button><button class="btn" data-act="wb-refresh">⟳</button></div>' +
+      (canRec() ? '<button class="btn" data-act="wb-rec-open">🎙 ' + h(T('مسجّل صوت وصورة', 'Audio/video recorder')) + '</button>' : '') + '<button class="btn" data-act="wb-refresh">⟳</button></div>' +
       (W.loaded ? '' : '<div class="sub">' + h(T('جارٍ التحميل…', 'Loading…')) + '</div>') +
       (up.length ? '<h3 style="margin:12px 0 0">' + h(T('القادمة والمباشرة', 'Upcoming & live')) + '</h3>' + up.map(card).join('') : (W.loaded ? '<div class="empty">' + h(T('لا ويبنارات قادمة.', 'No upcoming webinars.')) + '</div>' : '')) +
       (past.length ? '<h3 style="margin:16px 0 0">' + h(T('السابقة', 'Past')) + '</h3>' + past.map(card).join('') : '');
@@ -113,7 +114,8 @@
       '<div class="wb-row">' + regBtns(e) + '<button class="btn" data-act="wb-open" data-id="' + e.id + '">' + h(T('التفاصيل', 'Details')) + '</button></div></div>';
   }
   function eventHtml(e) {
-    var tabs = [['info', 'ℹ ' + T('التفاصيل', 'Details')], ['qa', '❓ ' + T('الأسئلة', 'Q&A')], ['polls', '📊 ' + T('الاستطلاعات', 'Polls')], ['rec', '🎙 ' + T('تسجيلات', 'Recordings')], ['fb', '⭐ ' + T('التقييم', 'Feedback')]];
+    var tabs = [['info', 'ℹ ' + T('التفاصيل', 'Details')], ['qa', '❓ ' + T('الأسئلة', 'Q&A')], ['polls', '📊 ' + T('الاستطلاعات', 'Polls')], ['fb', '⭐ ' + T('التقييم', 'Feedback')]];
+    if (canRec()) tabs.splice(3, 0, ['rec', '🎙 ' + T('تسجيلات', 'Recordings')]);
     if (isMgr(e)) tabs.push(['att', '👥 ' + T('الحضور', 'Attendance')]);
     var body = '';
     if (W.tab === 'info') body = infoTab(e); else if (W.tab === 'qa') body = qaTab(e); else if (W.tab === 'polls') body = pollsTab(e);
@@ -123,7 +125,7 @@
   }
   function infoTab(e) {
     var aud = [];
-    if (e.aud_students) aud.push(T('كل الطلبة', 'All students')); if (e.aud_staff) aud.push(T('الموظفون وأعضاء هيئة التدريس', 'Staff & faculty'));
+    if (e.aud_students) aud.push(T('كل طلبة الكلية', 'All college students')); if (e.aud_external) aud.push(T('كل الطلبة الخارجيين', 'All external students')); if (e.aud_staff) aud.push(T('الموظفون وأعضاء هيئة التدريس', 'Staff & faculty'));
     (e.cohort_ids || []).forEach(function (id) { var c = (W.cohorts || []).filter(function (x) { return x.id === id; })[0]; aud.push(c ? c.name : T('شعبة #', 'Cohort #') + id); });
     return '<div class="wb-card"><div class="sub">' + (e.speaker ? '🎤 ' + h(e.speaker) + '<br>' : '') + '🗓 ' + h(fdt(e.starts_at)) + ' · ⏱ ' + e.duration_min + ' ' + h(T('دقيقة', 'min')) + (e.creator_name ? '<br>👤 ' + h(T('المنظّم: ', 'Organizer: ')) + h(e.creator_name) : '') + (isMgr(e) && aud.length ? '<br>🎯 ' + h(aud.join('، ')) : '') + '</div>' +
       (e.descr ? '<p class="wb-t">' + h(e.descr) + '</p>' : '') +
@@ -214,7 +216,7 @@
       '<label>' + h(T('المدة (دقيقة)', 'Duration (min)')) + '<input type="number" min="5" max="720" data-wbf="dur" value="' + h(f.dur) + '"></label>' +
       '<label>' + h(T('فتح الرابط قبل الموعد بـ (دقيقة، 0 = عند الموعد)', 'Open link minutes before start (0 = at start)')) + '<input type="number" min="0" max="120" data-wbf="openMin" value="' + h(f.openMin) + '"></label>' +
       '<label>' + h(T('رابط البث (Zoom / Meet / Teams / Jitsi)', 'Join link (Zoom / Meet / Teams / Jitsi)')) + '<input dir="ltr" data-wbf="link" value="' + h(f.link) + '" placeholder="https://"></label>' +
-      '<div><b style="font-size:13px">' + h(T('الجمهور', 'Audience')) + '</b>' + ck('students', T('كل الطلبة (طلبة الكلية)', 'All college students')) + ck('staff', T('الموظفون وأعضاء هيئة التدريس', 'Staff & faculty')) +
+      '<div><b style="font-size:13px">' + h(T('الجمهور', 'Audience')) + '</b>' + ck('students', T('كل طلبة الكلية', 'All college students')) + ck('external', T('كل الطلبة الخارجيين', 'All external students')) + ck('staff', T('الموظفون وأعضاء هيئة التدريس', 'Staff & faculty')) +
       ((W.cohorts || []).length ? '<div class="sub" style="margin-top:4px">' + h(T('شعب محددة (تشمل الخارجية):', 'Specific cohorts (incl. external):')) + '</div>' + W.cohorts.map(function (c) { return '<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" style="width:auto" data-wbc="' + c.id + '"' + (f.cohorts.indexOf(c.id) > -1 ? ' checked' : '') + '> ' + h(c.name) + (c.is_external ? ' 🌐' : '') + '</label>'; }).join('') : '') + '</div>' +
       '<label>' + h(T('رابط المرفقات (اختياري)', 'Materials link (optional)')) + '<input dir="ltr" data-wbf="materials" value="' + h(f.materials) + '" placeholder="https://"></label>' +
       '<label>' + h(T('رابط تسجيل الجلسة بعد انتهائها (اختياري)', 'Recording link after the session (optional)')) + '<input dir="ltr" data-wbf="record" value="' + h(f.record) + '" placeholder="https://"></label>' +
@@ -223,8 +225,8 @@
   }
   function newForm(e) {
     var d = new Date(Date.now() + 86400000); d.setMinutes(0, 0, 0);
-    return e ? { id: e.id, title: e.title, speaker: e.speaker || '', descr: e.descr || '', start: toLocalInput(e.starts_at), dur: e.duration_min, link: e.link || '', students: !!e.aud_students, staff: !!e.aud_staff, cohorts: (e.cohort_ids || []).slice(), materials: e.materials_url || '', record: e.record_url || '', allowRec: !!e.allow_recordings, openMin: e.open_before_min || 0 }
-      : { id: null, title: '', speaker: '', descr: '', start: toLocalInput(d), dur: 60, link: '', students: true, staff: false, cohorts: [], materials: '', record: '', allowRec: false, openMin: 0 };
+    return e ? { id: e.id, title: e.title, speaker: e.speaker || '', descr: e.descr || '', start: toLocalInput(e.starts_at), dur: e.duration_min, link: e.link || '', students: !!e.aud_students, external: !!e.aud_external, staff: !!e.aud_staff, cohorts: (e.cohort_ids || []).slice(), materials: e.materials_url || '', record: e.record_url || '', allowRec: !!e.allow_recordings, openMin: e.open_before_min || 0 }
+      : { id: null, title: '', speaker: '', descr: '', start: toLocalInput(d), dur: 60, link: '', students: true, external: false, staff: false, cohorts: [], materials: '', record: '', allowRec: false, openMin: 0 };
   }
   async function loadCohorts() {
     if (W.cohorts) return;
@@ -411,9 +413,9 @@ S === 'ready' ? '<div class="pill ok" style="display:block;margin:8px 0;line-hei
       if (!f.title.trim()) { W.err = T('اكتب عنوان الويبنار', 'Enter a title'); return redraw(); }
       if (!f.start) { W.err = T('حدّد الموعد', 'Set the date/time'); return redraw(); }
       if (f.link && !safeUrl(f.link)) { W.err = T('رابط البث يجب أن يبدأ بـ https://', 'Join link must start with https://'); return redraw(); }
-      if (!f.students && !f.staff && !f.cohorts.length) { W.err = T('اختر جمهوراً واحداً على الأقل', 'Pick at least one audience'); return redraw(); }
+      if (!f.students && !f.external && !f.staff && !f.cohorts.length) { W.err = T('اختر جمهوراً واحداً على الأقل', 'Pick at least one audience'); return redraw(); }
       go(async function () {
-        var id = await rpc('wb_save', { p_id: f.id, p_title: f.title, p_speaker: f.speaker, p_descr: f.descr, p_starts: new Date(f.start).toISOString(), p_dur: Number(f.dur) || 60, p_link: f.link, p_students: !!f.students, p_staff: !!f.staff, p_cohorts: f.cohorts, p_materials: f.materials, p_record: f.record, p_allow_rec: !!f.allowRec, p_open_min: Math.max(0, Math.min(120, Number(f.openMin) || 0)) });
+        var id = await rpc('wb_save', { p_id: f.id, p_title: f.title, p_speaker: f.speaker, p_descr: f.descr, p_starts: new Date(f.start).toISOString(), p_dur: Number(f.dur) || 60, p_link: f.link, p_students: !!f.students, p_external: !!f.external, p_staff: !!f.staff, p_cohorts: f.cohorts, p_materials: f.materials, p_record: f.record, p_allow_rec: !!f.allowRec, p_open_min: Math.max(0, Math.min(120, Number(f.openMin) || 0)) });
         W.form = null; await loadEvents(); W.id = id; W.tab = 'info'; W.msg = h(T('✅ تم الحفظ.', '✅ Saved.'));
       });
     },
