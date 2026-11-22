@@ -41,7 +41,8 @@
   }
   function body(st) {
     var mine = st.groups.filter(function (g) { return g.mine; })[0], closed = st.closed;
-    var out = closed ? '<p class="pill warn" style="white-space:normal">🔒 ' + h(st.closed_msg || T('الحجز مغلق حالياً', 'Booking is closed')) + '</p>' : '';
+    var out = st.goals ? '<div class="card" style="margin:6px 0"><b>📘 ' + h(st.goals_label || T('أهداف المحاضرة', 'Lecture goals')) + '</b><div style="white-space:pre-wrap;margin-top:4px">' + h(st.goals) + '</div></div>' : '';
+    out += closed ? '<p class="pill warn" style="white-space:normal">🔒 ' + h(st.closed_msg || T('الحجز مغلق حالياً', 'Booking is closed')) + '</p>' : '';
     out += '<div class="sub" style="margin:6px 0">' + h(st.cap ? T('أقصى عدد أعضاء المجموعة: ', 'Max members per group: ') + st.cap : T('عدد أعضاء المجموعة غير محدد', 'No member limit')) + '</div>';
     if (mine) {
       var free = st.topics.filter(function (t) { return !t.group_no; });

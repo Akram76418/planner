@@ -24,6 +24,14 @@
   function cur() { return B.offs.filter(function (o) { return o.id === B.off; })[0] || null; }
   function topicOf(id) { return B.topics.filter(function (t) { return t.id === id; })[0] || null; }
   function groupOwner(topicId) { return B.groups.filter(function (g) { return g.topic_id === topicId; })[0] || null; }
+  var GLABS = ['أهداف المحاضرة', 'محتويات المحاضرة', 'أهداف ومحتويات المحاضرة', 'الوصف'];
+  function glab() { var o = cur(); return (o && o.goals_label) || 'أهداف المحاضرة'; }
+  function goalsBox(o) {
+    var lab = o.goals_label || GLABS[0];
+    if (ro()) return o.goals ? '<div class="card" style="margin-top:8px"><b>📘 ' + h(lab) + '</b><div style="white-space:pre-wrap">' + h(o.goals) + '</div></div>' : '';
+    return '<div style="margin-top:10px;padding:10px;border-radius:10px;border:1px solid rgba(127,127,127,.3)"><b>📘 ' + h(T('أهداف / محتويات المحاضرة (اختياري، يراها الطلبة)', 'Lecture goals / contents (optional, visible to students)')) + '</b><div class="form" style="margin-top:6px"><label>' + h(T('عنوان الحقل', 'Field title')) + '<select id="bg-lab">' + GLABS.map(function (g) { return '<option' + (g === lab ? ' selected' : '') + '>' + h(g) + '</option>'; }).join('') + '</select></label>' +
+      '<label style="grid-column:1/-1">' + h(lab) + '<textarea id="bg-txt" rows="4" maxlength="3000" placeholder="' + h(T('اكتب أهداف المحاضرة أو محتواها…', 'Write the goals or contents…')) + '">' + h(o.goals || '') + '</textarea></label></div><div class="tabs"><button class="btn sm pri" data-act="bk-goals">' + h(T('حفظ', 'Save')) + '</button></div></div>';
+  }
   function ro() { var o = cur(); return !o || o.archived; }
   function say(m, bad) { B.msg = m || ''; B.msgBad = !!bad; }
 
@@ -42,6 +50,7 @@
         var g = await sb().from('book_groups').select('*').eq('offering_id', B.off).order('group_no', { ascending: true }).limit(2000); if (g.error) throw g.error;
         B.topics = t.data || []; B.groups = g.data || [];
         try { var mm = await sb().rpc('bk_admin_members', { p_off: B.off }); B.members = mm.error ? [] : (mm.data || []); } catch (x) { B.members = []; }
+        try { var uj = await sb().rpc('bk_admin_unjoined', { p_off: B.off }); B.unjoined = uj.error ? [] : (uj.data || []); } catch (x) { B.unjoined = []; }
       }
       try { var nn = await sb().rpc('bk_admin_notices', { p_limit: 40 }); B.notices = nn.error ? [] : (nn.data || []); setBadge(B.notices.filter(function (n) { return !n.seen; }).length); } catch (x) { B.notices = []; }
       if (!B.cohorts.length) { try { var cc = await sb().rpc('comm_list_cohorts'); B.cohorts = cc.error ? [] : (cc.data || []); } catch (x) {} }
@@ -65,7 +74,7 @@
       (B.offs.length ? '<div class="form"><label>' + h(T('الفصل الدراسي', 'Semester')) + '<select data-bk="sem">' + sems.map(function (s) { return '<option' + (s === sem ? ' selected' : '') + ' value="' + h(s) + '">' + h(s) + '</option>'; }).join('') + '</select></label>' +
         '<label>' + h(T('المساق', 'Course')) + '<select data-bk="crs">' + courses.map(function (c) { return '<option value="' + c.id + '"' + (c.id === B.off ? ' selected' : '') + '>' + h(c.course + (c.archived ? ' — ' + T('مؤرشف', 'archived') : '')) + '</option>'; }).join('') + '</select></label></div>' : '<p class="sub">' + h(T('لا توجد مساقات بعد. أضف أول مساق.', 'No courses yet. Add one.')) + '</p>') +
       (o ? '<div class="sub" style="margin:8px 0 4px">' + h(T('تم حجز ' + taken + ' من ' + n, taken + ' of ' + n + ' booked')) + '</div><div style="height:7px;border-radius:5px;background:rgba(127,127,127,.2)"><div style="height:7px;border-radius:5px;background:var(--accent,#0b8a97);width:' + (n ? Math.round(taken * 100 / n) : 0) + '%"></div></div>' : '') +
-      (o ? closeBar(o) + cohortBox(o) : '') +
+      (o ? closeBar(o) + goalsBox(o) + cohortBox(o) : '') +
       (o && o.archived ? '<p class="pill warn" style="margin-top:8px">🗄 ' + h(T('مساق مؤرشف: للعرض فقط. استرجعه من الأرشيف للتعديل.', 'Archived: read-only. Restore it to edit.')) + '</p>' : '') +
       '<div class="tabs" style="margin-top:8px"><button class="btn sm pri" data-act="bk-offpanel">' + h(B.offPanel ? T('إخفاء إدارة المساقات', 'Hide course tools') : T('+ مساق / إدارة المساقات', '+ Course / manage')) + '</button>' +
       (o ? ' <button class="btn sm" data-act="bk-export">⬇ Excel</button> <button class="btn sm bad" data-act="bk-reset" data-confirm="1" data-confirm-text="اضغط لتأكيد التصفير">' + h(T('تصفير الحجوزات', 'Reset bookings')) + '</button>' : '') + '</div>' +
@@ -147,10 +156,10 @@
       (list.map(groupCard).join('') || '<div class="empty">' + h(T('لا نتائج', 'No results')) + '</div>');
   }
   function topicsPane() {
-    var add = ro() ? '' : '<div class="card"><b>' + h(T('إضافة موضوع', 'Add topic')) + '</b> <span class="sub">' + h(T('(تُضاف مجموعة جديدة تلقائياً)', '(a group is added automatically)')) + '</span><div class="form"><label style="grid-column:1/-1">' + h(T('العنوان', 'Title')) + '<input id="bt-title" maxlength="200"></label><label style="grid-column:1/-1">' + h(T('الوصف (اختياري)', 'Description')) + '<textarea id="bt-desc" rows="2" maxlength="1500"></textarea></label></div><button class="btn pri" data-act="bk-tadd">+ ' + h(T('إضافة', 'Add')) + '</button></div>';
+    var add = ro() ? '' : '<div class="card"><b>' + h(T('إضافة موضوع', 'Add topic')) + '</b> <span class="sub">' + h(T('(تُضاف مجموعة جديدة تلقائياً)', '(a group is added automatically)')) + '</span><div class="form"><label style="grid-column:1/-1">' + h(T('العنوان', 'Title')) + '<input id="bt-title" maxlength="200"></label><label style="grid-column:1/-1">' + h(glab() + ' ' + T('(اختياري)', '(optional)')) + '<textarea id="bt-desc" rows="2" maxlength="1500"></textarea></label></div><button class="btn pri" data-act="bk-tadd">+ ' + h(T('إضافة', 'Add')) + '</button></div>';
     var rows = B.topics.map(function (t) {
       var o = groupOwner(t.id);
-      if (B.tEdit === t.id) return '<div class="card" style="margin:8px 0;border:2px solid var(--accent,#0b8a97)"><div class="form"><label style="grid-column:1/-1">' + h(T('العنوان', 'Title')) + '<input id="bt-etitle" value="' + h(t.title) + '" maxlength="200"></label><label style="grid-column:1/-1">' + h(T('الوصف', 'Description')) + '<textarea id="bt-edesc" rows="3" maxlength="1500">' + h(t.descr || '') + '</textarea></label></div><div class="tabs"><button class="btn pri" data-act="bk-tsave" data-id="' + t.id + '">' + h(T('حفظ', 'Save')) + '</button><button class="btn" data-act="bk-tcancel">' + h(T('إلغاء', 'Cancel')) + '</button></div></div>';
+      if (B.tEdit === t.id) return '<div class="card" style="margin:8px 0;border:2px solid var(--accent,#0b8a97)"><div class="form"><label style="grid-column:1/-1">' + h(T('العنوان', 'Title')) + '<input id="bt-etitle" value="' + h(t.title) + '" maxlength="200"></label><label style="grid-column:1/-1">' + h(glab()) + '<textarea id="bt-edesc" rows="3" maxlength="1500">' + h(t.descr || '') + '</textarea></label></div><div class="tabs"><button class="btn pri" data-act="bk-tsave" data-id="' + t.id + '">' + h(T('حفظ', 'Save')) + '</button><button class="btn" data-act="bk-tcancel">' + h(T('إلغاء', 'Cancel')) + '</button></div></div>';
       return '<div class="row"><div class="main"><div class="t">#' + t.no + ' ' + h(t.title) + '</div>' + (t.descr ? '<div class="sub">' + h(t.descr) + '</div>' : '') + '<div class="sub">' + (o ? '<span class="pill warn">' + h(T('محجوز — مجموعة ', 'Booked — group ')) + o.group_no + '</span>' : '<span class="pill ok">' + h(T('متاح', 'Free')) + '</span>') + '</div></div>' +
         (ro() ? '' : '<div class="act"><button class="btn sm" data-act="bk-tedit" data-id="' + t.id + '">' + h(T('تعديل', 'Edit')) + '</button> <button class="btn sm bad" data-act="bk-tdel" data-id="' + t.id + '" data-confirm="1">' + h(T('حذف', 'Delete')) + '</button></div>') + '</div>';
     }).join('') || '<div class="empty">' + h(T('لا مواضيع بعد', 'No topics yet')) + '</div>';
@@ -246,12 +255,27 @@
 
   /* ---------- تصدير ---------- */
   function exportRows() {
-    var rows = [['رقم المجموعة', 'رقم الموضوع', 'عنوان الموضوع', 'اسم الطالب', 'رابط المحاضرة', 'تاريخ المحاضرة']];
+    var rows = [['رقم المجموعة', 'رقم الموضوع', 'عنوان الموضوع', 'اسم الطالب', 'رقم الطالب الجامعي', 'رابط المحاضرة', 'تاريخ المحاضرة']];
     B.groups.forEach(function (g) {
-      var t = topicOf(g.topic_id), names = (g.students || []).concat(membersOf(g.id).map(function (m) { return (m.full_name || '') + (m.university_id ? ' (' + m.university_id + ')' : ''); })); if (!names.length) names = [''];
-      names.forEach(function (n) { rows.push([g.group_no, t ? t.no : '', t ? t.title : 'لم تحجز موضوعاً بعد', n, g.link || '', g.lecture_date || '']); });
+      var t = topicOf(g.topic_id), who = (g.students || []).map(function (n) { return [n, '']; }).concat(membersOf(g.id).map(function (m) { return [m.full_name || '', m.university_id || '']; })); if (!who.length) who = [['', '']];
+      who.forEach(function (n) { rows.push([g.group_no, t ? t.no : '', t ? t.title : 'لم تحجز موضوعاً بعد', n[0], n[1], g.link || '', g.lecture_date || '']); });
     });
     return rows;
+  }
+  function exportSheets() {
+    var o = cur() || {}, cap = o.group_cap || '';
+    var sum = [['رقم المجموعة', 'رقم الموضوع', 'عنوان الموضوع', 'عدد الأعضاء', 'الحد الأقصى', 'الأعضاء', 'تاريخ المحاضرة', 'رابط المحاضرة']];
+    B.groups.forEach(function (g) {
+      var t = topicOf(g.topic_id), mem = membersOf(g.id).map(function (m) { return (m.full_name || '') + (m.university_id ? ' (' + m.university_id + ')' : ''); }).concat(g.students || []);
+      sum.push([g.group_no, t ? t.no : '', t ? t.title : 'لم تحجز موضوعاً بعد', mem.length, g.cap || cap, mem.join('، '), g.lecture_date || '', g.link || '']);
+    });
+    var st = [['اسم الطالب', 'رقم الطالب الجامعي', 'رقم المجموعة', 'رقم الموضوع', 'عنوان الموضوع', 'تاريخ الانضمام']];
+    B.members.forEach(function (m) { var g = findG(m.group_no), t = g ? topicOf(g.topic_id) : null; st.push([m.full_name || '', m.university_id || '', m.group_no, t ? t.no : '', t ? t.title : '', m.joined_at ? String(m.joined_at).slice(0, 16).replace('T', ' ') : '']); });
+    B.groups.forEach(function (g) { var t = topicOf(g.topic_id); (g.students || []).forEach(function (n) { st.push([n, '', g.group_no, t ? t.no : '', t ? t.title : '', '']); }); });
+    var sheets = [['المجموعات', sum, [14, 14, 55, 12, 12, 70, 16, 50]], ['الطلبة', st, [36, 20, 14, 14, 55, 18]], ['الحجوزات', exportRows(), [14, 14, 55, 36, 20, 50, 16]]];
+    if ((B.unjoined || []).length) sheets.push(['لم ينضموا', [['اسم الطالب', 'رقم الطالب الجامعي']].concat(B.unjoined.map(function (u) { return [u.full_name || '', u.university_id || '']; })), [36, 20]]);
+    if (o.goals) sheets.push([(o.goals_label || 'الأهداف').slice(0, 30), [[o.goals_label || 'أهداف المحاضرة'], [o.goals]], [100]]);
+    return sheets;
   }
   function saveBlob(name, blob) { var u = URL.createObjectURL(blob), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 4000); }
   function loadXlsx() {
@@ -259,13 +283,14 @@
     return new Promise(function (res, rej) { var sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; sc.onload = res; sc.onerror = function () { rej(new Error('xlsx')); }; document.head.appendChild(sc); });
   }
   async function doExport() {
-    var o = cur(), rows = exportRows(), lab = (o ? o.course + '-' + o.semester : 'booking').replace(/[\\/:*?"<>|\s]+/g, '-'), name = 'حجز-المحاضرات-' + lab + '-' + new Date().toISOString().slice(0, 10);
+    var o = cur(), sheets = exportSheets(), lab = (o ? o.course + '-' + o.semester : 'booking').replace(/[\\/:*?"<>|\s]+/g, '-'), name = 'حجز-المحاضرات-' + lab + '-' + new Date().toISOString().slice(0, 10);
     try {
       await loadXlsx();
-      var ws = window.XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = [{ wch: 14 }, { wch: 14 }, { wch: 60 }, { wch: 36 }, { wch: 55 }, { wch: 16 }];
-      var wb = window.XLSX.utils.book_new(); wb.Workbook = { Views: [{ RTL: true }] }; window.XLSX.utils.book_append_sheet(wb, ws, 'الحجوزات');
+      var wb = window.XLSX.utils.book_new(); wb.Workbook = { Views: [{ RTL: true }] };
+      sheets.forEach(function (sh) { var ws = window.XLSX.utils.aoa_to_sheet(sh[1]); ws['!cols'] = sh[2].map(function (w) { return { wch: w }; }); window.XLSX.utils.book_append_sheet(wb, ws, sh[0]); });
       saveBlob(name + '.xlsx', new Blob([window.XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/octet-stream' }));
     } catch (e) {
+      var rows = sheets[1][1];
       var csv = '﻿' + rows.map(function (r) { return r.map(function (c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(','); }).join('\r\n');
       saveBlob(name + '.csv', new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     }
@@ -351,6 +376,10 @@
     'bk-offren': function () {
       var s = val('bo-rsem').trim(), c = val('bo-rcrs').trim(); if (!s || !c) { toast_(T('اكتب الفصل واسم المساق', 'Enter semester and course')); return; }
       guard(async function () { var r = await sb().from('book_offerings').update({ semester: s, course: c }).eq('id', B.off); if (r.error) throw r.error; say(T('تم حفظ الاسم', 'Saved')); await reloadQuiet(); });
+    },
+    'bk-goals': function () {
+      var o = cur(); if (!o) return;
+      guard(async function () { var r = await sb().from('book_offerings').update({ goals: val('bg-txt').trim() || null, goals_label: val('bg-lab') || GLABS[0] }).eq('id', o.id); if (r.error) throw new Error(/goals/.test(r.error.message || '') ? T('شغّل ملف booking-goals.sql في Supabase أولاً', 'Run booking-goals.sql in Supabase first') : r.error.message); say(T('حُفظ', 'Saved')); await reloadQuiet(); });
     },
     'bk-offarc': function () { var o = cur(); if (!o) return; guard(async function () { var r = await sb().from('book_offerings').update({ archived: !o.archived }).eq('id', o.id); if (r.error) throw r.error; say(o.archived ? T('استُرجع المساق', 'Restored') : T('أُرشف المساق', 'Archived')); await reloadQuiet(); }); }
   };
