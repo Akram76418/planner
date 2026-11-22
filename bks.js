@@ -39,27 +39,31 @@
     el.innerHTML = html;
     var l = $q('#bs-link'); if (l) l.value = S.link;
   }
+  function goalsOf(st, id) { var t = (st.topics || []).filter(function (x) { return x.id === id; })[0]; return t && t.descr ? '<div class="sub" style="white-space:pre-wrap">📘 <b>' + h(T('أهداف ومحتويات المحاضرة', 'Lecture goals & contents')) + ':</b> ' + h(t.descr) + '</div>' : ''; }
   function body(st) {
     var mine = st.groups.filter(function (g) { return g.mine; })[0], closed = st.closed;
-    var out = st.goals ? '<div class="card" style="margin:6px 0"><b>📘 ' + h(st.goals_label || T('أهداف المحاضرة', 'Lecture goals')) + '</b><div style="white-space:pre-wrap;margin-top:4px">' + h(st.goals) + '</div></div>' : '';
+    var out = '';
     out += closed ? '<p class="pill warn" style="white-space:normal">🔒 ' + h(st.closed_msg || T('الحجز مغلق حالياً', 'Booking is closed')) + '</p>' : '';
     out += '<div class="sub" style="margin:6px 0">' + h(st.cap ? T('أقصى عدد أعضاء المجموعة: ', 'Max members per group: ') + st.cap : T('عدد أعضاء المجموعة غير محدد', 'No member limit')) + '</div>';
     if (mine) {
       var free = st.topics.filter(function (t) { return !t.group_no; });
       out += '<div class="card" style="border:2px solid var(--accent,#0b8a97)"><b>⭐ ' + h(T('مجموعتي: ', 'My group: ')) + mine.group_no + '</b> <span class="pill ' + (mine.cap && mine.count >= mine.cap ? 'ok' : '') + '">' + mine.count + (mine.cap ? '/' + mine.cap : '') + '</span>' +
         '<div class="sub">' + mine.members.map(function (m) { return h(m.name) + (m.me ? ' (' + h(T('أنا', 'me')) + ')' : ''); }).concat((mine.manual || []).map(h)).join('، ') + '</div>' +
-        (mine.topic_id ? '<div style="margin-top:6px">📌 <b>#' + mine.topic_no + '</b> ' + h(mine.topic_title) + '</div>' + (mine.date ? '<div class="sub">📅 ' + h(fmtDate(mine.date)) + '</div>' : '') +
+        (mine.topic_id ? '<div style="margin-top:6px">📌 <b>#' + mine.topic_no + '</b> ' + h(mine.topic_title) + '</div>' + goalsOf(st, mine.topic_id) + (mine.date ? '<div class="sub">📅 ' + h(fmtDate(mine.date)) + '</div>' : '') +
           (closed ? (mine.link ? '<div class="sub"><a href="' + h(mine.link) + '" target="_blank" rel="noopener noreferrer">🔗 ' + h(T('رابط المحاضرة', 'Lecture link')) + '</a></div>' : '') :
             '<div class="form" style="margin-top:6px"><label>' + h(T('رابط المحاضرة (اختياري)', 'Lecture link (optional)')) + '<input id="bs-link" dir="ltr" placeholder="https://…" maxlength="500"></label></div><div class="tabs"><button class="btn sm pri" data-act="bs-link">' + h(T('حفظ الرابط', 'Save link')) + '</button><button class="btn sm bad" data-act="bs-cancel" data-confirm="1" data-confirm-text="' + h(T('اضغط لتأكيد إلغاء الموضوع', 'Press to confirm')) + '">' + h(T('إلغاء الموضوع', 'Cancel topic')) + '</button></div>') :
           (closed ? '<div class="sub">' + h(T('لم تحجز موضوعاً', 'No topic booked')) + '</div>' : '<div class="sub" style="margin-top:6px">' + h(T('اختر موضوع مجموعتك (يستطيع أي عضو الحجز):', 'Pick your group topic (any member can book):')) + '</div>' +
-            (free.length ? free.map(function (t) { return '<div class="wb-q" style="padding:6px 0;border-top:1px dashed rgba(127,127,127,.3)"><button class="btn sm pri" data-act="bs-book" data-t="' + t.id + '" data-confirm="1" data-confirm-text="' + h(T('اضغط لتأكيد حجز هذا الموضوع', 'Press to confirm')) + '">' + h(T('حجز', 'Book')) + '</button> <b>#' + t.no + '</b> ' + h(t.title) + (t.descr ? '<div class="sub">' + h(t.descr) + '</div>' : '') + '</div>'; }).join('') : '<div class="sub">' + h(T('لا مواضيع متاحة', 'No free topics')) + '</div>'))) +
+            (free.length ? free.map(function (t) { return '<div class="wb-q" style="padding:6px 0;border-top:1px dashed rgba(127,127,127,.3)"><button class="btn sm pri" data-act="bs-book" data-t="' + t.id + '" data-confirm="1" data-confirm-text="' + h(T('اضغط لتأكيد حجز هذا الموضوع', 'Press to confirm')) + '">' + h(T('حجز', 'Book')) + '</button> <b>#' + t.no + '</b> ' + h(t.title) + goalsOf(st, t.id) + '</div>'; }).join('') : '<div class="sub">' + h(T('لا مواضيع متاحة', 'No free topics')) + '</div>'))) +
         (closed ? '' : '<div style="margin-top:8px"><button class="btn sm" data-act="bs-leave" data-confirm="1" data-confirm-text="' + h(T('اضغط لتأكيد مغادرة المجموعة', 'Press to confirm leaving')) + '">' + h(T('مغادرة المجموعة', 'Leave group')) + '</button></div>') + '</div>';
-    } else if (!closed) out += '<p class="pill" style="white-space:normal">' + h(T('اختر مجموعة وانضم إليها بحسابك (مجموعة واحدة فقط).', 'Pick a group and join it with your account (one group only).')) + '</p>';
+    } else {
+      if (!closed) out += '<p class="pill" style="white-space:normal">' + h(T('اختر مجموعة وانضم إليها بحسابك (مجموعة واحدة فقط).', 'Pick a group and join it with your account (one group only).')) + '</p>';
+      if (st.topics && st.topics.length) out += '<h3 style="margin:12px 0 4px">' + h(T('المحاضرات المتاحة للحجز', 'Lectures available')) + '</h3>' + st.topics.map(function (t) { return '<div class="card" style="margin:6px 0"><div><b>#' + t.no + '</b> ' + h(t.title) + ' <span class="pill ' + (t.group_no ? 'warn' : 'ok') + '">' + h(t.group_no ? T('محجوزة: مجموعة ', 'Booked: group ') + t.group_no : T('متاحة', 'Available')) + '</span></div>' + goalsOf(st, t.id) + '</div>'; }).join('');
+    }
     out += '<h3 style="margin:12px 0 4px">' + h(T('المجموعات', 'Groups')) + '</h3>' + st.groups.map(function (g) {
       var full = g.cap && g.count >= g.cap;
       return '<div class="card" style="margin:6px 0' + (g.mine ? ';opacity:.85' : '') + '"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><div><b>' + h(T('مجموعة ', 'Group ')) + g.group_no + '</b> <span class="pill ' + (full ? 'warn' : '') + '">' + g.count + (g.cap ? '/' + g.cap : '') + '</span>' + (full ? ' <span class="pill bad">' + h(T('مكتملة', 'Full')) + '</span>' : '') + (g.topic_id ? ' <span class="pill ok">' + h(T('محجوز موضوع', 'Topic booked')) + '</span>' : '') + '</div>' +
         (!mine && !closed ? '<button class="btn sm' + (full ? '' : ' pri') + '" data-act="bs-join" data-g="' + g.id + '"' + (full ? ' disabled' : '') + '>' + h(full ? T('مكتملة', 'Full') : T('انضمام', 'Join')) + '</button>' : '') + '</div>' +
-        (g.topic_id ? '<div class="sub">📌 #' + g.topic_no + ' ' + h(g.topic_title) + '</div>' : '') +
+        (g.topic_id ? '<div class="sub">📌 #' + g.topic_no + ' ' + h(g.topic_title) + '</div>' + goalsOf(st, g.topic_id) : '') +
         '<div class="sub">' + (g.members.length || (g.manual || []).length ? g.members.map(function (m) { return h(m.name) + (m.me ? ' (' + h(T('أنا', 'me')) + ')' : ''); }).concat((g.manual || []).map(h)).join('، ') : h(T('لا أعضاء بعد', 'No members yet'))) + '</div></div>';
     }).join('');
     return out;
