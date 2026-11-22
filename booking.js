@@ -337,14 +337,14 @@
       guard(async function () { var r = await sb().from('book_groups').update(row).eq('id', g.id); if (r.error) throw r.error; B.edit = null; say(T('تم الحفظ', 'Saved')); await reloadQuiet(); });
     },
     'bk-tadd': function () {
-      var title = val('bt-title').trim(); if (!title) { toast_(T('اكتب العنوان', 'Enter a title')); return; }
-      guard(async function () { var r = await sb().rpc('book_add_topic', { p_off: B.off, p_title: title, p_desc: val('bt-desc').trim() || null }); if (r.error) throw r.error; say(T('أُضيف الموضوع ومجموعة جديدة', 'Topic and group added')); await reloadQuiet(); });
+      var title = val('bt-title').trim(), desc = val('bt-desc').trim() || null; if (!title) { toast_(T('اكتب العنوان', 'Enter a title')); return; }
+      guard(async function () { var r = await sb().rpc('book_add_topic', { p_off: B.off, p_title: title, p_desc: desc }); if (r.error) throw r.error; say(T('أُضيف الموضوع ومجموعة جديدة', 'Topic and group added')); await reloadQuiet(); });
     },
     'bk-tedit': function (el) { B.tEdit = Number(el.dataset.id); draw(); },
     'bk-tcancel': function () { B.tEdit = null; draw(); },
     'bk-tsave': function (el) {
-      var title = val('bt-etitle').trim(); if (!title) { toast_(T('اكتب العنوان', 'Enter a title')); return; }
-      guard(async function () { var r = await sb().from('book_topics').update({ title: title, descr: val('bt-edesc').trim() || null }).eq('id', Number(el.dataset.id)); if (r.error) throw r.error; B.tEdit = null; say(T('تم الحفظ', 'Saved')); await reloadQuiet(); });
+      var title = val('bt-etitle').trim(), desc = val('bt-edesc').trim() || null; if (!title) { toast_(T('اكتب العنوان', 'Enter a title')); return; }
+      guard(async function () { var r = await sb().from('book_topics').update({ title: title, descr: desc }).eq('id', Number(el.dataset.id)); if (r.error) throw r.error; B.tEdit = null; say(T('تم الحفظ', 'Saved')); await reloadQuiet(); });
     },
     'bk-tdel': function (el) {
       var id = Number(el.dataset.id), last = B.groups[B.groups.length - 1];
@@ -363,8 +363,8 @@
     'bk-nseen': function () { guard(async function () { var r = await sb().rpc('bk_admin_notices_seen'); if (r.error) throw r.error; setBadge(0); await reloadQuiet(); }); },
     'bk-reset': function () { guard(async function () { var r = await sb().rpc('book_reset', { p_off: B.off }); if (r.error) throw r.error; say(T('مُسحت الحجوزات والأسماء والروابط (التواريخ محفوظة)', 'Bookings cleared (dates kept)')); await reloadQuiet(); }); },
     'bk-offadd': function () {
-      var s = val('bo-sem').trim(), c = val('bo-crs').trim(); if (!s || !c) { toast_(T('اكتب الفصل واسم المساق', 'Enter semester and course')); return; }
-      guard(async function () { var r = await sb().rpc('book_add_offering', { p_semester: s, p_course: c, p_copy: val('bo-copy') ? Number(val('bo-copy')) : null }); if (r.error) throw r.error; B.off = Number(r.data); B.offPanel = false; say(T('أُضيف المساق', 'Course added')); await reloadQuiet(); });
+      var s = val('bo-sem').trim(), c = val('bo-crs').trim(), cp = val('bo-copy') ? Number(val('bo-copy')) : null; if (!s || !c) { toast_(T('اكتب الفصل واسم المساق', 'Enter semester and course')); return; }
+      guard(async function () { var r = await sb().rpc('book_add_offering', { p_semester: s, p_course: c, p_copy: cp }); if (r.error) throw r.error; B.off = Number(r.data); B.offPanel = false; say(T('أُضيف المساق', 'Course added')); await reloadQuiet(); });
     },
     'bk-offren': function () {
       var s = val('bo-rsem').trim(), c = val('bo-rcrs').trim(); if (!s || !c) { toast_(T('اكتب الفصل واسم المساق', 'Enter semester and course')); return; }
