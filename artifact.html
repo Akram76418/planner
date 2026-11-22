@@ -320,7 +320,7 @@ const EXV=()=>window.EXAMS&&window.EXAMS.visible()?['ex']:[];
 const BSV=()=>window.bsVisible&&window.bsVisible()?['bs']:[];
 const WBV=()=>window.wbVisible&&window.wbVisible()?['wb']:[];
 const RSV=()=>window.rsVisible&&window.rsVisible()?['rs']:[];
-const views=()=>window.CTX&&window.CTX.external?['ex','comm','wb',...BSV()]:window.COMM_ONLY?['comm',...IVV(),...EXV(),...RSV(),...WBV(),...BSV()]:window.HAS_COMM?[...['dash','cal','appts','follow','reports'].filter(v=>PV('p_'+v)&&!(window.PERMS&&window.CTX&&window.CTX.planner===false)),'comm',...EXV(),...RSV(),...WBV(),...(window.CAN&&(window.CAN('proj')||window.CAN('tk'))?['proj']:[]),...(window.CAN&&window.CAN('logs')?['logs']:[]),...(window.CAN&&window.CAN('book')?['book']:[]),...IVV(),...(window.CAN&&window.CAN('main')?['ledger']:[]),'settings']:BASE_VIEWS;
+const views=()=>window.CTX&&window.CTX.external?['ex','comm','wb',...BSV(),...RSV()]:window.COMM_ONLY?['comm',...IVV(),...EXV(),...RSV(),...WBV(),...BSV()]:window.HAS_COMM?[...['dash','cal','appts','follow','reports'].filter(v=>PV('p_'+v)&&!(window.PERMS&&window.CTX&&window.CTX.planner===false)),'comm',...EXV(),...RSV(),...WBV(),...(window.CAN&&(window.CAN('proj')||window.CAN('tk'))?['proj']:[]),...(window.CAN&&window.CAN('logs')?['logs']:[]),...(window.CAN&&window.CAN('book')?['book']:[]),...IVV(),...(window.CAN&&window.CAN('main')?['ledger']:[]),'settings']:BASE_VIEWS;
 
 /* ---------- domain helpers ---------- */
 const PR={high:0,med:1,low:2};

@@ -47,7 +47,16 @@
   async function loadGroups() { R.groups = (await rpc('rs_my_groups')) || []; R.loaded = true; window.RSG = R.groups; try { R.rem = (await rpc('rs_reminders', { p_days: 7 })) || []; } catch (e) { R.rem = []; } navBadge(); }
   async function loadCmts() { try { R.cmts = (await rpc('rs_cmt_list', { p_group: R.g.id })) || []; } catch (e) { R.cmts = []; } }
   function navBadge() { var b = $q('#side [data-v="rs"]'); if (!b) return; var n = (window.RSG || []).reduce(function (s, g) { return s + (Number(g.unread) || 0) + (Number(g.cmt_new) || 0) + (Number(g.overdue) || 0) + (Number(g.soon) || 0); }, 0), o = b.querySelector('.rs-nb'); if (o) o.remove(); if (n > 0) { var sp = document.createElement('span'); sp.className = 'rs-nb'; sp.textContent = n > 99 ? '99+' : n; b.appendChild(sp); } }
-  setTimeout(navBadge, 1500); setInterval(async function () { try { if (document.hidden || !window.RSG) return; var r = await rpc('rs_my_groups'); window.RSG = r || []; navBadge(); } catch (e) {} }, 60000);
+  // تحميل خلفي لمجموعات المستخدم: بدونه لا يظهر زر «أبحاث الماجستير» للطالب (لأن الزر يُعرَض فقط بعد معرفة أن له مجموعة)
+  function bgRs() {
+    if (document.hidden || !window.CTX) return;
+    rpc('rs_my_groups').then(function (d) {
+      var had = !!(window.RSG && window.RSG.length); window.RSG = d || []; if (R.loaded) R.groups = window.RSG;
+      if ((had !== (window.RSG.length > 0) || !window.__rsFirst) && typeof window.render === 'function') { window.__rsFirst = 1; try { window.render(); } catch (e) {} }
+      navBadge();
+    }).catch(function () {});
+  }
+  setTimeout(bgRs, 3000); setTimeout(bgRs, 9000); setInterval(bgRs, 60000);
   async function openGroup(id) {
     R.g = R.groups.filter(function (g) { return String(g.id) === String(id); })[0]; if (!R.g) return;
     R.tab = 'chat'; R.members = (await rpc('rs_members_list', { p_group: R.g.id })) || []; R.found = []; R.files = []; R.ms = []; R.cmts = []; R.copen = null; R.cdraft = ''; R.cplace = ''; R.msg = ''; R.gedit = false;
