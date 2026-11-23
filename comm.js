@@ -119,6 +119,9 @@
       if (ST.admin.sub === 'requests') ST.admin.reqs = await rpc('comm_list_requests');
       if (ST.admin.sub === 'pending') ST.admin.pending = await rpc('comm_pending_passwords');
       if (ST.admin.sub === 'students') { try { ST.admin.students = await rpc('comm_list_students', { p_search: ST.admin.q || '', p_external: ST.admin.kind === 'ext' }); } catch (e1) { if (ST.admin.kind === 'ext') throw new Error(T('شغّل account-lockdown.sql في Supabase لعرض الطلبة الخارجيين.', 'Run account-lockdown.sql in Supabase to list external students.')); ST.admin.students = await rpc('comm_list_students', { p_search: ST.admin.q || '' }); } }
+      if (ST.admin.sub === 'report') { ST.admin.rep = (await rpc('comm_cohort_report')) || []; }
+      if (ST.admin.sub === 'audit') { ST.admin.au = (await rpc('comm_audit_list', { p_q: ST.admin.aq || '', p_limit: 200 })) || []; }
+      if (ST.admin.sub === 'people' && !ST.cohorts) { try { ST.cohorts = await rpc('comm_list_cohorts'); } catch (e) { ST.cohorts = []; } }
       if (ST.admin.sub === 'people') { ST.admin.pp = ST.admin.pq ? ((await rpc('comm_people_search', { p_q: ST.admin.pq })) || []) : []; }
       if (ST.admin.sub === 'staff') { ST.admin.staff = await rpc('comm_list_staff'); await loadAcc(); }
       if (ST.admin.sub === 'assign') { ST.admin.staff = await rpc('comm_list_staff'); ST.admin.cp = await rpc('comm_cohort_professors'); }
@@ -260,7 +263,7 @@
       '<div class="tabs"><button class="btn pri" data-act="cm-pw">' + h(T('تغيير كلمة المرور', 'Change password')) + '</button><button class="btn" data-act="push-enable">' + h(T('تفعيل إشعارات الرسائل على هذا الجهاز', 'Enable message notifications on this device')) + '</button><button class="btn" data-act="sign-out">' + h(T('تسجيل الخروج', 'Sign out')) + '</button></div></div>';
   }
 
-  var SUBPERM = { create: 'create', requests: 'requests', pending: 'reset', students: 'students', people: 'students', dups: 'students', staff: 'staff', assign: 'staff', cohorts: 'cohorts', admins: 'main' };
+  var SUBPERM = { create: 'create', requests: 'requests', pending: 'reset', students: 'students', people: 'students', dups: 'students', staff: 'staff', assign: 'staff', cohorts: 'cohorts', report: 'students', audit: 'main', admins: 'main' };
   function admSubs() { return Object.keys(SUBPERM).filter(function (k) { return CAN(SUBPERM[k]); }).map(function (k) { return [k]; }); }
   var PERM_LIST = [['create', 'إنشاء حسابات', 'Create accounts'], ['requests', 'طلبات التسجيل', 'Sign-up requests'], ['students', 'الطلبة والشعب والتكرار', 'Students, cohorts, duplicates'], ['staff', 'الموظفون والأكاديميون', 'Staff & academics'], ['cohorts', 'إدارة الشعب', 'Manage cohorts'], ['reset', 'إعادة كلمات المرور', 'Reset passwords'], ['delete', 'حذف الحسابات', 'Delete accounts'], ['ann', 'الإعلانات والقنوات', 'Announcements & channels'], ['sched', 'جدول المحاضرات', 'Schedule'], ['poll', 'الاستبيانات', 'Polls'], ['weekly', 'جدول الدوام', 'Weekly roster'], ['logs', 'السجلات', 'Logs'], ['wipe', 'مسح الرسائل', 'Wipe messages'], ['proj', 'المشاريع الخارجية', 'External projects'], ['book', 'حجز المحاضرات', 'Lecture booking'], ['tk', 'التكافل (إدارة الدورات والمبالغ)', 'Takaful management'], ['iv', 'المقابلات', 'Interviews'], ['ex', 'الاختبارات (إدارة وتصحيح)', 'Exams (manage & grade)'], ['rs', 'أبحاث الماجستير (إدارة كل المجموعات)', 'Master research (manage all groups)'], ['wb', 'الويبنار (إدارة كل الويبنارات)', 'Webinars (manage all)'], ['p_dash', 'منظّم الأعمال: لوحة التحكم', 'Planner: Dashboard'], ['p_cal', 'منظّم الأعمال: التقويم', 'Planner: Calendar'], ['p_appts', 'منظّم الأعمال: المواعيد', 'Planner: Appointments'], ['p_follow', 'منظّم الأعمال: متابعاتي اليومية', 'Planner: Daily follow-ups'], ['p_reports', 'منظّم الأعمال: التقارير والإنجازات', 'Planner: Reports']];
   function normQ(t) { return String(t || '').toLowerCase().replace(/[\u064B-\u0652\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim(); }
@@ -295,7 +298,7 @@
       '<div class="list">' + rows + '</div></div>';
   }
   function adminHtml() {
-    var A = ST.admin, subs = [['create', T('إنشاء حسابات', 'Create accounts')], ['requests', T('طلبات التسجيل', 'Sign-up requests') + ' (' + A.reqs.length + ')'], ['pending', T('لم يغيّروا كلمتهم', 'Not changed yet') + ' (' + A.pending.length + ')'], ['students', T('الطلبة والشعب', 'Students & cohorts')], ['people', T('🔎 بحث شامل', 'Search all')], ['dups', T('التكرار', 'Duplicates')], ['staff', T('تصنيف الموظفين', 'Staff categories')], ['assign', T('ربط الأكاديميين', 'Assign academics')], ['cohorts', T('الشعب', 'Cohorts')], ['admins', T('المسؤولون', 'Admins')]];
+    var A = ST.admin, subs = [['create', T('إنشاء حسابات', 'Create accounts')], ['requests', T('طلبات التسجيل', 'Sign-up requests') + ' (' + A.reqs.length + ')'], ['pending', T('لم يغيّروا كلمتهم', 'Not changed yet') + ' (' + A.pending.length + ')'], ['students', T('الطلبة والشعب', 'Students & cohorts')], ['people', T('🔎 بحث شامل', 'Search all')], ['dups', T('التكرار', 'Duplicates')], ['staff', T('تصنيف الموظفين', 'Staff categories')], ['assign', T('ربط الأكاديميين', 'Assign academics')], ['cohorts', T('الشعب', 'Cohorts')], ['report', T('📊 تقرير الشعب', 'Cohort report')], ['audit', T('🕘 سجل التعديلات', 'Audit log')], ['admins', T('المسؤولون', 'Admins')]];
     var okSub = admSubs().map(function (x) { return x[0]; }); subs = subs.filter(function (x) { return okSub.indexOf(x[0]) >= 0; });
     if (okSub.indexOf(A.sub) < 0) A.sub = okSub[0];
     var nav = '<div class="cm-tabs">' + subs.map(function (s) { return '<button class="btn sm' + (A.sub === s[0] ? ' pri' : '') + '" data-act="cm-sub" data-s="' + s[0] + '">' + h(s[1]) + '</button>'; }).join('') + '</div>';
@@ -330,14 +333,38 @@
         '<details style="margin:8px 0"><summary>' + h(T('إسناد جماعي بالأرقام', 'Bulk assign by numbers')) + '</summary><textarea id="bk-ids" class="cm-ta" placeholder="20250071&#10;20250072"></textarea><select id="bk-coh">' + cohOpt(0) + '</select> <button class="btn pri" data-act="cm-bulk">' + h(T('إسناد', 'Assign')) + '</button></details>' +
         '<div class="tabs" style="margin:8px 0"><label class="ck"><input type="checkbox" data-cm="selall"' + ((A.students || []).length && selCount() === (A.students || []).length ? ' checked' : '') + '> ' + h(T('تحديد الكل المعروض', 'Select all shown')) + '</label><button class="btn sm bad" data-act="cm-del-sel"' + (selCount() ? '' : ' disabled') + '>' + h(T('حذف المحدد', 'Delete selected')) + ' (' + selCount() + ')</button> <button class="btn sm" data-act="cm-reset-sel"' + (selCount() ? '' : ' disabled') + '>' + h(T('كلمة افتراضية للمحدد', 'Reset selected')) + '</button> <button class="btn sm bad" data-act="cm-reset-all" data-scope="students">' + h(T('إعادة كلمة المرور لكل الطلبة', 'Reset all students')) + '</button><span class="sub">' + h(T('المعروض: ', 'Shown: ') + (A.students || []).length) + '</span></div>' +
         '<div class="list">' + ((A.students || []).map(function (s) { return '<div class="row"><label style="padding-inline-end:8px"><input type="checkbox" data-cm="sel" data-id="' + h(s.id) + '"' + (A.sel[s.id] ? ' checked' : '') + '></label><div class="main"><div class="t">' + h(s.full_name) + '</div><div class="sub">' + h(s.university_id || '') + ' · ' + h(s.major || '') + '</div></div><div class="act"><select data-cm="assign" data-id="' + h(s.id) + '"><option value="">—</option>' + cohOpt(s.cohort_id) + '</select> <button class="btn sm bad" data-act="cm-reset" data-id="' + h(s.id) + '" data-confirm="1" data-confirm-text="اضغط لتأكيد إعادة التعيين">' + h(T('كلمة افتراضية', 'Reset pw')) + '</button></div></div>'; }).join('') || '<div class="empty">' + h(T('اكتب اسماً أو رقماً ثم ابحث', 'Search by name or number')) + '</div>') + '</div>';
+    } else if (A.sub === 'report') {
+      body = '<p class="sub">' + h(T('النشاط آخر 14 يوماً، والإعلانات آخر 30 يوماً. نسبة القراءة = القراءات ÷ (عدد الإعلانات × أعضاء الشعبة).', 'Activity over 14 days; announcements over 30 days. Read % = reads ÷ (announcements × members).')) + '</p>' +
+        '<div class="tabs"><button class="btn" data-act="cm-backup">💾 ' + h(T('نسخة احتياطية (Excel)', 'Backup (Excel)')) + '</button></div>' +
+        (A.note ? '<p class="pill ok">' + h(A.note) + '</p>' : '') +
+        '<div class="list">' + ((A.rep || []).map(function (r) {
+          return '<div class="row"><div class="main"><b dir="ltr">' + h(r.cohort_name) + '</b><div class="sub">' + r.members + ' ' + h(T('طالب', 'students')) + ' · ' + h(T('لم يدخلوا أبداً', 'never signed in')) + ': ' + r.never_signed + ' · ' + h(T('غائبون 14 يوماً', 'inactive 14d')) + ': ' + r.inactive_14 + ' · ' + h(T('كلمة افتراضية', 'default password')) + ': ' + r.default_pw + ' · ' + h(T('إعلانات', 'announcements')) + ': ' + r.ann_30 + (r.read_pct == null ? '' : ' · ' + h(T('قراءة', 'read')) + ' ' + r.read_pct + '%') + '</div>' +
+            (A.inactCoh === r.cohort_id ? '<div style="max-height:220px;overflow:auto;margin-top:4px">' + ((A.inact || []).map(function (m) { return '<div class="sub">• ' + h(m.full_name) + ' <small dir="ltr">(' + h(m.university_id || '') + ')</small> — ' + h(m.last_sign_in ? String(m.last_sign_in).slice(0, 10) : T('لم يدخل أبداً', 'never')) + (m.default_pw ? ' · ' + h(T('كلمة افتراضية', 'default pw')) : '') + '</div>'; }).join('') || '<div class="sub">' + h(T('لا أحد', 'None')) + '</div>') + '</div>' : '') +
+            '</div><div class="act"><button class="btn sm" data-act="cm-inact" data-id="' + r.cohort_id + '">' + h(A.inactCoh === r.cohort_id ? T('إخفاء', 'Hide') : T('غير النشطين', 'Inactive')) + '</button></div></div>';
+        }).join('') || '<div class="empty">' + h(T('لا شعب', 'No cohorts')) + '</div>') + '</div>';
+    } else if (A.sub === 'audit') {
+      body = '<div class="form"><label>' + h(T('بحث في السجل', 'Search log')) + '<input id="au-q" value="' + h(A.aq || '') + '" data-cm="auq"></label><div style="align-self:end"><button class="btn pri" data-act="cm-aufind">' + h(T('بحث', 'Search')) + '</button></div></div>' +
+        '<div class="list">' + ((A.au || []).map(function (r) {
+          return '<div class="row"><div class="main"><b>' + h(r.action) + '</b>' + (r.target_name ? ' — ' + h(r.target_name) : '') + '<div class="sub">' + h(String(r.at).replace('T', ' ').slice(0, 16)) + ' · ' + h(r.actor_name || '') + '</div>' + (r.detail ? '<div class="sub">' + h(r.detail) + '</div>' : '') + '</div></div>';
+        }).join('') || '<div class="empty">' + h(T('لا سجلات بعد', 'No entries yet')) + '</div>') + '</div>';
     } else if (A.sub === 'people') {
       var RL = { student: T('طالب', 'Student'), professor: T('عضو هيئة', 'Faculty'), staff: T('موظف', 'Staff') };
       body = '<p class="sub">' + h(T('ابحث بالاسم أو الرقم في جميع الحسابات (طلبة، موظفون، أكاديميون) ثم عدّل الاسم أو الرقم. تغيير الرقم يغيّر رقم الدخول؛ كلمة المرور لا تتغيّر.', 'Search every account by name or number, then edit name or number. Changing the number changes the login number; password is unchanged.')) + '</p>' +
+        '<details style="margin:6px 0"><summary class="btn sm">' + h(T('➕ إضافة طالب/حساب يدوياً', 'Add an account manually')) + '</summary><div class="form" style="margin-top:6px">' +
+          '<label>' + h(T('الرقم *', 'Number *')) + '<input id="pa-num" dir="ltr"></label><label>' + h(T('الاسم *', 'Name *')) + '<input id="pa-name"></label>' +
+          '<label>' + h(T('النوع', 'Type')) + '<select id="pa-role"><option value="student">' + h(T('طالب', 'Student')) + '</option><option value="professor">' + h(T('عضو هيئة', 'Faculty')) + '</option><option value="staff">' + h(T('موظف', 'Staff')) + '</option></select></label>' +
+          '<label>' + h(T('الشعبة (للطالب)', 'Cohort (students)')) + '<select id="pa-coh"><option value="">—</option>' + (ST.cohorts || []).map(function (c) { return '<option value="' + c.id + '">' + h(c.name) + '</option>'; }).join('') + '</select></label>' +
+          '<label>' + h(T('التخصص (اختياري)', 'Major (optional)')) + '<input id="pa-major"></label>' +
+          '<label style="flex-direction:row;gap:6px;align-items:center"><input type="checkbox" id="pa-same"> ' + h(T('السماح باسم مشابه', 'Allow similar name')) + '</label>' +
+          '<div style="align-self:end"><button class="btn pri" data-act="cm-ppadd">' + h(T('إنشاء', 'Create')) + '</button></div></div><p class="sub">' + h(T('كلمة المرور الافتراضية 12345678 ويُلزَم بتغييرها عند أول دخول.', 'Default password 12345678; must be changed at first login.')) + '</p></details>' +
         '<div class="form"><label>' + h(T('بحث', 'Search')) + '<input id="pp-q" value="' + h(A.pq || '') + '" data-cm="ppq"></label><div style="align-self:end"><button class="btn pri" data-act="cm-ppfind">' + h(T('بحث', 'Search')) + '</button></div></div>' +
         (A.note ? '<p class="pill ok">' + h(A.note) + '</p>' : '') +
         '<div class="list">' + ((A.pp || []).map(function (x) {
           var ed = A.ppEdit === x.id;
-          var main = ed ? '<input id="pe-n-' + x.id + '" value="' + h(x.full_name) + '" style="width:100%;max-width:320px"> <input id="pe-u-' + x.id + '" value="' + h(x.number || '') + '" dir="ltr" style="width:140px">' : '<div class="t">' + h(x.full_name) + '</div>';
+          var curC = (ST.cohorts || []).filter(function (c) { return c.name === x.cohort_name; })[0];
+          var cohSel = ed && x.role === 'student' ? '<div style="margin-top:4px"><select id="pe-c-' + x.id + '"><option value="">' + h(T('— بلا شعبة —', '— no cohort —')) + '</option>' + (ST.cohorts || []).map(function (c) { return '<option value="' + c.id + '"' + (curC && curC.id === c.id ? ' selected' : '') + '>' + h(c.name) + '</option>'; }).join('') + '</select></div>' : '';
+          var hist = ed && A.pph && A.pph.length ? '<div class="sub" style="margin-top:4px">🕘 ' + A.pph.map(function (r) { return h(String(r.at).slice(0, 10) + ': ' + (r.from_name || '—') + ' ← ' + (r.to_name || '—')); }).join(' | ') + '</div>' : '';
+          var main = ed ? '<input id="pe-n-' + x.id + '" value="' + h(x.full_name) + '" style="width:100%;max-width:320px"> <input id="pe-u-' + x.id + '" value="' + h(x.number || '') + '" dir="ltr" style="width:140px">' + cohSel + hist : '<div class="t">' + h(x.full_name) + '</div>';
           var acts = ed ? '<button class="btn sm pri" data-act="cm-ppsave" data-id="' + x.id + '">' + h(T('حفظ التغييرات', 'Save changes')) + '</button> <button class="btn sm" data-act="cm-ppedit" data-id="">' + h(T('إلغاء', 'Cancel')) + '</button>' : '<button class="btn sm" data-act="cm-ppedit" data-id="' + x.id + '">' + h(T('تعديل', 'Edit')) + '</button>';
           return '<div class="row"><div class="main">' + main + '<div class="sub">' + h(RL[x.role] || x.role) + (ed ? '' : ' · <span dir="ltr">' + h(x.number || '') + '</span>') + (x.cohort_name ? ' · ' + h(x.cohort_name) : '') + (x.major ? ' · ' + h(x.major) : '') + '</div></div><div class="act">' + acts + '</div></div>';
         }).join('') || '<div class="empty">' + h(A.pq ? T('لا نتائج', 'No results') : T('اكتب اسماً أو رقماً للبحث', 'Type a name or number')) + '</div>') + '</div>';
@@ -494,8 +521,8 @@
     'cm-reject': function (el) { guard(async function () { await rpc('comm_decide_request', { p_id: Number(el.dataset.id), p_status: 'rejected' }); await loadTab(); }); },
     'cm-sfind': function () { ST.admin.q = ($c('#cm-sq') || {}).value || ''; guard(loadTab); },
     'cm-bulk': function () { guard(async function () { var ids = ($c('#bk-ids').value || '').split(/[\s,;]+/).filter(Boolean), c = Number($c('#bk-coh').value); var n = await rpc('comm_bulk_assign_cohort', { p_university_ids: ids, p_cohort: c }); toast_(T('تم إسناد ' + n, 'Assigned ' + n)); await loadTab(); }); },
-    'cm-reset': function (el) { guard(async function () { var r = await sb().functions.invoke(((window.PLANNER_CONFIG||{}).ADMIN_FN||'admin-accounts'), { body: { action: 'reset', user_id: el.dataset.id } }); if (r.error || (r.data && r.data.error)) throw new Error((r.data && r.data.error) || await ferr(r)); toast_(T('أُعيدت كلمة المرور إلى 12345678 وسيُلزَم بتغييرها', 'Password reset to 12345678; change required')); }); },
-    'cm-addcoh': function () { guard(async function () { var n = ($c('#co-name').value || '').trim(); if (!n) return; await rpc('comm_add_cohort', { p_name: n }); await loadTab(); }); },
+    'cm-reset': function (el) { guard(async function () { var r = await sb().functions.invoke(((window.PLANNER_CONFIG||{}).ADMIN_FN||'admin-accounts'), { body: { action: 'reset', user_id: el.dataset.id } }); aud('إعادة كلمة مرور', null, 'المعرّف: ' + el.dataset.id); if (r.error || (r.data && r.data.error)) throw new Error((r.data && r.data.error) || await ferr(r)); toast_(T('أُعيدت كلمة المرور إلى 12345678 وسيُلزَم بتغييرها', 'Password reset to 12345678; change required')); }); },
+    'cm-addcoh': function () { guard(async function () { var n = ($c('#co-name').value || '').trim(); if (!n) return; await rpc('comm_add_cohort', { p_name: n }); aud('إضافة شعبة', n); await loadTab(); }); },
     'cm-preset': function () { guard(async function () {
       var codes = ['BSN20240', 'BSN20230', 'BSN20231', 'BSN20241', 'BSM20231', 'BSM20241', 'BSN20250', 'BSN20251', 'BSM20251', 'BSN20261', 'BSN20260'];
       var old = ['شعبة 2023 تمريض', 'شعبة 2023 قبالة', 'شعبة 2024 تمريض وقبالة', 'شعبة 2025 تمريض وقبالة', 'شعبة 2026 تمريض وقبالة'], removed = 0, kept = [];
@@ -505,11 +532,57 @@
       ST.admin.note = T('أُضيفت الشعب المعتمدة. حُذفت ' + removed + ' شعبة قديمة' + (kept.length ? '، وبقيت (فيها طلبة أو إعلانات): ' + kept.join('، ') : '') + '.', 'Standard cohorts added. Removed ' + removed + ' old cohort(s)' + (kept.length ? '; kept (not empty): ' + kept.join(', ') : '') + '.');
       await loadTab();
     }); },
+    'cm-ppadd': function () {
+      var num = (($c('#pa-num') || {}).value || '').trim(), name = (($c('#pa-name') || {}).value || '').trim(), role_ = ($c('#pa-role') || {}).value || 'student',
+          coh = ($c('#pa-coh') || {}).value, major = (($c('#pa-major') || {}).value || '').trim(), same = !!($c('#pa-same') || {}).checked;
+      if (!num || !name) { ST.admin.note = T('اكتب الرقم والاسم', 'Enter number and name'); return draw(); }
+      guard(async function () {
+        var row = { number: num, name: name, role: role_ }; if (major) row.major = major; if (coh && role_ === 'student') row.cohort_id = Number(coh);
+        var r = await sb().functions.invoke(((window.PLANNER_CONFIG || {}).ADMIN_FN || 'admin-accounts'), { body: { action: 'create', allow_same_name: same, rows: [row] } });
+        if (r.error || (r.data && r.data.error)) throw new Error((r.data && r.data.error) || await ferr(r));
+        var x = (r.data.results || [])[0] || {}, msg;
+        if (x.status === 'created') { msg = T('تم إنشاء الحساب: ' + name, 'Account created: ' + name); aud('إنشاء حساب', name, 'الرقم: ' + num); }
+        else if (x.status === 'dup_name') msg = T('يوجد اسم مشابه. علّم «السماح باسم مشابه» وأعد المحاولة.', 'Similar name exists. Tick "Allow similar name" and retry.');
+        else if (x.status === 'exists') msg = T('الرقم موجود مسبقاً.', 'Number already exists.');
+        else msg = T('لم يُنشأ: ', 'Not created: ') + (x.message || x.status || '');
+        ST.admin.note = msg; ST.admin.pq = name; ST.admin.ppEdit = null; await loadTab();
+      });
+    },
+    'cm-inact': function (el) {
+      var id = Number(el.dataset.id);
+      if (ST.admin.inactCoh === id) { ST.admin.inactCoh = null; return draw(); }
+      guard(async function () { ST.admin.inact = (await rpc('comm_cohort_inactive', { p_cohort: id, p_days: 14 })) || []; ST.admin.inactCoh = id; });
+    },
+    'cm-aufind': function () { ST.admin.aq = (($c('#au-q') || {}).value || '').trim(); guard(loadTab); },
+    'cm-backup': function () {
+      guard(async function () {
+        var d = await rpc('comm_backup_export'); await loadXlsx();
+        var X = window.XLSX, wb = X.utils.book_new(); wb.Workbook = { Views: [{ RTL: true }] };
+        var add = function (n, head, rows) { var ws = X.utils.aoa_to_sheet([head].concat(rows)); ws['!cols'] = head.map(function () { return { wch: 24 }; }); X.utils.book_append_sheet(wb, ws, n); };
+        add('الأشخاص', ['النوع', 'الاسم', 'الرقم', 'التخصص', 'الشعبة'], (d.people || []).map(function (p) { return [p.role, p.name, p.number, p.major || '', p.cohort || '']; }));
+        add('الشعب', ['الشعبة', 'فعّالة', 'عدد الطلبة'], (d.cohorts || []).map(function (c) { return [c.name, c.active ? 'نعم' : 'لا', c.members]; }));
+        add('الإعلانات', ['الشعبة', 'العنوان', 'النص', 'التاريخ'], (d.announcements || []).map(function (a) { return [a.cohort || '', a.title || '', a.body || '', String(a.at || '').slice(0, 16)]; }));
+        add('سجل التعديلات', ['التاريخ', 'المنفّذ', 'الإجراء', 'الشخص', 'التفاصيل'], (d.audit || []).map(function (a) { return [String(a.at || '').slice(0, 16), a.actor || '', a.action || '', a.target || '', a.detail || '']; }));
+        saveFile('backup-' + new Date().toISOString().slice(0, 10) + '.xlsx', new Blob([X.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/octet-stream' }));
+        ST.admin.note = T('تم تنزيل النسخة الاحتياطية', 'Backup downloaded');
+      });
+    },
     'cm-ppfind': function () { ST.admin.pq = (($c('#pp-q') || {}).value || '').trim(); ST.admin.ppEdit = null; ST.admin.note = ''; guard(loadTab); },
-    'cm-ppedit': function (el) { ST.admin.pq = (($c('#pp-q') || {}).value || ST.admin.pq || '').trim(); ST.admin.ppEdit = el.dataset.id || null; draw(); },
+    'cm-ppedit': function (el) {
+      ST.admin.pq = (($c('#pp-q') || {}).value || ST.admin.pq || '').trim(); ST.admin.ppEdit = el.dataset.id || null; ST.admin.pph = [];
+      if (!ST.admin.ppEdit) return draw();
+      draw(); rpc('comm_person_history', { p_user: ST.admin.ppEdit }).then(function (r) { ST.admin.pph = r || []; draw(); }, function () {});
+    },
     'cm-ppsave': function (el) {
-      var id = el.dataset.id, n = (($c('#pe-n-' + id) || {}).value || '').trim(), u = (($c('#pe-u-' + id) || {}).value || '').trim();
-      guard(async function () { await rpc('comm_person_update', { p_user: id, p_name: n, p_number: u }); ST.admin.ppEdit = null; ST.admin.note = T('تم حفظ التغييرات', 'Changes saved'); await loadTab(); });
+      var id = el.dataset.id, n = (($c('#pe-n-' + id) || {}).value || '').trim(), u = (($c('#pe-u-' + id) || {}).value || '').trim(), cs = $c('#pe-c-' + id);
+      var coh = cs ? (cs.value ? Number(cs.value) : null) : undefined;
+      var x = (ST.admin.pp || []).filter(function (y) { return y.id === id; })[0] || {};
+      var curC = (ST.cohorts || []).filter(function (c) { return c.name === x.cohort_name; })[0], curId = curC ? curC.id : null;
+      guard(async function () {
+        await rpc('comm_person_update', { p_user: id, p_name: n, p_number: u });
+        if (coh !== undefined && coh !== curId) await rpc('comm_assign_cohort', { p_user: id, p_cohort: coh });
+        ST.admin.ppEdit = null; ST.admin.pph = []; ST.admin.note = T('تم حفظ التغييرات', 'Changes saved'); await loadTab();
+      });
     },
     'cm-coedit': function (el) { ST.admin.coEdit = el.dataset.id ? Number(el.dataset.id) : null; draw(); },
     'cm-coren': function (el) {
@@ -518,7 +591,7 @@
       var c = ST.cohorts.filter(function (x) { return x.id === id; })[0] || {};
       if (rm.length && !window.confirm(T('سيتم إزالة ' + rm.length + ' طالب من الشعبة. متابعة؟', 'Remove ' + rm.length + ' student(s) from this cohort?'))) return;
       guard(async function () {
-        if (v && v !== c.name) await rpc('comm_rename_cohort', { p_id: id, p_name: v });
+        if (v && v !== c.name) { await rpc('comm_rename_cohort', { p_id: id, p_name: v }); aud('إعادة تسمية شعبة', v, c.name + ' ← ' + v); }
         for (var k = 0; k < rm.length; k++) await rpc('comm_assign_cohort', { p_user: rm[k], p_cohort: null });
         ST.admin.coEdit = null; ST.admin.note = T('تم حفظ التغييرات', 'Changes saved'); await loadTab();
       });
@@ -530,7 +603,7 @@
         if (!window.confirm(T('في الشعبة «' + c.name + '» ' + r.members + ' طالب و' + r.announcements + ' إعلان. عند الحذف يصير طلبتها بلا شعبة وتُحذف إعلاناتها نهائياً. هل تريد الحذف؟', 'Cohort "' + c.name + '" has ' + r.members + ' student(s) and ' + r.announcements + ' announcement(s). Deleting makes the students unassigned and removes the announcements. Delete?'))) return;
         r = await rpc('comm_delete_cohort', { p_id: id, p_force: true });
       }
-      ST.admin.note = T('تم حذف الشعبة', 'Cohort deleted'); await loadTab();
+      aud('حذف شعبة', c.name); ST.admin.note = T('تم حذف الشعبة', 'Cohort deleted'); await loadTab();
     }); },
     'cm-pw': function () { guard(async function () { var v = ($c('#cm-np').value || ''); if (v.length < 8) throw new Error(T('8 أحرف على الأقل', 'At least 8 characters')); var r = await sb().auth.updateUser({ password: v }); if (r.error) throw r.error; toast_(T('تم تغيير كلمة المرور', 'Password changed')); }); }
   };
@@ -549,7 +622,7 @@
   });
   document.addEventListener('input', function (e) {
     var k = e.target.dataset && e.target.dataset.cm; if (!k) return;
-    if (k === 'draft') ST.draft = e.target.value; else if (k === 'title') ST.title = e.target.value; else if (k === 'sq') ST.admin.q = e.target.value; else if (k === 'ppq') ST.admin.pq = e.target.value;
+    if (k === 'draft') ST.draft = e.target.value; else if (k === 'title') ST.title = e.target.value; else if (k === 'sq') ST.admin.q = e.target.value; else if (k === 'ppq') ST.admin.pq = e.target.value; else if (k === 'auq') ST.admin.aq = e.target.value;
     else if (k === 'q') { ST.q = e.target.value; clearTimeout(qT); qT = setTimeout(searchRecips, 350); }
   });
   document.addEventListener('change', function (e) {
@@ -664,6 +737,7 @@
     rows.forEach(function (x) { out.push([x.university_id || '', x.full_name || '', (ROLE[x.role] || [x.role, x.role])[ar() ? 0 : 1], x.category && cn[x.category] ? cn[x.category][ar() ? 0 : 1] : '']); });
     return out;
   }
+  function aud(a, name, d) { try { var p = rpc('comm_audit_add', { p_action: a, p_target: null, p_target_name: name || null, p_detail: d || null }); if (p && p.catch) p.catch(function () {}); } catch (e) {} }
   function saveFile(name, blob) { var u = URL.createObjectURL(blob), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 4000); }
   /* ---------- ميزات الطلبة: الرئيسية، الجدول، الاستبيانات ---------- */
   var KINDS = { lecture: ['محاضرة', 'Lecture', ''], clinical: ['تدريب عملي', 'Clinical', 'warn'], exam: ['امتحان', 'Exam', 'bad'], event: ['فعالية', 'Event', 'ok'], other: ['أخرى', 'Other', ''] };
@@ -983,7 +1057,7 @@
         r.data.results.forEach(function (x) { if (x.status === 'deleted') { del++; gone += Number(x.messages || 0); } else if (x.status === 'error') errs.push(x.message); else skip++; });
       }
       ST.admin.note = T('تم حذف ' + del + (gone ? ' (مع ' + gone + ' رسالة)' : '') + (skip ? ' · تخطّى ' + skip : '') + (errs.length ? ' · تعذّر ' + errs.length + ': ' + errs[0] : ''), 'Deleted ' + del + (skip ? ' · skipped ' + skip : '') + (errs.length ? ' · failed ' + errs.length + ': ' + errs[0] : ''));
-      ST.admin.sel = {}; ST.admin.dupSel = {};
+      aud('حذف حسابات', null, 'العدد: ' + del); ST.admin.sel = {}; ST.admin.dupSel = {};
       await after();
     });
   }

@@ -8,6 +8,18 @@
   function h(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function $q(s) { return document.querySelector(s); }
   function rpc(n, a) { return api().rpc(n, a); }
+  /* إعادة المحاولة عند ازدحام الشبكة/الخادم (ليس عند رفض صريح): 3 محاولات بتأخير عشوائي متصاعد */
+  async function rpcRetry(n, a) {
+    var last;
+    for (var i = 0; i < 4; i++) {
+      try { return await rpc(n, a); } catch (e) {
+        last = e; var m = String((e && e.message) || e);
+        if (!/fetch|network|timeout|timed out|503|502|504|429|failed|load/i.test(m) || /not allowed|closed|finished/i.test(m)) throw e;
+        await new Promise(function (r) { setTimeout(r, 800 * (i + 1) + Math.random() * 1500); });
+      }
+    }
+    throw last;
+  }
   function db() { return api().sb(); }
   function num(x, d) { var n = Number(String(x == null ? '' : x).replace(/[٠-٩]/g, function (c) { return c.charCodeAt(0) - 1632; }).replace('٫', '.').replace(',', '.')); return isFinite(n) && String(x).trim() !== '' ? n : d; }
   function r2(n) { return Math.round(Number(n) * 100) / 100; }
@@ -595,7 +607,7 @@
   var ACTS = {
     'xm-back': function () { back(); go(load); },
     'xm-start': function (el) { go(async function () {
-      var id = Number(el.dataset.id), exam = X.list.filter(function (e) { return e.id === id; })[0], st = await rpc('ex_start', { p_exam: id });
+      var id = Number(el.dataset.id), exam = X.list.filter(function (e) { return e.id === id; })[0], st = await rpcRetry('ex_start', { p_exam: id });
       if (st.status === 'finished') { await load(); X.view = 'res'; X.res = await rpc('ex_my_results', { p_exam: id }); return; }
       X.run = newRun(st, exam); X.view = 'run';
     }); },
@@ -710,7 +722,7 @@
     var els = document.querySelectorAll('[data-xm-cd]'); if (!els.length) return;
     var zero = false;
     els.forEach(function (el) { var l = Number(el.getAttribute('data-xm-cd')) - Date.now(); el.textContent = cdText(l); if (l <= 0) zero = true; else if (el.getAttribute('data-xm-k') === 'close' && l < 600000) el.style.color = '#b91c1c'; });
-    if (zero && !cdBusy && !X.busy && X.view !== 'run') { cdBusy = true; setTimeout(async function () { try { await load(); if (root() && X.view === 'list') redraw(); else if (api() && api().draw) api().draw(); } catch (e) {} cdBusy = false; }, 1200); }
+    if (zero && !cdBusy && !X.busy && X.view !== 'run') { cdBusy = true; setTimeout(async function () { try { await load(); if (root() && X.view === 'list') redraw(); else if (api() && api().draw) api().draw(); } catch (e) {} cdBusy = false; }, 1200 + Math.floor(Math.random() * 5000)); }
   }, 1000);
   /* شريط تنبيه للطالب أعلى صفحة التواصل: الاختبارات القادمة/المتاحة/المنتهية حديثاً */
   function noticeHtml() {

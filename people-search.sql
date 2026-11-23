@@ -20,7 +20,7 @@ end $$;
 
 create or replace function public.comm_person_update(p_user uuid, p_name text, p_number text) returns void
 language plpgsql security definer set search_path = public set row_security = off as $$
-declare v_name text := trim(coalesce(p_name, '')); v_num text := trim(coalesce(p_number, '')); v_role text;
+declare v_name text := trim(coalesce(p_name, '')); v_num text := trim(coalesce(p_number, '')); v_role text; v_mail text;
 begin
   if not public.admin_can('students') then raise exception 'admin only'; end if;
   select role::text into v_role from profiles where id = p_user;
@@ -34,6 +34,13 @@ begin
   update profiles set full_name = v_name, university_id = v_num,
          employee_number = case when v_role = 'student' then employee_number else v_num end
    where id = p_user;
+  -- مزامنة بريد الدخول الداخلي مع الرقم الجديد (كي يمكن إعادة استخدام الرقم القديم لشخص آخر)
+  v_mail := lower(v_num) || '@planner.local';
+  if exists (select 1 from auth.users where id = p_user and email like '%@planner.local')
+     and not exists (select 1 from auth.users where id <> p_user and lower(email) = v_mail) then
+    update auth.users set email = v_mail where id = p_user;
+    update auth.identities set identity_data = jsonb_set(identity_data, '{email}', to_jsonb(v_mail)), provider_id = v_mail where user_id = p_user and provider = 'email';
+  end if;
 end $$;
 
 revoke execute on function public.comm_people_search(text, integer) from public, anon;

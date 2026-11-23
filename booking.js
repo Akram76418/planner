@@ -126,14 +126,15 @@
       (t ? '<div style="margin-top:6px"><b>#' + t.no + '</b> ' + h(t.title) + '</div>' : '') +
       memHtml(g) +
       (st.length ? '<div class="sub">' + h(st.join('، ')) + '</div>' : '<div class="sub">' + h(T('لا أسماء بعد', 'No names yet')) + '</div>') +
-      '<div class="sub">📅 ' + h(fmtDate(g.lecture_date)) + (g.link ? ' · <a href="' + h(g.link) + '" target="_blank" rel="noopener noreferrer">🔗 ' + h(T('رابط المحاضرة', 'Lecture link')) + '</a>' : '') + '</div></div>';
+      '<div class="sub">📅 ' + h(fmtDate(g.lecture_date)) + (g.lecture_time ? ' · 🕒 ' + h(g.lecture_time) : '') + (g.link ? ' · <a href="' + h(g.link) + '" target="_blank" rel="noopener noreferrer">🔗 ' + h(T('رابط المحاضرة', 'Lecture link')) + '</a>' : '') + '</div></div>';
   }
   function groupForm(g) {
     var free = B.topics.filter(function (t) { var o = groupOwner(t.id); return !o || o.group_no === g.group_no; });
     return '<div class="card" style="margin:8px 0;border:2px solid var(--accent,#0b8a97)"><b>' + h(T('مجموعة ', 'Group ')) + g.group_no + '</b><div class="form">' +
       '<label style="grid-column:1/-1">' + h(T('الموضوع', 'Topic')) + '<select id="bg-topic"><option value="">' + h(T('— بلا موضوع —', '— none —')) + '</option>' + free.map(function (t) { return '<option value="' + t.id + '"' + (t.id === g.topic_id ? ' selected' : '') + '>#' + t.no + ' ' + h(t.title) + '</option>'; }).join('') + '</select></label>' +
       '<label style="grid-column:1/-1">' + h(T('أسماء الطلبة (اسم في كل سطر، حتى 15)', 'Students (one per line, max 15)')) + '<textarea id="bg-names" rows="5">' + h((g.students || []).join('\n')) + '</textarea></label>' +
-      '<label>' + h(T('تاريخ المحاضرة', 'Lecture date')) + '<input id="bg-date" type="date" value="' + h(g.lecture_date || '') + '"></label>' +
+      '<label>' + h(T('تاريخ المحاضرة', 'Lecture date')) + '<input id="bg-date" type="date" value="' + h((g.lecture_date || '') + (g.lecture_time ? ' ' + g.lecture_time : '')) + '"></label>' +
+      '<label>' + h(T('وقت المحاضرة (اختياري)', 'Lecture time (optional)')) + '<input id="bg-time" type="time" value="' + h(g.lecture_time || '') + '"></label>' +
       '<label>' + h(T('رابط المحاضرة', 'Lecture link')) + '<input id="bg-link" dir="ltr" placeholder="https://…" maxlength="500" value="' + h(g.link || '') + '"></label></div>' +
       '<div class="tabs" style="margin-top:8px"><button class="btn pri" data-act="bk-save" data-n="' + g.group_no + '">' + h(T('حفظ', 'Save')) + '</button><button class="btn" data-act="bk-cancel">' + h(T('إلغاء', 'Cancel')) + '</button></div></div>';
   }
@@ -252,7 +253,7 @@
     var rows = [['رقم المجموعة', 'رقم الموضوع', 'عنوان الموضوع', 'أهداف ومحتويات المحاضرة', 'اسم الطالب', 'رقم الطالب الجامعي', 'رابط المحاضرة', 'تاريخ المحاضرة']];
     B.groups.forEach(function (g) {
       var t = topicOf(g.topic_id), who = (g.students || []).map(function (n) { return [n, '']; }).concat(membersOf(g.id).map(function (m) { return [m.full_name || '', m.university_id || '']; })); if (!who.length) who = [['', '']];
-      who.forEach(function (n) { rows.push([g.group_no, t ? t.no : '', t ? t.title : 'لم تحجز موضوعاً بعد', t ? (t.descr || '') : '', n[0], n[1], g.link || '', g.lecture_date || '']); });
+      who.forEach(function (n) { rows.push([g.group_no, t ? t.no : '', t ? t.title : 'لم تحجز موضوعاً بعد', t ? (t.descr || '') : '', n[0], n[1], g.link || '', (g.lecture_date || '') + (g.lecture_time ? ' ' + g.lecture_time : '')]); });
     });
     return rows;
   }
@@ -261,7 +262,7 @@
     var sum = [['رقم المجموعة', 'رقم الموضوع', 'عنوان الموضوع', 'أهداف ومحتويات المحاضرة', 'عدد الأعضاء', 'الحد الأقصى', 'الأعضاء', 'تاريخ المحاضرة', 'رابط المحاضرة']];
     B.groups.forEach(function (g) {
       var t = topicOf(g.topic_id), mem = membersOf(g.id).map(function (m) { return (m.full_name || '') + (m.university_id ? ' (' + m.university_id + ')' : ''); }).concat(g.students || []);
-      sum.push([g.group_no, t ? t.no : '', t ? t.title : 'لم تحجز موضوعاً بعد', t ? (t.descr || '') : '', mem.length, g.cap || cap, mem.join('، '), g.lecture_date || '', g.link || '']);
+      sum.push([g.group_no, t ? t.no : '', t ? t.title : 'لم تحجز موضوعاً بعد', t ? (t.descr || '') : '', mem.length, g.cap || cap, mem.join('، '), (g.lecture_date || '') + (g.lecture_time ? ' ' + g.lecture_time : ''), g.link || '']);
     });
     var st = [['اسم الطالب', 'رقم الطالب الجامعي', 'رقم المجموعة', 'رقم الموضوع', 'عنوان الموضوع', 'تاريخ الانضمام']];
     B.members.forEach(function (m) { var g = findG(m.group_no), t = g ? topicOf(g.topic_id) : null; st.push([m.full_name || '', m.university_id || '', m.group_no, t ? t.no : '', t ? t.title : '', m.joined_at ? String(m.joined_at).slice(0, 16).replace('T', ' ') : '']); });
@@ -322,7 +323,7 @@
     'bk-cancel': function () { B.edit = null; draw(); },
     'bk-save': function (el) {
       var n = Number(el.dataset.n), g = findG(n); if (!g) return;
-      var topic = val('bg-topic') ? Number(val('bg-topic')) : null, link = val('bg-link').trim(), date = val('bg-date') || null;
+      var topic = val('bg-topic') ? Number(val('bg-topic')) : null, link = val('bg-link').trim(), date = val('bg-date') || null, ltime = val('bg-time') || null;
       var names = val('bg-names').split(/\r?\n/).map(function (s) { return s.trim().slice(0, 80); }).filter(Boolean);
       if (names.length > 15) { toast_(T('الحد الأقصى 15 طالباً', 'Max 15 students')); return; }
       var seen = {};
@@ -334,6 +335,7 @@
       if (link && !okUrl(link)) { toast_(T('الرابط غير صالح: يبدأ بـ http:// أو https:// بلا مسافات', 'Invalid link')); return; }
       if (link && !topic) { toast_(T('اختر موضوعاً أولاً ثم أضف الرابط', 'Pick a topic before adding a link')); return; }
       var row = { topic_id: topic, students: names, link: link || null, lecture_date: date, booked_at: topic ? (g.topic_id === topic && g.booked_at ? g.booked_at : new Date().toISOString()) : null };
+      if (ltime || g.lecture_time) row.lecture_time = ltime;
       guard(async function () { var r = await sb().from('book_groups').update(row).eq('id', g.id); if (r.error) throw r.error; B.edit = null; say(T('تم الحفظ', 'Saved')); await reloadQuiet(); });
     },
     'bk-tadd': function () {

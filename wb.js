@@ -43,6 +43,17 @@
   window.wbView = function () { return '<div id="wb-root"></div>'; };
   window.wbMount = function () { redraw(); if (!W.loaded && !W.busy) go(loadEvents); startPoll(); };
   function root() { return $q('#wb-root'); }
+  function ytId(u) {
+    try { var x = new URL(u), hn = x.hostname.replace(/^www\.|^m\./, ''), id = '';
+      if (hn === 'youtu.be') id = x.pathname.slice(1).split('/')[0];
+      else if (hn === 'youtube.com' || hn === 'youtube-nocookie.com') { id = x.searchParams.get('v') || ''; if (!id) { var m = x.pathname.match(/^\/(?:live|embed|shorts)\/([\w-]{6,20})/); id = m ? m[1] : ''; } }
+      return /^[\w-]{6,20}$/.test(id) ? id : ''; } catch (e) { return ''; }
+  }
+  function embedHtml() {
+    if (!W.embed) return '';
+    return '<div class="card" style="margin:8px 0"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>🔴 ' + h(W.embed.t || T('البث المباشر', 'Live stream')) + '</b><span><a class="btn sm" href="' + h(W.embed.url) + '" target="_blank" rel="noopener noreferrer">' + h(T('فتح في يوتيوب', 'Open in YouTube')) + '</a> <button class="btn sm" data-act="wb-embedx">' + h(T('إغلاق', 'Close')) + '</button></span></div>' +
+      '<div style="position:relative;padding-top:56.25%;margin-top:8px"><iframe src="https://www.youtube-nocookie.com/embed/' + h(W.embed.v) + '?autoplay=1&rel=0" style="position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:10px" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" title="stream"></iframe></div></div>';
+  }
   function redraw() {
     var r = root(); if (!r) return;
     var a = $q('#wb-q-t'), b = $q('#wb-fbc'), c = $q('#wb-po'), d = $q('#wb-pq');
@@ -83,7 +94,7 @@
 
   /* ───────── العرض ───────── */
   function html() {
-    var msg = (W.err ? '<div class="pill bad" style="display:block;margin:8px 0">' + h(W.err) + '</div>' : '') + (W.msg ? '<div class="pill ok" style="display:block;margin:8px 0">' + W.msg + '</div>' : '');
+    var msg = (W.err ? '<div class="pill bad" style="display:block;margin:8px 0">' + h(W.err) + '</div>' : '') + (W.msg ? '<div class="pill ok" style="display:block;margin:8px 0">' + W.msg + '</div>' : '') + embedHtml();
     if (W.form) return msg + formHtml();
     if (W.id && cur()) return msg + eventHtml(cur());
     return msg + listHtml();
@@ -403,7 +414,8 @@ S === 'ready' ? '<div class="pill ok" style="display:block;margin:8px 0;line-hei
   var ACTS = {
     'wb-refresh': function () { go(async function () { await loadEvents(); if (W.id) await loadTab(); }); },
     'wb-open': function (el) { W.id = Number(el.dataset.id); W.tab = 'info'; W.msg = ''; go(async function () { await loadCohorts(); }); },
-    'wb-back': function () { W.id = null; W.msg = ''; go(loadEvents); },
+    'wb-embedx': function () { W.embed = null; redraw(); },
+    'wb-back': function () { W.embed = null; W.id = null; W.msg = ''; go(loadEvents); },
     'wb-tab': function (el) { W.tab = el.dataset.t; W.msg = ''; W.play = null; go(loadTab); },
     'wb-new': function () { go(async function () { await loadCohorts(); W.form = newForm(null); }); },
     'wb-edit': function () { W.form = newForm(cur()); redraw(); },
@@ -424,7 +436,7 @@ S === 'ready' ? '<div class="pill ok" style="display:block;margin:8px 0;line-hei
     'wb-join': function (el) {
       var w = null; try { w = window.open('', '_blank'); } catch (e) {}
       go(async function () {
-        try { var ev0 = W.ev.filter(function (x) { return x.id === Number(el.dataset.id); })[0], mg = isMgr(ev0); var link = await rpc('wb_join', { p_id: Number(el.dataset.id) }); await loadEvents(); if (w && !w.closed) { w.opener = null; w.location.href = link; W.msg = h(mg ? T('تم فتح الرابط. إن لم تُفتح الصفحة: ', 'Opened. If it did not open: ') : T('✅ سُجّل حضورك. إن لم تُفتح الصفحة: ', '✅ Attendance recorded. If it did not open: ')) + '<a href="' + h(link) + '" target="_blank" rel="noopener">' + h(T('افتح رابط البث', 'open the join link')) + '</a>'; } else W.msg = h(T('✅ سُجّل حضورك. ', '✅ Attendance recorded. ')) + '<a class="btn pri" href="' + h(link) + '" target="_blank" rel="noopener">🎥 ' + h(T('افتح رابط البث', 'Open join link')) + '</a>'; }
+        try { var ev0 = W.ev.filter(function (x) { return x.id === Number(el.dataset.id); })[0], mg = isMgr(ev0); var link = await rpc('wb_join', { p_id: Number(el.dataset.id) }); await loadEvents(); var yv = ytId(link); if (yv) { try { if (w) w.close(); } catch (e2) {} W.embed = { v: yv, t: ev0 ? ev0.title : '', url: link }; W.msg = h(mg ? T('البث معروض أدناه.', 'Stream shown below.') : T('✅ سُجّل حضورك. البث معروض أدناه.', '✅ Attendance recorded. Stream shown below.')); return; } if (w && !w.closed) { w.opener = null; w.location.href = link; W.msg = h(mg ? T('تم فتح الرابط. إن لم تُفتح الصفحة: ', 'Opened. If it did not open: ') : T('✅ سُجّل حضورك. إن لم تُفتح الصفحة: ', '✅ Attendance recorded. If it did not open: ')) + '<a href="' + h(link) + '" target="_blank" rel="noopener">' + h(T('افتح رابط البث', 'open the join link')) + '</a>'; } else W.msg = h(T('✅ سُجّل حضورك. ', '✅ Attendance recorded. ')) + '<a class="btn pri" href="' + h(link) + '" target="_blank" rel="noopener">🎥 ' + h(T('افتح رابط البث', 'Open join link')) + '</a>'; }
         catch (e) { try { w && w.close(); } catch (x) {} throw e; }
       });
     },
