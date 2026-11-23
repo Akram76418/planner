@@ -121,7 +121,10 @@
       if (ST.admin.sub === 'students') { try { ST.admin.students = await rpc('comm_list_students', { p_search: ST.admin.q || '', p_external: ST.admin.kind === 'ext' }); } catch (e1) { if (ST.admin.kind === 'ext') throw new Error(T('شغّل account-lockdown.sql في Supabase لعرض الطلبة الخارجيين.', 'Run account-lockdown.sql in Supabase to list external students.')); ST.admin.students = await rpc('comm_list_students', { p_search: ST.admin.q || '' }); } }
       if (ST.admin.sub === 'staff') { ST.admin.staff = await rpc('comm_list_staff'); await loadAcc(); }
       if (ST.admin.sub === 'assign') { ST.admin.staff = await rpc('comm_list_staff'); ST.admin.cp = await rpc('comm_cohort_professors'); }
-      if (ST.admin.sub === 'cohorts') ST.cohorts = await rpc('comm_list_cohorts');
+      if (ST.admin.sub === 'cohorts') {
+        ST.cohorts = await rpc('comm_list_cohorts'); ST.admin.cm = {};
+        await Promise.all(ST.cohorts.map(async function (c) { try { ST.admin.cm[c.id] = (await rpc('comm_list_students', { p_cohort: c.id, p_search: '' })) || []; } catch (e) { ST.admin.cm[c.id] = []; } }));
+      }
       if (ST.admin.sub === 'admins') { ST.admin.admins = await rpc('comm_list_admins'); ST.admin.staff = await rpc('comm_list_staff'); }
     }
   }
@@ -352,7 +355,13 @@
     } else {
       body = '<div class="form"><label>' + h(T('اسم شعبة جديدة', 'New cohort')) + '<input id="co-name" dir="ltr"></label><div style="align-self:end"><button class="btn pri" data-act="cm-addcoh">' + h(T('إضافة', 'Add')) + '</button></div></div>' +
         '<button class="btn sm" data-act="cm-preset" style="margin:6px 0">' + h(T('إنشاء الشعب المعتمدة (11) وحذف الشعب الخمس القديمة الفارغة', 'Create the 11 standard cohorts and remove the old empty five')) + '</button>' +
-        '<div class="list">' + ST.cohorts.map(function (c) { return '<div class="row"><div class="main"><input id="coe-' + c.id + '" value="' + h(c.name) + '" dir="ltr" style="width:100%;max-width:260px"><div class="sub">' + c.members + ' ' + h(T('طالب', 'students')) + '</div></div><div class="act"><button class="btn sm" data-act="cm-coren" data-id="' + c.id + '">' + h(T('حفظ الاسم', 'Save name')) + '</button> <button class="btn sm bad" data-act="cm-codel" data-id="' + c.id + '">' + h(T('حذف', 'Delete')) + '</button></div></div>'; }).join('') + '</div>';
+        '<div class="list">' + ST.cohorts.map(function (c) {
+          var ed = ST.admin.coEdit === c.id, ms = (ST.admin.cm || {})[c.id] || [];
+          var names = ms.length ? ms.map(function (m) { return ed ? '<label style="display:flex;gap:6px;align-items:center;margin:2px 0"><input type="checkbox" class="co-rm-' + c.id + '" value="' + m.id + '"> <span>' + h(m.full_name) + (m.university_id ? ' <small dir="ltr">(' + h(m.university_id) + ')</small>' : '') + '</span></label>' : '<div class="sub" style="margin:1px 0">• ' + h(m.full_name) + (m.university_id ? ' <small dir="ltr">(' + h(m.university_id) + ')</small>' : '') + '</div>'; }).join('') : '<div class="sub">' + h(T('لا يوجد طلبة', 'No students')) + '</div>';
+          var head = ed ? '<input id="coe-' + c.id + '" value="' + h(c.name) + '" dir="ltr" style="width:100%;max-width:260px">' : '<b dir="ltr">' + h(c.name) + '</b>';
+          var acts = ed ? '<button class="btn sm pri" data-act="cm-coren" data-id="' + c.id + '">' + h(T('حفظ التغييرات', 'Save changes')) + '</button> <button class="btn sm" data-act="cm-coedit" data-id="">' + h(T('إلغاء', 'Cancel')) + '</button>' : '<button class="btn sm" data-act="cm-coedit" data-id="' + c.id + '">' + h(T('تعديل', 'Edit')) + '</button> <button class="btn sm bad" data-act="cm-codel" data-id="' + c.id + '">' + h(T('حذف', 'Delete')) + '</button>';
+          return '<div class="row"><div class="main">' + head + '<div class="sub">' + c.members + ' ' + h(T('طالب', 'students')) + (ed && ms.length ? ' — ' + h(T('علّم من تريد إزالته من الشعبة', 'tick students to remove from the cohort')) : '') + '</div><div style="max-height:220px;overflow:auto;margin-top:4px">' + names + '</div></div><div class="act">' + acts + '</div></div>';
+        }).join('') + '</div>';
     }
     return '<div class="card">' + nav + (A.note ? '<p class="pill ok">' + h(A.note) + '</p>' : '') + body + '</div>';
   }
@@ -374,7 +383,7 @@
     'cm-unfile': function () { ST.file = null; draw(); },
     'cm-send': function () { send(); },
     'cm-kind': function (el) { ST.admin.kind = el.dataset.k; ST.admin.sel = {}; draw(); guard(loadTab); },
-    'cm-sub': function (el) { ST.admin.sub = el.dataset.s; draw(); guard(loadTab); },
+    'cm-sub': function (el) { ST.admin.sub = el.dataset.s; ST.admin.coEdit = null; draw(); guard(loadTab); },
     'cm-create': function () { createAccounts(); },
     'cm-pfx-csv': function () { var l = ST.admin.pfxList || []; if (!l.length) return; var q = function (v) { v = String(v == null ? '' : v); return '"' + v.replace(/"/g, '""') + '"'; }; saveFile('external-logins.csv', new Blob(['\ufeff' + ['رقم الدخول,الاسم,الرقم الأصلي,كلمة المرور الافتراضية'].concat(l.map(function (x) { return [x.login, x.name, x.orig, '12345678'].map(q).join(','); })).join('\r\n')], { type: 'text/csv;charset=utf-8' })); },
     'cm-mkstaff': function (el) { var id = el.dataset.id; guard(async function () { await rpc('comm_make_staff', { p_user: id, p_role: 'staff', p_category: null }); ST.admin.staff = await rpc('comm_list_staff'); ST.admin.found = await rpc('comm_find_account', { p_q: ST.admin.fq }); ST.admin.note = T('تم تحويل «' + el.dataset.n + '» إلى موظف. حدّد تصنيفه من القائمة أدناه.', 'Converted to staff.'); }); },
@@ -484,7 +493,18 @@
       ST.admin.note = T('أُضيفت الشعب المعتمدة. حُذفت ' + removed + ' شعبة قديمة' + (kept.length ? '، وبقيت (فيها طلبة أو إعلانات): ' + kept.join('، ') : '') + '.', 'Standard cohorts added. Removed ' + removed + ' old cohort(s)' + (kept.length ? '; kept (not empty): ' + kept.join(', ') : '') + '.');
       await loadTab();
     }); },
-    'cm-coren': function (el) { guard(async function () { var v = ($c('#coe-' + el.dataset.id) || {}).value || ''; await rpc('comm_rename_cohort', { p_id: Number(el.dataset.id), p_name: v }); ST.admin.note = T('تم تعديل الاسم', 'Renamed'); await loadTab(); }); },
+    'cm-coedit': function (el) { ST.admin.coEdit = el.dataset.id ? Number(el.dataset.id) : null; draw(); },
+    'cm-coren': function (el) {
+      var id = Number(el.dataset.id), v = (($c('#coe-' + id) || {}).value || '').trim();
+      var rm = Array.prototype.map.call(document.querySelectorAll('.co-rm-' + id + ':checked'), function (x) { return x.value; });
+      var c = ST.cohorts.filter(function (x) { return x.id === id; })[0] || {};
+      if (rm.length && !window.confirm(T('سيتم إزالة ' + rm.length + ' طالب من الشعبة. متابعة؟', 'Remove ' + rm.length + ' student(s) from this cohort?'))) return;
+      guard(async function () {
+        if (v && v !== c.name) await rpc('comm_rename_cohort', { p_id: id, p_name: v });
+        for (var k = 0; k < rm.length; k++) await rpc('comm_assign_cohort', { p_user: rm[k], p_cohort: null });
+        ST.admin.coEdit = null; ST.admin.note = T('تم حفظ التغييرات', 'Changes saved'); await loadTab();
+      });
+    },
     'cm-codel': function (el) { guard(async function () {
       var id = Number(el.dataset.id), c = ST.cohorts.filter(function (x) { return x.id === id; })[0] || {};
       var r = await rpc('comm_delete_cohort', { p_id: id, p_force: false });
