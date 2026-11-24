@@ -20,6 +20,17 @@
   function p2(n) { return String(n).padStart(2, '0'); }
   function toLocalInput(d) { d = new Date(d); return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + 'T' + p2(d.getHours()) + ':' + p2(d.getMinutes()); }
   function stamp() { var d = new Date(); return d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + '-' + p2(d.getHours()) + p2(d.getMinutes()); }
+  /* مدة بصيغة مكتوبة: «ساعة و20 دقيقة» */
+  function fmtMin(m) {
+    m = Math.max(0, Math.round(Number(m) || 0)); var hh = Math.floor(m / 60), mm = m % 60;
+    if (ar()) { if (!hh) return mm + ' دقيقة'; var hs = hh === 1 ? 'ساعة' : hh === 2 ? 'ساعتان' : hh + ' ساعات'; return mm ? hs + ' و' + mm + ' دقيقة' : hs; }
+    return hh ? hh + ' h' + (mm ? ' ' + mm + ' min' : '') : mm + ' min';
+  }
+  function loadXlsx() {
+    if (window.XLSX) return Promise.resolve();
+    var srcs = ['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'];
+    return srcs.reduce(function (prev, src) { return prev.catch(function () { return new Promise(function (res, rej) { var sc = document.createElement('script'); sc.src = src; sc.onload = function () { window.XLSX ? res() : rej(); }; sc.onerror = rej; document.head.appendChild(sc); }); }); }, Promise.reject());
+  }
   function saveBlob(name, blob) { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500); }
   function csvQ(v) { v = String(v == null ? '' : v); if (/^[=+\-@]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; }
   function csvBlob(rows) { return new Blob(['﻿' + rows.map(function (r) { return r.map(csvQ).join(','); }).join('\r\n')], { type: 'text/csv;charset=utf-8' }); }
@@ -73,7 +84,7 @@
     var e = cur(); if (!e) return;
     if (W.tab === 'qa') W.q = (await rpc('wb_q_list', { p_id: e.id })) || [];
     else if (W.tab === 'polls') W.polls = (await rpc('wb_poll_list', { p_id: e.id })) || [];
-    else if (W.tab === 'att') W.att = (await rpc('wb_attendees', { p_id: e.id })) || [];
+    else if (W.tab === 'att') { W.att = (await rpc('wb_attendees', { p_id: e.id })) || []; try { W.minReq = await rpc('wb_min_get', { p_id: e.id }); } catch (e4) { W.minReq = null; } }
     else if (W.tab === 'fb' && isMgr(e)) W.fb = (await rpc('wb_fb_list', { p_id: e.id })) || [];
     else if (W.tab === 'rec') W.recs = (await rpc('wb_rec_list', { p_event: e.id })) || [];
   }
@@ -210,10 +221,12 @@
 
   /* ── الحضور ── */
   function attTab(e) {
-    var att = W.att.filter(function (a) { return a.joined_at; }).length;
-    return '<div class="wb-card"><div class="wb-h"><b>👥 ' + W.att.length + ' ' + h(T('في القائمة', 'listed')) + ' · ✔ ' + att + ' ' + h(T('حاضر', 'attended')) + '</b><span style="flex:1"></span><button class="btn sm" data-act="wb-acsv">⬇ ' + h(T('تصدير الحضور (Excel)', 'Export (Excel)')) + '</button></div>' +
-      '<div class="sub">' + h(T('يُسجَّل الحضور عند ضغط «انضمام» من التطبيق. ومن دخل Zoom مباشرة تؤكد حضوره يدوياً بالزر.', 'Attendance is recorded when people press “Join” in the app. Confirm others manually.')) + '</div>' +
-      W.att.map(function (a) { return '<div class="wb-q wb-h" style="justify-content:space-between"><span>' + (a.joined_at ? '✔ ' : '○ ') + h(a.full_name || '') + ' <span class="sub">' + h(a.university_id || '') + ' · ' + h(a.acct_role || '') + (a.joined_at ? ' · ' + h(fshort(a.joined_at)) : '') + '</span></span><button class="btn sm' + (a.joined_at ? '' : ' pri') + '" data-act="wb-att" data-u="' + h(a.user_id) + '" data-on="' + (a.joined_at ? 0 : 1) + '">' + h(a.joined_at ? T('إلغاء الحضور', 'Unmark') : T('تأكيد الحضور', 'Mark attended')) + '</button></div>'; }).join('') + '</div>';
+    var att = W.att.filter(function (a) { return a.joined_at; }).length, mr = W.minReq;
+    var ok = function (a) { return a.joined_at && (!mr || (a.minutes || 0) >= mr); };
+    return '<div class="wb-card"><div class="wb-h"><b>👥 ' + W.att.length + ' ' + h(T('في القائمة', 'listed')) + ' · ✔ ' + att + ' ' + h(T('حاضر', 'attended')) + ' · 🎓 ' + W.att.filter(ok).length + '</b><span style="flex:1"></span><button class="btn sm" data-act="wb-acsv">⬇ ' + h(T('تصدير Excel منسّق', 'Export formatted Excel')) + '</button></div>' +
+      '<div class="sub">' + h(T('تُحتسب مدة الحضور تلقائياً بينما صفحة الويبنار (أو البث المضمّن) مفتوحة عند الطالب بعد ضغط «انضمام». ومن دخل Zoom مباشرة أو أُغلقت صفحته فعدّل مدته يدوياً.', 'Duration is measured automatically while the webinar page is open after pressing “Join”. For others, edit the duration manually.')) + '</div>' +
+      '<div class="form" style="align-items:end;margin:8px 0"><label>' + h(T('الحد الأدنى لإصدار الشهادة (دقيقة، فارغ = بلا شرط)', 'Minimum minutes for certificate (blank = none)')) + '<input id="wb-minreq" inputmode="numeric" value="' + h(mr || '') + '" style="max-width:160px"></label><button class="btn sm pri" data-act="wb-minsave">' + h(T('حفظ الشرط', 'Save rule')) + '</button></div>' +
+      W.att.map(function (a) { return '<div class="wb-q wb-h" style="justify-content:space-between"><span>' + (a.joined_at ? '✔ ' : '○ ') + h(a.full_name || '') + ' <span class="sub">' + h(a.university_id || '') + ' · ' + h(a.acct_role || '') + (a.joined_at ? ' · ' + h(fshort(a.joined_at)) + ' · ⏱ ' + h(fmtMin(a.minutes || 0)) + (mr ? (ok(a) ? ' · 🎓' : ' · ✖') : '') : '') + '</span></span><span>' + (a.joined_at ? '<button class="btn sm" data-act="wb-amin" data-u="' + h(a.user_id) + '" data-m="' + (a.minutes || 0) + '">✎ ' + h(T('المدة', 'Duration')) + '</button> ' : '') + '<button class="btn sm' + (a.joined_at ? '' : ' pri') + '" data-act="wb-att" data-u="' + h(a.user_id) + '" data-on="' + (a.joined_at ? 0 : 1) + '">' + h(a.joined_at ? T('إلغاء الحضور', 'Unmark') : T('تأكيد الحضور', 'Mark attended')) + '</button></span></div>'; }).join('') + '</div>';
   }
 
   /* ── نموذج الإنشاء/التعديل ── */
@@ -231,6 +244,10 @@
       ((W.cohorts || []).length ? '<div class="sub" style="margin-top:4px">' + h(T('شعب محددة (تشمل الخارجية):', 'Specific cohorts (incl. external):')) + '</div>' + W.cohorts.map(function (c) { return '<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" style="width:auto" data-wbc="' + c.id + '"' + (f.cohorts.indexOf(c.id) > -1 ? ' checked' : '') + '> ' + h(c.name) + (c.is_external ? ' 🌐' : '') + '</label>'; }).join('') : '') + '</div>' +
       '<label>' + h(T('رابط المرفقات (اختياري)', 'Materials link (optional)')) + '<input dir="ltr" data-wbf="materials" value="' + h(f.materials) + '" placeholder="https://"></label>' +
       '<label>' + h(T('رابط تسجيل الجلسة بعد انتهائها (اختياري)', 'Recording link after the session (optional)')) + '<input dir="ltr" data-wbf="record" value="' + h(f.record) + '" placeholder="https://"></label>' +
+      '<div><b style="font-size:13px">' + h(T('الشهادة (اختياري)', 'Certificate (optional)')) + '</b></div>' +
+      '<label>' + h(T('اسم الجهة المنظِّمة (فارغ = صيغة محايدة بلا جهة)', 'Organizer name (blank = neutral wording)')) + '<input data-wbf="certOrg" value="' + h(f.certOrg || '') + '" maxlength="200"></label>' +
+      ck('certLogo', T('إظهار شعار التطبيق على الشهادة', 'Show the logo on the certificate')) +
+      '<label>' + h(T('اسم الموقِّع (فارغ = بلا توقيع)', 'Signer name (blank = no signature)')) + '<input data-wbf="certSigner" value="' + h(f.certSigner || '') + '" maxlength="200"></label>' +
       ck('allowRec', T('السماح للمشاركين بإرسال تسجيلات صوت/صورة إليّ', 'Let participants send me audio/video recordings')) +
       '<div class="wb-row"><button class="btn pri" data-act="wb-save">' + h(T('حفظ', 'Save')) + '</button><button class="btn" data-act="wb-fcancel">' + h(T('إلغاء', 'Cancel')) + '</button></div></div></div>';
   }
@@ -407,7 +424,12 @@ S === 'ready' ? '<div class="pill ok" style="display:block;margin:8px 0;line-hei
   /* ───────── شهادة الحضور ───────── */
   function certHtml(c) {
     var d = new Date(c.starts_at).toLocaleDateString(ar() ? 'ar' : 'en', { year: 'numeric', month: 'long', day: 'numeric' });
-    return '<div class="wb-cr" dir="' + (ar() ? 'rtl' : 'ltr') + '"><img src="logo.png" alt="" style="height:70px"><h1>' + h(T('شهادة حضور', 'Certificate of Attendance')) + '</h1><p>' + h(T('تشهد الكلية بأن', 'This is to certify that')) + '</p><div class="nm">' + h(c.full_name) + '</div><p>' + h(T('قد حضر/ت الويبنار', 'attended the webinar')) + '</p><p><b style="font-size:22px">' + h(c.title) + '</b></p>' + (c.speaker ? '<p>' + h(T('المتحدث: ', 'Speaker: ')) + h(c.speaker) + '</p>' : '') + '<p>' + h(d) + ' · ' + c.duration_min + ' ' + h(T('دقيقة', 'min')) + '</p><div class="sg"><div>' + h(T('منظّم الويبنار', 'Organizer')) + '</div><div>' + h(T('إدارة الكلية', 'College administration')) + '</div></div></div>';
+    var mins = c.minutes != null ? '<p><b>' + h(T('مدة حضوره الفعلية: ', 'Attendance time: ')) + h(fmtMin(c.minutes)) + '</b> ' + h(T('من أصل ', 'out of ')) + h(fmtMin(c.duration_min)) + '</p>' : '<p>' + h(T('مدة الويبينار: ', 'Webinar length: ')) + h(fmtMin(c.duration_min)) + '</p>';
+    var head = c.org ? '<p>' + h(T('تتشرف ', 'We, ')) + '<b>' + h(c.org) + '</b>' + h(T(' بمنح', ' hereby award')) + '</p>' : '<p>' + h(T('نفيد بأن', 'This is to certify that')) + '</p>';
+    var mid = c.org ? '<p>' + h(T('هذه الشهادة تقديراً لحضوره/ا فعاليات الويبينار', 'this certificate in recognition of attending the webinar')) + '</p>' : '<p>' + h(T('قد حضر/ت الويبينار', 'attended the webinar')) + '</p>';
+    return '<div class="wb-cr" dir="' + (ar() ? 'rtl' : 'ltr') + '">' + (c.logo ? '<img src="logo.png" alt="" style="height:70px">' : '') + '<h1>' + h(c.org ? T('شهادة مشاركة', 'Certificate of Participation') : T('شهادة حضور', 'Certificate of Attendance')) + '</h1>' + head + '<div class="nm">' + h(c.full_name) + '</div>' + mid +
+      '<p><b style="font-size:22px">' + h(c.title) + '</b></p>' + (c.speaker ? '<p>' + h(T('المتحدث: ', 'Speaker: ')) + h(c.speaker) + '</p>' : '') + '<p>' + h(d) + '</p>' + mins +
+      (c.signer ? '<div class="sg"><div>' + h(c.signer) + '<br><span style="font-size:12px">' + h(T('المنظِّم', 'Organizer')) + '</span></div></div>' : '') + '</div>';
   }
 
   /* ───────── الأوامر ───────── */
@@ -418,7 +440,7 @@ S === 'ready' ? '<div class="pill ok" style="display:block;margin:8px 0;line-hei
     'wb-back': function () { W.embed = null; W.id = null; W.msg = ''; go(loadEvents); },
     'wb-tab': function (el) { W.tab = el.dataset.t; W.msg = ''; W.play = null; go(loadTab); },
     'wb-new': function () { go(async function () { await loadCohorts(); W.form = newForm(null); }); },
-    'wb-edit': function () { W.form = newForm(cur()); redraw(); },
+    'wb-edit': function () { go(async function () { W.form = newForm(cur()); try { var o = ((await rpc('wb_cert_opts_get', { p_id: W.form.id })) || [])[0]; if (o) { W.form.certHad = true; W.form.certOrg = o.org || ''; W.form.certLogo = !!o.logo; W.form.certSigner = o.signer || ''; } } catch (e6) { /* لم يُشغَّل webinar-cert.sql */ } }); },
     'wb-fcancel': function () { W.form = null; redraw(); },
     'wb-save': function () {
       var f = W.form; if (!f) return;
@@ -428,6 +450,7 @@ S === 'ready' ? '<div class="pill ok" style="display:block;margin:8px 0;line-hei
       if (!f.students && !f.external && !f.staff && !f.cohorts.length) { W.err = T('اختر جمهوراً واحداً على الأقل', 'Pick at least one audience'); return redraw(); }
       go(async function () {
         var id = await rpc('wb_save', { p_id: f.id, p_title: f.title, p_speaker: f.speaker, p_descr: f.descr, p_starts: new Date(f.start).toISOString(), p_dur: Number(f.dur) || 60, p_link: f.link, p_students: !!f.students, p_external: !!f.external, p_staff: !!f.staff, p_cohorts: f.cohorts, p_materials: f.materials, p_record: f.record, p_allow_rec: !!f.allowRec, p_open_min: Math.max(0, Math.min(120, Number(f.openMin) || 0)) });
+        if (f.certOrg || f.certLogo || f.certSigner || f.certHad) { try { await rpc('wb_cert_opts_set', { p_id: id, p_org: f.certOrg || '', p_logo: !!f.certLogo, p_signer: f.certSigner || '' }); } catch (e7) { W.msg = h(T('تم الحفظ، لكن خيارات الشهادة تحتاج تشغيل webinar-cert.sql', 'Saved, but certificate options need webinar-cert.sql')); } }
         W.form = null; await loadEvents(); W.id = id; W.tab = 'info'; W.msg = h(T('✅ تم الحفظ.', '✅ Saved.'));
       });
     },
@@ -436,7 +459,7 @@ S === 'ready' ? '<div class="pill ok" style="display:block;margin:8px 0;line-hei
     'wb-join': function (el) {
       var w = null; try { w = window.open('', '_blank'); } catch (e) {}
       go(async function () {
-        try { var ev0 = W.ev.filter(function (x) { return x.id === Number(el.dataset.id); })[0], mg = isMgr(ev0); var link = await rpc('wb_join', { p_id: Number(el.dataset.id) }); await loadEvents(); var yv = ytId(link); if (yv) { try { if (w) w.close(); } catch (e2) {} W.embed = { v: yv, t: ev0 ? ev0.title : '', url: link }; W.msg = h(mg ? T('البث معروض أدناه.', 'Stream shown below.') : T('✅ سُجّل حضورك. البث معروض أدناه.', '✅ Attendance recorded. Stream shown below.')); return; } if (w && !w.closed) { w.opener = null; w.location.href = link; W.msg = h(mg ? T('تم فتح الرابط. إن لم تُفتح الصفحة: ', 'Opened. If it did not open: ') : T('✅ سُجّل حضورك. إن لم تُفتح الصفحة: ', '✅ Attendance recorded. If it did not open: ')) + '<a href="' + h(link) + '" target="_blank" rel="noopener">' + h(T('افتح رابط البث', 'open the join link')) + '</a>'; } else W.msg = h(T('✅ سُجّل حضورك. ', '✅ Attendance recorded. ')) + '<a class="btn pri" href="' + h(link) + '" target="_blank" rel="noopener">🎥 ' + h(T('افتح رابط البث', 'Open join link')) + '</a>'; }
+        try { var ev0 = W.ev.filter(function (x) { return x.id === Number(el.dataset.id); })[0], mg = isMgr(ev0); var link = await rpc('wb_join', { p_id: Number(el.dataset.id) }); await loadEvents(); try { var pp = rpc('wb_ping', { p_id: Number(el.dataset.id) }); if (pp && pp.catch) pp.catch(function () {}); } catch (e5) {} var yv = ytId(link); if (yv) { try { if (w) w.close(); } catch (e2) {} W.embed = { v: yv, t: ev0 ? ev0.title : '', url: link }; W.msg = h(mg ? T('البث معروض أدناه.', 'Stream shown below.') : T('✅ سُجّل حضورك. البث معروض أدناه.', '✅ Attendance recorded. Stream shown below.')); return; } if (w && !w.closed) { w.opener = null; w.location.href = link; W.msg = h(mg ? T('تم فتح الرابط. إن لم تُفتح الصفحة: ', 'Opened. If it did not open: ') : T('✅ سُجّل حضورك. إن لم تُفتح الصفحة: ', '✅ Attendance recorded. If it did not open: ')) + '<a href="' + h(link) + '" target="_blank" rel="noopener">' + h(T('افتح رابط البث', 'open the join link')) + '</a>'; } else W.msg = h(T('✅ سُجّل حضورك. ', '✅ Attendance recorded. ')) + '<a class="btn pri" href="' + h(link) + '" target="_blank" rel="noopener">🎥 ' + h(T('افتح رابط البث', 'Open join link')) + '</a>'; }
         catch (e) { try { w && w.close(); } catch (x) {} throw e; }
       });
     },
@@ -451,7 +474,25 @@ S === 'ready' ? '<div class="pill ok" style="display:block;margin:8px 0;line-hei
     'wb-star': function (el) { W.fbr = Number(el.dataset.r); W.fbc = (($q('#wb-fbc') || {}).value || W.fbc); redraw(); },
     'wb-fbsave': function () { var e = cur(); go(async function () { await rpc('wb_fb_save', { p_id: e.id, p_rating: W.fbr || e.my_rating, p_comment: (($q('#wb-fbc') || {}).value || '') }); await loadEvents(); W.msg = h(T('✅ شكراً على تقييمك.', '✅ Thanks for your rating.')); }); },
     'wb-att': function (el) { go(async function () { await rpc('wb_mark_attended', { p_id: W.id, p_user: el.dataset.u, p_on: el.dataset.on === '1' }); await loadTab(); await loadEvents(); }); },
-    'wb-acsv': function () { var e = cur(); saveBlob('attendance-' + String(e.title).slice(0, 30) + '.csv', csvBlob([[T('الاسم', 'Name'), T('الرقم', 'Number'), T('النوع', 'Type'), T('وقت التسجيل', 'Registered'), T('وقت الحضور', 'Joined'), T('حضر؟', 'Attended')]].concat(W.att.map(function (a) { return [a.full_name, a.university_id, a.acct_role, a.registered_at ? new Date(a.registered_at).toLocaleString() : '', a.joined_at ? new Date(a.joined_at).toLocaleString() : '', a.joined_at ? T('نعم', 'Yes') : T('لا', 'No')]; })))); },
+    'wb-acsv': function () {
+      var e = cur(), mr = W.minReq;
+      go(async function () {
+        await loadXlsx(); var X = window.XLSX, wb = X.utils.book_new(); wb.Workbook = { Views: [{ RTL: true }] };
+        var D = function (v) { return v ? new Date(v).toLocaleString('en-GB') : ''; };
+        var tot = W.att.filter(function (a) { return a.joined_at; }), sum = tot.reduce(function (s0, a) { return s0 + (a.minutes || 0); }, 0);
+        var info = [[T('الويبنار', 'Webinar'), e.title], [T('المتحدث', 'Speaker'), e.speaker || ''], [T('الموعد', 'Date'), D(e.starts_at)], [T('المدة المقررة', 'Scheduled'), fmtMin(e.duration_min)],
+          [T('عدد المسجّلين', 'Registered'), W.att.length], [T('عدد الحاضرين', 'Attended'), tot.length], [T('متوسط مدة الحضور', 'Average attendance'), tot.length ? fmtMin(sum / tot.length) : '—'],
+          [T('الحد الأدنى للشهادة', 'Certificate minimum'), mr ? fmtMin(mr) : T('بلا شرط', 'none')], [T('مستحقو الشهادة', 'Certificate-eligible'), W.att.filter(function (a) { return a.joined_at && (!mr || (a.minutes || 0) >= mr); }).length]];
+        var ws0 = X.utils.aoa_to_sheet(info); ws0['!cols'] = [{ wch: 26 }, { wch: 50 }]; X.utils.book_append_sheet(wb, ws0, T('ملخص', 'Summary'));
+        var head = [T('الاسم', 'Name'), T('الرقم', 'Number'), T('النوع', 'Type'), T('وقت التسجيل', 'Registered'), T('وقت الحضور', 'Joined'), T('حضر؟', 'Attended'), T('مدة الحضور (دقيقة)', 'Minutes'), T('مدة الحضور (نص)', 'Duration'), T('نسبة الحضور', 'Share'), T('الشهادة', 'Certificate')];
+        var rows = W.att.map(function (a) { var m = a.minutes || 0; return [a.full_name || '', a.university_id || '', a.acct_role || '', D(a.registered_at), D(a.joined_at), a.joined_at ? T('نعم', 'Yes') : T('لا', 'No'), a.joined_at ? m : '', a.joined_at ? fmtMin(m) : '', a.joined_at && e.duration_min ? Math.min(100, Math.round(100 * m / e.duration_min)) + '%' : '', a.joined_at ? ((!mr || m >= mr) ? T('مستحق', 'Eligible') : T('غير مستحق', 'Not eligible')) : '']; });
+        var ws = X.utils.aoa_to_sheet([head].concat(rows)); ws['!cols'] = [34, 16, 12, 20, 20, 8, 12, 18, 10, 12].map(function (w) { return { wch: w }; }); ws['!freeze'] = { xSplit: 0, ySplit: 1 }; ws['!autofilter'] = { ref: 'A1:J' + (rows.length + 1) };
+        X.utils.book_append_sheet(wb, ws, T('الحضور', 'Attendance'));
+        saveBlob('attendance-' + String(e.title).slice(0, 30).replace(/[\\/:*?"<>|]+/g, '-') + '.xlsx', new Blob([X.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/octet-stream' }));
+      });
+    },
+    'wb-minsave': function () { var e = cur(), v = Number((($q('#wb-minreq') || {}).value || '').trim() || 0); go(async function () { await rpc('wb_min_set', { p_id: e.id, p_min: v }); W.minReq = v || null; W.msg = h(T('✅ حُفظ الشرط', '✅ Rule saved')); }); },
+    'wb-amin': function (el) { var v = window.prompt(T('مدة الحضور بالدقائق:', 'Attendance minutes:'), el.dataset.m || '0'); if (v == null) return; var n = Number(v); if (!isFinite(n) || n < 0) return; go(async function () { await rpc('wb_set_minutes', { p_id: W.id, p_user: el.dataset.u, p_min: Math.round(n) }); await loadTab(); }); },
     'wb-rplay': function (el) { var id = Number(el.dataset.id); go(async function () { var r = await sb().storage.from(BUCKET).createSignedUrl(el.dataset.p, 900); if (r.error) throw new Error(r.error.message); W.urls[id] = r.data.signedUrl; W.play = id; }); },
     'wb-rdl': function (el) { go(async function () { var r = await sb().storage.from(BUCKET).createSignedUrl(el.dataset.p, 600, { download: el.dataset.n }); if (r.error) throw new Error(r.error.message); var a = document.createElement('a'); a.href = r.data.signedUrl; a.download = el.dataset.n || ''; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove(); }); },
     'wb-rdel': function (el) { go(async function () { var p = await rpc('wb_rec_delete', { p_id: Number(el.dataset.id) }); if (p) { try { await sb().storage.from(BUCKET).remove([p]); } catch (e) {} } await loadTab(); }); },
@@ -519,6 +560,13 @@ S === 'ready' ? '<div class="pill ok" style="display:block;margin:8px 0;line-hei
   }
   async function bgLoad() { try { if (!role() || document.hidden || W.busy) return; W.ev = (await rpc('wb_list')) || []; W.loaded = true; updWBN(); } catch (e) { /* لم يُشغَّل webinar.sql بعد */ } }
   setTimeout(bgLoad, 5000); setInterval(bgLoad, 180000);
+  /* نبضة حضور كل دقيقة لما انضمّ إليه الطالب وهو في نافذة البث (تُحتسب المدة في الخادم) */
+  setInterval(function () {
+    try { if (!role() || !W.ev) return; var now = Date.now();
+      W.ev.forEach(function (e) { if (!e.joined || e.is_mgr || e.cancelled) return; var st = new Date(e.starts_at).getTime();
+        if (now >= st - (e.open_before_min || 0) * 60000 && now <= st + e.duration_min * 60000 + 3600000) { var p = rpc('wb_ping', { p_id: e.id }); if (p && p.catch) p.catch(function () {}); } });
+    } catch (e) {}
+  }, 60000);
 
   window.WB = { visible: window.wbVisible };
 })();
