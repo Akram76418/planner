@@ -140,8 +140,8 @@
     return '<div class="card"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>' + h(R.exam.title) + '</b><span class="sub">' + h(T('السؤال ', 'Question ')) + (st.pos + 1) + ' / ' + st.total + '</span></div>' +
       '<div class="xm-bar"><i style="width:' + Math.round(st.pos / st.total * 100) + '%"></i></div>' + timer +
       '<div class="xm-q">' + h(q.stem) + '</div>' + (q.multi ? '<p class="sub">' + h(T('يمكن اختيار أكثر من إجابة.', 'You may select more than one answer.')) + '</p>' : '') + opts +
-      '<label style="display:block;margin-top:12px"><b>' + h(prompt) + '</b><textarea id="xm-txt" class="xm-just" maxlength="600" data-ex="txt" placeholder="' + h(T('اكتب تبريرك بكلماتك (5 إلى 600 حرف)', 'Write your reasoning in your own words (5–600 characters)')) + '">' + h(R.text) + '</textarea></label>' +
-      '<div class="sub" style="display:flex;justify-content:space-between"><span>' + h(T('يُقيَّم تبريرك بشكل منفصل عن اختيارك.', 'Your justification is graded separately from your choice.')) + '</span><span id="xm-cnt">' + R.text.length + ' / 600</span></div>' +
+      (noJ() ? '' : '<label style="display:block;margin-top:12px"><b>' + h(prompt) + '</b><textarea id="xm-txt" class="xm-just" maxlength="600" data-ex="txt" placeholder="' + h(T('اكتب تبريرك بكلماتك (5 إلى 600 حرف)', 'Write your reasoning in your own words (5–600 characters)')) + '">' + h(R.text) + '</textarea></label>' +
+      '<div class="sub" style="display:flex;justify-content:space-between"><span>' + h(T('يُقيَّم تبريرك بشكل منفصل عن اختيارك.', 'Your justification is graded separately from your choice.')) + '</span><span id="xm-cnt">' + R.text.length + ' / 600</span></div>') +
       '<p class="sub">' + h(T('لا رجوع للأسئلة السابقة بعد الإرسال، واللصق في خانة التبرير غير مسموح.', 'You cannot go back after submitting, and pasting into the box is disabled.')) + '</p>' +
       '<button class="btn pri" data-act="xm-submit"' + (X.busy ? ' disabled' : '') + '>' + h(st.pos + 1 >= st.total ? T('إرسال وإنهاء', 'Submit & finish') : T('إرسال والتالي', 'Submit & next')) + '</button></div>';
   }
@@ -163,7 +163,7 @@
   function expired() {
     var R = X.run; if (!R || R.sent || (R.noAuto && Date.now() < R.noAuto)) return; R.sent = true; stopTick();
     if (R.free) return void expiredFree();
-    if (R.sel.length && R.text.trim().length >= 5) return void submit(true);
+    if (R.sel.length && (noJ() || R.text.trim().length >= 5)) return void submit(true);
     go(async function () { await advance(await rpc('ex_current', { p_attempt: R.st.attempt_id })); });
   }
   async function advance(st) {
@@ -173,7 +173,7 @@
   }
   async function submit(auto) {
     var R = X.run; if (!R) return;
-    if (!auto) { if (!R.sel.length) { X.err = T('اختر إجابة أولاً', 'Choose an answer first'); return redraw(); } if (R.text.trim().length < 5) { X.err = T('اكتب تبريرك (5 أحرف على الأقل)', 'Write your reasoning (min 5 characters)'); return redraw(); } }
+    if (!auto) { if (!R.sel.length) { X.err = T('اختر إجابة أولاً', 'Choose an answer first'); return redraw(); } if (!noJ() && R.text.trim().length < 5) { X.err = T('اكتب تبريرك (5 أحرف على الأقل)', 'Write your reasoning (min 5 characters)'); return redraw(); } }
     R.sent = true; stopTick();
     var sg = { paste: R.sig.paste, blur: R.sig.blur, typed_ms: R.t0 ? Math.max(0, (R.t1 || Date.now()) - R.t0) : 0, keys: R.sig.keys };
     await go(async function () {
@@ -184,7 +184,7 @@
         if (auto) { try { await advance(await rpc('ex_current', { p_attempt: R.st.attempt_id })); return; } catch (e2) { /* لا اتصال: تبقى المسودة ويُعاد الإرسال لاحقاً */ } }
         throw e;
       }
-      clearDraft(R); grade(r.justification_id);
+      clearDraft(R); if (r.justification_id) grade(r.justification_id);
       await advance(r.next);
     });
   }
@@ -200,7 +200,8 @@
     setTimeout(function () { Object.keys(R.dirty).forEach(function (k) { flush(R, Number(k)); }); }, 300);
     return R;
   }
-  function qState(R, q) { var a = R.ans[q.id] || {}, s = (a.sel || []).length, t = (a.text || '').trim().length; return s && t >= 5 ? 'ok' : (s || t) ? 'part' : ''; }
+  function noJ() { var R = X.run; return !!(R && R.st && R.st.use_just === false); }
+  function qState(R, q) { var a = R.ans[q.id] || {}, s = (a.sel || []).length, t = (a.text || '').trim().length; if (noJ()) return s ? 'ok' : ''; return s && t >= 5 ? 'ok' : (s || t) ? 'part' : ''; }
   function pageOf(R) { return [R.page * R.ps, Math.min(R.qs.length, (R.page + 1) * R.ps)]; }
   function pages(R) { return Math.max(1, Math.ceil(R.qs.length / R.ps)); }
   function touch(R, qid) { var a = R.ans[qid]; a.v++; R.dirty[qid] = 1; persistFree(R); clearTimeout(a.tm); a.tm = setTimeout(function () { flush(R, qid); }, 700); setSv(R); }
@@ -238,7 +239,7 @@
     var a = R.ans[q.id], opts = (q.options || []).map(function (o, k) { var on = a.sel.indexOf(k) > -1; return '<label class="xm-opt' + (on ? ' on' : '') + '"><input type="' + (q.multi ? 'checkbox' : 'radio') + '" name="xm-o-' + q.id + '" data-ex="fopt" data-q="' + q.id + '" data-i="' + k + '"' + (on ? ' checked' : '') + '><span><b>' + LET(k) + '.</b> ' + h(o) + '</span></label>'; }).join('');
     return '<div class="card xm-fq" id="xm-q-' + q.id + '" style="margin:10px 0"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><b>' + h(T('السؤال ', 'Question ')) + (i + 1) + ' / ' + R.qs.length + '</b><button class="btn sm' + (a.flag ? ' pri' : '') + '" data-act="xm-flag" data-q="' + q.id + '">🚩 ' + h(a.flag ? T('إلغاء التعليم', 'Unflag') : T('علّم للمراجعة', 'Flag for review')) + '</button></div>' +
       '<div class="xm-q">' + h(q.stem) + '</div>' + (q.multi ? '<p class="sub">' + h(T('يمكن اختيار أكثر من إجابة.', 'You may select more than one answer.')) + '</p>' : '') + opts +
-      '<label style="display:block;margin-top:12px"><b>' + h(q.multi ? T('اشرح باختصار سبب اختيارك لهذه الإجابات.', 'Briefly explain why you chose these answers.') : T('اشرح باختصار سبب اختيارك لهذه الإجابة.', 'Briefly explain why you chose this answer.')) + '</b><textarea class="xm-just" maxlength="600" data-ex="ftxt" data-q="' + q.id + '" placeholder="' + h(T('اكتب تبريرك بكلماتك (5 إلى 600 حرف)', 'Write your reasoning in your own words (5–600 characters)')) + '">' + h(a.text) + '</textarea></label><div class="sub" style="text-align:end"><span id="xm-cnt-' + q.id + '">' + a.text.length + ' / 600</span></div></div>';
+      (noJ() ? '' : '<label style="display:block;margin-top:12px"><b>' + h(q.multi ? T('اشرح باختصار سبب اختيارك لهذه الإجابات.', 'Briefly explain why you chose these answers.') : T('اشرح باختصار سبب اختيارك لهذه الإجابة.', 'Briefly explain why you chose this answer.')) + '</b><textarea class="xm-just" maxlength="600" data-ex="ftxt" data-q="' + q.id + '" placeholder="' + h(T('اكتب تبريرك بكلماتك (5 إلى 600 حرف)', 'Write your reasoning in your own words (5–600 characters)')) + '">' + h(a.text) + '</textarea></label><div class="sub" style="text-align:end"><span id="xm-cnt-' + q.id + '">' + a.text.length + ' / 600</span></div>') + '</div>';
   }
   function freeHtml() {
     var R = X.run, top = '<div class="card"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>' + h(R.exam.title) + '</b><span id="xm-sv" class="sub"></span></div>' +
@@ -282,8 +283,8 @@
       var ok = sel.slice().sort().join() === cor.slice().sort().join();
       return '<div class="xm-rv"><div class="xm-q">' + (q.pos + 0) + '. ' + h(q.stem) + '</div>' +
         '<div class="xm-kv">' + h(T('إجابتك: ', 'Your answer: ')) + (sel.length ? sel.map(function (i) { return LET(i); }).join('، ') : '—') + ' <b class="' + (ok ? 'xm-ok' : 'xm-no') + '">' + (ok ? '✓' : '✗') + '</b> · ' + h(T('الصحيح: ', 'Correct: ')) + cor.map(function (i) { return LET(i); }).join('، ') + ' · ' + h(T('درجة الاختيار: ', 'Choice score: ')) + r2(q.choice_score) + '</div>' +
-        (r.mode === 'choice' ? '' : '<div style="margin:6px 0">' + h(q.just_text || '—') + '</div>') +
-        (r.mode === 'choice' ? '' : q.pending ? '<div class="sub">' + h(T('تبريرك قيد المراجعة', 'Justification under review')) + '</div>' : '<div class="xm-kv">' + h(T('درجة التبرير: ', 'Justification score: ')) + r2(q.just_score) + (q.feedback ? ' — ' + h(q.feedback) : '') + '</div>') + '</div>';
+        ((r.mode === 'choice' || !q.just_text) ? '' : '<div style="margin:6px 0">' + h(q.just_text || '—') + '</div>') +
+        ((r.mode === 'choice' || !q.just_text) ? '' : q.pending ? '<div class="sub">' + h(T('تبريرك قيد المراجعة', 'Justification under review')) + '</div>' : '<div class="xm-kv">' + h(T('درجة التبرير: ', 'Justification score: ')) + r2(q.just_score) + (q.feedback ? ' — ' + h(q.feedback) : '') + '</div>') + '</div>';
     }).join('');
     return '<div class="card"><h2>' + h(T('نتيجتك', 'Your result')) + ': ' + r.total + ' / ' + r.max + '</h2><p class="sub">' + h(T('الاختيار: ', 'Choices: ')) + r.choice_total + (r.mode === 'choice' ? '' : ' · ' + h(T('التبرير: ', 'Justifications: ')) + r.just_total) + (r.mode !== 'choice' && r.unreviewed ? ' · ' + h(T('بعض التبريرات لم تُعتمد بعد', 'some justifications are not approved yet')) : '') + '</p>' + rows + '<button class="btn" data-act="xm-back">' + h(T('رجوع', 'Back')) + '</button></div>';
   }
@@ -368,6 +369,7 @@
       '<label>' + h(T('زمن كل سؤال بالثواني (اتركه فارغاً لعدم التحديد)', 'Seconds per question (blank = none)')) + '<input id="xm-pq" inputmode="numeric" value="' + h(e.per_question_sec || '') + '"></label>' +
       '<label>' + h(T('نمط التنقل بين الأسئلة', 'Question navigation')) + '<select id="xm-nav" data-ex="nav"' + (e.locked ? ' disabled' : '') + '><option value="seq"' + (e.nav_mode !== 'free' ? ' selected' : '') + '>' + h(T('تسلسلي: سؤال بسؤال ولا رجوع للسابق', 'Sequential: one by one, no going back')) + '</option><option value="free"' + (e.nav_mode === 'free' ? ' selected' : '') + '>' + h(T('تنقل حر (مثل مودل): لوحة أسئلة، رجوع وتعديل، تعليم للمراجعة', 'Free navigation (Moodle-style): question panel, go back, flag')) + '</option></select></label>' +
       (e.nav_mode === 'free' ? '<label>' + h(T('عدد الأسئلة في الشاشة الواحدة (1 إلى 50)', 'Questions per screen (1–50)')) + '<input id="xm-ps" inputmode="numeric" value="' + h(e.page_size || 1) + '"></label><div class="sub">' + h(T('في التنقل الحر لا يُطبَّق زمن كل سؤال، ويبقى الزمن الكلي وموعد الإغلاق فقط. لا يمكن تغيير النمط بعد أن يبدأ أي طالب.', 'Free mode ignores per-question time; only total time and the close time apply. The mode cannot be changed once a student has started.')) + '</div>' : '') +
+      '<label>' + h(T('أسئلة الاختبار', 'Exam questions')) + '<select id="xm-uj"' + (e.locked ? ' disabled' : '') + '><option value="1"' + (e.use_just === false ? '' : ' selected') + '>' + h(T('بتبرير علمي (يُقيَّم)', 'With justification (graded)')) + '</option><option value="0"' + (e.use_just === false ? ' selected' : '') + '>' + h(T('بدون تبرير (اختيار فقط)', 'No justification (choice only)')) + '</option></select></label>' +
       '<label>' + h(T('وزن الاختيار', 'Choice weight')) + '<input id="xm-wc" inputmode="decimal" value="' + h(e.choice_weight == null ? 1 : e.choice_weight) + '"></label>' +
       '<label>' + h(T('وزن التبرير', 'Justification weight')) + '<input id="xm-wj" inputmode="decimal" value="' + h(e.just_weight == null ? 1 : e.just_weight) + '"></label>' +
       '<label>' + h(T('عرض النتيجة للطالب', 'Result visibility')) + '<select id="xm-fm"><option value="after_release"' + (e.feedback_mode !== 'immediate' ? ' selected' : '') + '>' + h(T('بعد أن أطلقها أنا (موصى به)', 'After I release it (recommended)')) + '</option><option value="immediate"' + (e.feedback_mode === 'immediate' ? ' selected' : '') + '>' + h(T('فور التسليم', 'Right after submitting')) + '</option></select></label></div>' +
@@ -380,7 +382,7 @@
     var e = E.exam, v = function (id) { var x = $q('#' + id); return x ? x.value : ''; };
     e.title = v('xm-title'); e.description = v('xm-desc'); e.feedback_mode = v('xm-fm') || 'after_release';
     e.opens_at = v('xm-open') ? new Date(v('xm-open')).toISOString() : null; e.closes_at = v('xm-close') ? new Date(v('xm-close')).toISOString() : null;
-    e.duration_min = num(v('xm-dur'), null); e.per_question_sec = num(v('xm-pq'), null); if ($q('#xm-nav')) e.nav_mode = v('xm-nav') || 'seq'; if ($q('#xm-ps')) e.page_size = num(v('xm-ps'), 1); if (e.nav_mode === 'free') e.per_question_sec = null; e.choice_weight = num(v('xm-wc'), 1); e.just_weight = num(v('xm-wj'), 1);
+    e.duration_min = num(v('xm-dur'), null); e.per_question_sec = num(v('xm-pq'), null); if ($q('#xm-nav')) e.nav_mode = v('xm-nav') || 'seq'; if ($q('#xm-ps')) e.page_size = num(v('xm-ps'), 1); if (e.nav_mode === 'free') e.per_question_sec = null; e.choice_weight = num(v('xm-wc'), 1); e.just_weight = num(v('xm-wj'), 1); if ($q('#xm-uj')) { e.use_just = v('xm-uj') !== '0'; if (!e.use_just) e.just_weight = 0; }
     e.cohort_ids = Array.prototype.map.call(document.querySelectorAll('[data-ex="coh"]:checked'), function (c) { return Number(c.value); });
     E.qs.forEach(function (q, qi) {
       var box = document.querySelector('.xm-rv[data-qi="' + qi + '"]'); if (!box) return;
@@ -394,7 +396,7 @@
   async function openEditor(id) {
     var E = { exam: { cohort_ids: [], choice_weight: 1, just_weight: 1, feedback_mode: 'after_release' }, qs: [] };
     if (id) {
-      var r = await db().from('ex_exams').select('*').eq('id', id).single(); if (r.error) throw new Error(r.error.message); E.exam = r.data; E.hadNav = 'nav_mode' in r.data;
+      var r = await db().from('ex_exams').select('*').eq('id', id).single(); if (r.error) throw new Error(r.error.message); E.exam = r.data; E.hadNav = 'nav_mode' in r.data; E.hadUJ = 'use_just' in r.data;
       var q = await db().from('ex_questions').select('*, justification_rubrics(*)').eq('exam_id', id).order('pos').order('id'); if (q.error) throw new Error(q.error.message);
       E.qs = (q.data || []).map(function (x) { var rb = x.justification_rubrics; rb = Array.isArray(rb) ? rb[0] : rb; rb = rb || {}; return { id: x.id, stem: x.stem, options: x.options, correct: x.correct_options, multi: x.multi_select, category: x.category || '', time_sec: x.time_sec || '', key: rb.key_reasoning || '', concepts: conceptsToText(rb.concepts, rb.required_concepts) }; });
     } else E.qs = [blankQ()];
@@ -519,6 +521,7 @@
     });
     if (e.nav_mode === 'free' && (!(e.page_size >= 1 && e.page_size <= 50) || Math.floor(e.page_size) !== e.page_size)) throw new Error(T('عدد الأسئلة في الشاشة من 1 إلى 50', 'Questions per screen must be 1–50'));
     var body = { title: e.title.trim(), description: (e.description || '').trim() || null, cohort_ids: e.cohort_ids, opens_at: e.opens_at, closes_at: e.closes_at, duration_min: e.duration_min, per_question_sec: e.per_question_sec, choice_weight: e.choice_weight, just_weight: e.just_weight, feedback_mode: e.feedback_mode };
+    if (e.use_just === false || E.hadUJ) body.use_just = e.use_just !== false;
     if (e.nav_mode === 'free' || E.hadNav) { body.nav_mode = e.nav_mode === 'free' ? 'free' : 'seq'; body.page_size = e.nav_mode === 'free' ? e.page_size : 1; }
     var r = e.id ? await db().from('ex_exams').update(body).eq('id', e.id).select('id').single() : await db().from('ex_exams').insert(body).select('id').single();
     if (r.error) throw new Error(r.error.message); e.id = r.data.id;
