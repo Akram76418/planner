@@ -21,6 +21,13 @@
   async function rpc(n, a) { var r = await sb().rpc(n, a || {}); if (r.error) throw new Error(r.error.message); return r.data; }
 
   async function loadOffs() { S.offs = (await rpc('bk_my_offerings')) || []; S.loaded = true; if (!S.offs.some(function (o) { return o.id === S.off; })) S.off = (S.offs[0] || {}).id || 0; try { localStorage.setItem('bs_off', S.off || ''); } catch (e) {} }
+  /* ترتيب حسب موعد المحاضرة (بلا موعد في الآخر) ثم الرقم */
+  function dk(date, time) { return date ? String(date).slice(0, 10) + (time || '00:00') : '9999'; }
+  function byDate(gs) { return (gs || []).slice().sort(function (a, b) { var x = dk(a.date, a.time), y = dk(b.date, b.time); return x < y ? -1 : x > y ? 1 : (a.group_no || 0) - (b.group_no || 0); }); }
+  function byTopicDate(st) {
+    var gm = {}; (st.groups || []).forEach(function (g) { if (g.topic_no != null) gm[g.topic_no] = g; });
+    return (st.topics || []).slice().sort(function (a, b) { var ga = gm[a.no] || {}, gb = gm[b.no] || {}, x = dk(ga.date, ga.time), y = dk(gb.date, gb.time); return x < y ? -1 : x > y ? 1 : a.no - b.no; });
+  }
   async function loadState() {
     S.st = S.off ? await rpc('bk_state', { p_off: S.off }) : null; if (S.st && S.st.ok === false) S.st = null;
     if (S.st && S.off) { try { var ts = (await rpc('bk_times', { p_off: S.off })) || [], mp = {}; ts.forEach(function (x) { mp[x.group_no] = x.lecture_time; });
@@ -62,13 +69,13 @@
         (closed ? '' : '<div style="margin-top:8px"><button class="btn sm" data-act="bs-leave" data-confirm="1" data-confirm-text="' + h(T('اضغط لتأكيد مغادرة المجموعة', 'Press to confirm leaving')) + '">' + h(T('مغادرة المجموعة', 'Leave group')) + '</button></div>') + '</div>';
     } else {
       if (!closed) out += '<p class="pill" style="white-space:normal">' + h(T('اختر مجموعة وانضم إليها بحسابك (مجموعة واحدة فقط).', 'Pick a group and join it with your account (one group only).')) + '</p>';
-      if (st.topics && st.topics.length) out += '<h3 style="margin:12px 0 4px">' + h(T('المحاضرات المتاحة للحجز', 'Lectures available')) + '</h3>' + st.topics.map(function (t) { return '<div class="card" style="margin:6px 0"><div><b>#' + t.no + '</b> ' + h(t.title) + ' <span class="pill ' + (t.group_no ? 'warn' : 'ok') + '">' + h(t.group_no ? T('محجوزة: مجموعة ', 'Booked: group ') + t.group_no : T('متاحة', 'Available')) + '</span></div>' + goalsOf(st, t.id) + (function () { var g = (st.groups || []).filter(function (x) { return x.topic_id === t.id && x.date; })[0]; return g ? '<div class="sub">📅 ' + h(T('موعد المحاضرة: ', 'Lecture date: ')) + h(fmtDate(g.date)) + (g.time ? ' · 🕒 ' + h(g.time) : '') + '</div>' : ''; })() + '</div>'; }).join('');
+      if (st.topics && st.topics.length) out += '<h3 style="margin:12px 0 4px">' + h(T('المحاضرات المتاحة للحجز', 'Lectures available')) + '</h3>' + byTopicDate(st).map(function (t) { return '<div class="card" style="margin:6px 0"><div><b>#' + t.no + '</b> ' + h(t.title) + ' <span class="pill ' + (t.group_no ? 'warn' : 'ok') + '">' + h(t.group_no ? T('محجوزة: مجموعة ', 'Booked: group ') + t.group_no : T('متاحة', 'Available')) + '</span></div>' + goalsOf(st, t.id) + (function () { var g = (st.groups || []).filter(function (x) { return x.topic_id === t.id && x.date; })[0]; return g ? '<div class="sub">📅 ' + h(T('موعد المحاضرة: ', 'Lecture date: ')) + h(fmtDate(g.date)) + (g.time ? ' · 🕒 ' + h(g.time) : '') + '</div>' : ''; })() + '</div>'; }).join('');
     }
-    out += '<h3 style="margin:12px 0 4px">' + h(T('المجموعات', 'Groups')) + '</h3>' + st.groups.map(function (g) {
+    out += '<h3 style="margin:12px 0 4px">' + h(T('المجموعات', 'Groups')) + '</h3>' + byDate(st.groups).map(function (g) {
       var full = g.cap && g.count >= g.cap;
       return '<div class="card" style="margin:6px 0' + (g.mine ? ';opacity:.85' : '') + '"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><div><b>' + h(T('مجموعة ', 'Group ')) + g.group_no + '</b> <span class="pill ' + (full ? 'warn' : '') + '">' + g.count + (g.cap ? '/' + g.cap : '') + '</span>' + (full ? ' <span class="pill bad">' + h(T('مكتملة', 'Full')) + '</span>' : '') + (g.topic_id ? ' <span class="pill ok">' + h(T('محجوز موضوع', 'Topic booked')) + '</span>' : '') + '</div>' +
         (!mine && !closed ? '<button class="btn sm' + (full ? '' : ' pri') + '" data-act="bs-join" data-g="' + g.id + '"' + (full ? ' disabled' : '') + '>' + h(full ? T('مكتملة', 'Full') : T('انضمام', 'Join')) + '</button>' : '') + '</div>' +
-        (g.topic_id ? '<div class="sub">📌 #' + g.topic_no + ' ' + h(g.topic_title) + '</div>' + goalsOf(st, g.topic_id) : '') + (g.date ? '<div class="sub">📅 ' + h(T('موعد المحاضرة: ', 'Lecture date: ')) + h(fmtDate(g.date)) + '</div>' : '') +
+        (g.topic_id ? '<div class="sub">📌 #' + g.topic_no + ' ' + h(g.topic_title) + '</div>' + goalsOf(st, g.topic_id) : '') + (g.date ? '<div class="sub">📅 ' + h(T('موعد المحاضرة: ', 'Lecture date: ')) + h(fmtDate(g.date)) + (g.time ? ' · 🕒 ' + h(g.time) : '') + '</div>' : '') +
         '<div class="sub">' + (g.members.length || (g.manual || []).length ? g.members.map(function (m) { return h(m.name) + (m.me ? ' (' + h(T('أنا', 'me')) + ')' : ''); }).concat((g.manual || []).map(h)).join('، ') : h(T('لا أعضاء بعد', 'No members yet'))) + '</div></div>';
     }).join('');
     return out;

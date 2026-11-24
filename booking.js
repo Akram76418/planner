@@ -133,7 +133,7 @@
     return '<div class="card" style="margin:8px 0;border:2px solid var(--accent,#0b8a97)"><b>' + h(T('مجموعة ', 'Group ')) + g.group_no + '</b><div class="form">' +
       '<label style="grid-column:1/-1">' + h(T('الموضوع', 'Topic')) + '<select id="bg-topic"><option value="">' + h(T('— بلا موضوع —', '— none —')) + '</option>' + free.map(function (t) { return '<option value="' + t.id + '"' + (t.id === g.topic_id ? ' selected' : '') + '>#' + t.no + ' ' + h(t.title) + '</option>'; }).join('') + '</select></label>' +
       '<label style="grid-column:1/-1">' + h(T('أسماء الطلبة (اسم في كل سطر، حتى 15)', 'Students (one per line, max 15)')) + '<textarea id="bg-names" rows="5">' + h((g.students || []).join('\n')) + '</textarea></label>' +
-      '<label>' + h(T('تاريخ المحاضرة', 'Lecture date')) + '<input id="bg-date" type="date" value="' + h((g.lecture_date || '') + (g.lecture_time ? ' ' + g.lecture_time : '')) + '"></label>' +
+      '<label>' + h(T('تاريخ المحاضرة', 'Lecture date')) + '<input id="bg-date" type="date" value="' + h(g.lecture_date || '') + '"></label>' +
       '<label>' + h(T('وقت المحاضرة (اختياري)', 'Lecture time (optional)')) + '<input id="bg-time" type="time" value="' + h(g.lecture_time || '') + '"></label>' +
       '<label>' + h(T('رابط المحاضرة', 'Lecture link')) + '<input id="bg-link" dir="ltr" placeholder="https://…" maxlength="500" value="' + h(g.link || '') + '"></label></div>' +
       '<div class="tabs" style="margin-top:8px"><button class="btn pri" data-act="bk-save" data-n="' + g.group_no + '">' + h(T('حفظ', 'Save')) + '</button><button class="btn" data-act="bk-cancel">' + h(T('إلغاء', 'Cancel')) + '</button></div></div>';
@@ -161,8 +161,18 @@
     return add + '<div class="list" style="margin-top:8px">' + rows + '</div><p class="sub">' + h(T('حذف موضوع يلغي حجزه، ويعيد ترقيم المواضيع، ويحذف آخر مجموعة (عدد المجموعات = عدد المواضيع).', 'Deleting a topic cancels its booking, renumbers topics and removes the last group (groups = topics).')) + '</p>';
   }
   function schedPane() {
-    var rows = B.groups.map(function (g) { var t = topicOf(g.topic_id); return '<tr><td>' + g.group_no + '</td><td>' + h(t ? '#' + t.no + ' ' + t.title : '—') + '</td><td>' + h(fmtDate(g.lecture_date)) + '</td><td>' + (g.students || []).length + '</td></tr>'; }).join('');
-    return '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th>' + h(T('المجموعة', 'Group')) + '</th><th>' + h(T('الموضوع', 'Topic')) + '</th><th>' + h(T('تاريخ المحاضرة', 'Date')) + '</th><th>' + h(T('عدد الطلبة', 'Students')) + '</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+    var gs = B.groups.slice().sort(function (a, c) {
+      var da = a.lecture_date ? a.lecture_date + (a.lecture_time || '00:00') : '9999', dc = c.lecture_date ? c.lecture_date + (c.lecture_time || '00:00') : '9999';
+      return da < dc ? -1 : da > dc ? 1 : a.group_no - c.group_no;
+    });
+    var rows = gs.map(function (g) {
+      var t = topicOf(g.topic_id);
+      return '<tr><td>' + g.group_no + '</td><td>' + h(t ? '#' + t.no + ' ' + t.title : '—') + '</td>' +
+        '<td><input type="date" id="sd-d-' + g.id + '" value="' + h(g.lecture_date || '') + '"> <input type="time" id="sd-t-' + g.id + '" value="' + h(g.lecture_time || '') + '"></td>' +
+        '<td>' + (g.students || []).length + '</td><td><button class="btn sm pri" data-act="bk-sdsave" data-id="' + g.id + '">' + h(T('حفظ', 'Save')) + '</button></td></tr>';
+    }).join('');
+    return '<p class="sub">' + h(T('اكتب تاريخ (ووقت اختيارياً) كل محاضرة ثم «حفظ» في سطرها. يُرتَّب الجدول تلقائياً حسب الموعد، والمحاضرات بلا تاريخ في آخره.', 'Set each lecture date (and optional time), then Save on its row. The table is sorted by date; undated lectures come last.')) + '</p>' +
+      '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th>' + h(T('المجموعة', 'Group')) + '</th><th>' + h(T('الموضوع', 'Topic')) + '</th><th>' + h(T('تاريخ ووقت المحاضرة', 'Date & time')) + '</th><th>' + h(T('عدد الطلبة', 'Students')) + '</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
   }
   function draw() {
     var el = document.getElementById('bk-root'); if (!el) return;
@@ -344,6 +354,12 @@
     },
     'bk-tedit': function (el) { B.tEdit = Number(el.dataset.id); draw(); },
     'bk-tcancel': function () { B.tEdit = null; draw(); },
+    'bk-sdsave': function (el) {
+      var id = el.dataset.id, d = (document.getElementById('sd-d-' + id) || {}).value || null, tm = (document.getElementById('sd-t-' + id) || {}).value || null;
+      var g = B.groups.filter(function (x) { return String(x.id) === String(id); })[0] || {};
+      var row = { lecture_date: d }; if (tm || g.lecture_time) row.lecture_time = d ? tm : null;
+      guard(async function () { var r = await sb().from('book_groups').update(row).eq('id', id); if (r.error) throw r.error; say(T('تم حفظ الموعد', 'Date saved')); await reloadQuiet(); });
+    },
     'bk-tsave': function (el) {
       var title = val('bt-etitle').trim(), desc = val('bt-edesc').trim() || null; if (!title) { toast_(T('اكتب العنوان', 'Enter a title')); return; }
       guard(async function () { var r = await sb().from('book_topics').update({ title: title, descr: desc }).eq('id', Number(el.dataset.id)); if (r.error) throw r.error; B.tEdit = null; say(T('تم الحفظ', 'Saved')); await reloadQuiet(); });
