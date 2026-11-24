@@ -309,6 +309,7 @@
         '<div style="margin:8px 0"><button type="button" class="btn" data-act="cm-pick-xlsx">📄 ' + h(T('رفع ملف Excel أو CSV', 'Upload Excel or CSV')) + '</button> <span class="sub">' + h(T('أعمدة الملف: الرقم الجامعي، الاسم (اختياري: التخصص، الشعبة)', 'Columns: number, name (optional: major, cohort)')) + '</span></div>' +
         (A.rows ? '<p class="pill ok">' + h(A.rowsInfo) + ' <button class="btn sm" data-act="cm-clearrows">✕</button></p>' : '') +
         (A.sheet ? sheetHtml() : '') +
+        (A.rows ? '' : quickAdd(A)) +
         '<textarea id="ac-list" class="cm-ta" data-cm="cf" data-k="list" placeholder="20250071, الاسم"' + (A.rows ? ' disabled' : '') + '>' + h(A.clist || '') + '</textarea>' +
         '<label class="ck" style="margin:6px 0"><input id="ac-same" type="checkbox" data-cm="cf" data-k="same"' + (A.csame ? ' checked' : '') + '> ' + h(T('السماح بأسماء متشابهة (الافتراضي: يُتخطى من اسمه موجود)', 'Allow similar names (default: skip existing names)')) + '</label>' +
         '<div class="card" style="margin:6px 0;padding:8px 10px"><label class="ck"><input id="ac-pfx" type="checkbox" data-cm="cf" data-k="pfx"' + (A.cpfx ? ' checked' : '') + '> ' + h(T('طلبة من جامعة أخرى: إن كان الرقم الجامعي موجوداً لطالب آخر في الكلية، أنشئ الحساب برقم يبدأ بالبادئة:', 'Students from another university: if the number already belongs to another student, create the account with this prefix:')) + '</label> <input id="ac-pfxv" data-cm="cf" data-k="pfxv" value="' + h(A.cpfxv || 'EX') + '" maxlength="4" style="width:70px" dir="ltr"><div class="sub">' + h(T('يدخل الطالب بالرقم مع البادئة، مثل EX120260051. من أُنشئ سابقاً بنفس الاسم يُتخطى ولا يتكرر. تُعرض لك أرقام الدخول الجديدة لتسلّمها لهم.', 'The student logs in with the prefixed number, e.g. EX120260051. Accounts already created with the same name are skipped. You get the new login numbers to hand out.')) + '</div></div>' +
@@ -532,6 +533,15 @@
       ST.admin.note = T('أُضيفت الشعب المعتمدة. حُذفت ' + removed + ' شعبة قديمة' + (kept.length ? '، وبقيت (فيها طلبة أو إعلانات): ' + kept.join('، ') : '') + '.', 'Standard cohorts added. Removed ' + removed + ' old cohort(s)' + (kept.length ? '; kept (not empty): ' + kept.join(', ') : '') + '.');
       await loadTab();
     }); },
+    'cm-qadd': function () {
+      var num = normNum((($c('#qa-num') || {}).value || '').trim()), name = (($c('#qa-name') || {}).value || '').trim(), A = ST.admin;
+      if (!/^[A-Za-z0-9]{3,20}$/.test(num)) { A.qnote = T('الرقم غير صالح (3–20 حرفاً أو رقماً إنجليزياً)', 'Invalid number (3–20 letters/digits)'); return draw(); }
+      if (!name) { A.qnote = T('اكتب الاسم', 'Enter a name'); return draw(); }
+      if (listRows(A.clist).some(function (l) { return l.split(/[,\t;،\s]/)[0] === num; })) { A.qnote = T('هذا الرقم موجود في القائمة', 'Number already in list'); return draw(); }
+      A.qnote = ''; A.clist = (A.clist ? String(A.clist).replace(/\s+$/, '') + '\n' : '') + num + ', ' + name; draw();
+      setTimeout(function () { var n = $c('#qa-num'); if (n) n.focus(); }, 30);
+    },
+    'cm-qrm': function (el) { var rows = listRows(ST.admin.clist); rows.splice(Number(el.dataset.i), 1); ST.admin.clist = rows.join('\n'); draw(); },
     'cm-ppadd': function () {
       var num = (($c('#pa-num') || {}).value || '').trim(), name = (($c('#pa-name') || {}).value || '').trim(), role_ = ($c('#pa-role') || {}).value || 'student',
           coh = ($c('#pa-coh') || {}).value, major = (($c('#pa-major') || {}).value || '').trim(), same = !!($c('#pa-same') || {}).checked;
@@ -616,6 +626,11 @@
     if (keep) { var q = $c('#cm-q'); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
   }
   var qT; 
+  document.addEventListener('keydown', function (e) {
+    var t = e.target; if (e.key !== 'Enter' || !t || (t.id !== 'qa-num' && t.id !== 'qa-name')) return;
+    e.preventDefault();
+    if (t.id === 'qa-num') { var n = $c('#qa-name'); if (n) n.focus(); } else { var b = document.querySelector('[data-act="cm-qadd"]'); if (b) b.click(); }
+  });
   document.addEventListener('input', function (e) {
     var t = e.target; if (!t || t.id !== 'mystq') return;
     var q = t.value.trim().toLowerCase(); document.querySelectorAll('[data-ms]').forEach(function (r) { r.style.display = !q || r.getAttribute('data-ms').indexOf(q) > -1 ? '' : 'none'; });
@@ -736,6 +751,17 @@
     var out = [[T('الرقم الوظيفي', 'Employee number'), T('الاسم', 'Name'), T('النوع', 'Type'), T('التصنيف', 'Category')]];
     rows.forEach(function (x) { out.push([x.university_id || '', x.full_name || '', (ROLE[x.role] || [x.role, x.role])[ar() ? 0 : 1], x.category && cn[x.category] ? cn[x.category][ar() ? 0 : 1] : '']); });
     return out;
+  }
+  /* إضافة ديناميكية: أدخل الرقم والاسم ثم Enter أو «إضافة» فتُضاف إلى قائمة معاينة قابلة للحذف (تغذّي مربع القائمة أدناه) */
+  function listRows(txt) { return String(txt || '').split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean); }
+  function quickAdd(A) {
+    var rows = listRows(A.clist);
+    return '<div class="card" style="margin:8px 0;padding:8px 10px"><b>' + h(T('➕ إضافة سريعة', 'Quick add')) + '</b><div class="form" style="align-items:end;margin-top:6px">' +
+      '<label>' + h(T('الرقم', 'Number')) + '<input id="qa-num" dir="ltr" autocomplete="off" inputmode="text"></label>' +
+      '<label>' + h(T('الاسم', 'Name')) + '<input id="qa-name" autocomplete="off"></label>' +
+      '<button type="button" class="btn pri" data-act="cm-qadd">' + h(T('إضافة للقائمة', 'Add to list')) + '</button></div>' +
+      (A.qnote ? '<p class="pill bad" style="display:block">' + h(A.qnote) + '</p>' : '') +
+      (rows.length ? '<div class="sub" style="margin-top:6px">' + h(T('في القائمة: ', 'In list: ')) + rows.length + '</div><div style="max-height:200px;overflow:auto">' + rows.map(function (l, i) { return '<div class="row" style="padding:4px 6px"><div class="main"><span dir="ltr">' + h(l) + '</span></div><div class="act"><button type="button" class="btn sm bad" data-act="cm-qrm" data-i="' + i + '">✕</button></div></div>'; }).join('') + '</div>' : '') + '</div>';
   }
   function aud(a, name, d) { try { var p = rpc('comm_audit_add', { p_action: a, p_target: null, p_target_name: name || null, p_detail: d || null }); if (p && p.catch) p.catch(function () {}); } catch (e) {} }
   function saveFile(name, blob) { var u = URL.createObjectURL(blob), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 4000); }
