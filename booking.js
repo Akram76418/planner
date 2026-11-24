@@ -138,6 +138,9 @@
       '<label>' + h(T('رابط المحاضرة', 'Lecture link')) + '<input id="bg-link" dir="ltr" placeholder="https://…" maxlength="500" value="' + h(g.link || '') + '"></label></div>' +
       '<div class="tabs" style="margin-top:8px"><button class="btn pri" data-act="bk-save" data-n="' + g.group_no + '">' + h(T('حفظ', 'Save')) + '</button><button class="btn" data-act="bk-cancel">' + h(T('إلغاء', 'Cancel')) + '</button></div></div>';
   }
+  /* الترتيب حسب موعد المحاضرة (بلا موعد في الآخر) ثم رقم المجموعة */
+  function dk(g) { return g && g.lecture_date ? String(g.lecture_date).slice(0, 10) + (g.lecture_time || '00:00') : '9999'; }
+  function byDateG(a, c) { var x = dk(a), y = dk(c); return x < y ? -1 : x > y ? 1 : (a.group_no || 0) - (c.group_no || 0); }
   function groupsPane() {
     var q = norm(B.q);
     var list = B.groups.filter(function (g) {
@@ -145,14 +148,14 @@
       if (B.filt === 'free' && g.topic_id) return false;
       if (B.filt === 'taken' && !g.topic_id) return false;
       return !q || String(g.group_no) === q || norm((t ? t.title : '') + ' ' + (g.students || []).join(' ')).indexOf(q) >= 0;
-    });
+    }).sort(byDateG);
     return '<div class="tabs"><input id="bk-q" data-bk="q" placeholder="' + h(T('بحث (مجموعة/موضوع/اسم)…', 'Search…')) + '" value="' + h(B.q) + '" style="max-width:240px"> ' +
       [['all', T('الكل', 'All')], ['free', T('بلا موضوع', 'Unbooked')], ['taken', T('محجوزة', 'Booked')]].map(function (c) { return '<button class="btn sm' + (B.filt === c[0] ? ' pri' : '') + '" data-act="bk-filt" data-f="' + c[0] + '">' + h(c[1]) + '</button>'; }).join(' ') + '</div>' +
       (list.map(groupCard).join('') || '<div class="empty">' + h(T('لا نتائج', 'No results')) + '</div>');
   }
   function topicsPane() {
     var add = ro() ? '' : '<div class="card"><b>' + h(T('إضافة موضوع', 'Add topic')) + '</b> <span class="sub">' + h(T('(تُضاف مجموعة جديدة تلقائياً)', '(a group is added automatically)')) + '</span><div class="form"><label style="grid-column:1/-1">' + h(T('العنوان', 'Title')) + '<input id="bt-title" maxlength="200"></label><label style="grid-column:1/-1">' + h(glab() + ' ' + T('(اختياري)', '(optional)')) + '<textarea id="bt-desc" rows="2" maxlength="1500"></textarea></label></div><button class="btn pri" data-act="bk-tadd">+ ' + h(T('إضافة', 'Add')) + '</button></div>';
-    var rows = B.topics.map(function (t) {
+    var rows = B.topics.slice().sort(function (a, c) { var ga = groupOwner(a.id), gc = groupOwner(c.id), x = ga ? dk(ga) : '9999', y = gc ? dk(gc) : '9999'; return x < y ? -1 : x > y ? 1 : a.no - c.no; }).map(function (t) {
       var o = groupOwner(t.id);
       if (B.tEdit === t.id) return '<div class="card" style="margin:8px 0;border:2px solid var(--accent,#0b8a97)"><div class="form"><label style="grid-column:1/-1">' + h(T('العنوان', 'Title')) + '<input id="bt-etitle" value="' + h(t.title) + '" maxlength="200"></label><label style="grid-column:1/-1">' + h(glab()) + '<textarea id="bt-edesc" rows="4" maxlength="1500">' + h(t.descr || '') + '</textarea></label></div><div class="tabs"><button class="btn pri" data-act="bk-tsave" data-id="' + t.id + '">' + h(T('حفظ', 'Save')) + '</button><button class="btn" data-act="bk-tcancel">' + h(T('إلغاء', 'Cancel')) + '</button></div></div>';
       return '<div class="row"><div class="main"><div class="t">#' + t.no + ' ' + h(t.title) + '</div>' + (t.descr ? '<div class="sub" style="white-space:pre-wrap">📘 <b>' + h(glab()) + ':</b> ' + h(t.descr) + '</div>' : '') + '<div class="sub">' + (o ? '<span class="pill warn">' + h(T('محجوز — مجموعة ', 'Booked — group ')) + o.group_no + '</span>' : '<span class="pill ok">' + h(T('متاح', 'Free')) + '</span>') + '</div></div>' +
