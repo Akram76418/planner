@@ -42,18 +42,59 @@
     return K.rounds.filter(function (x) { return x.id !== r.id && (String(x.round_date) > String(r.round_date) || (String(x.round_date) === String(r.round_date) && x.id > r.id)); })
       .sort(function (a, b) { return String(a.round_date) < String(b.round_date) ? -1 : String(a.round_date) > String(b.round_date) ? 1 : a.id - b.id; })[0] || null;
   }
+  /* رقم الشهر: من عنوان الدورة أولاً (أكتوبر/تشرين الأول/شهر 10…)، وإلا من تاريخها. تاريخ الدورة الافتراضي هو يوم إنشائها فقد يختلف عن شهرها الفعلي */
+  var MONTHS = [['تشرين الأول', 10], ['تشرين الثاني', 11], ['كانون الأول', 12], ['كانون الثاني', 1], ['أكتوبر', 10], ['اكتوبر', 10], ['نوفمبر', 11], ['ديسمبر', 12], ['يناير', 1], ['فبراير', 2], ['مارس', 3], ['أبريل', 4], ['ابريل', 4], ['مايو', 5], ['يونيو', 6], ['يوليو', 7], ['أغسطس', 8], ['اغسطس', 8], ['سبتمبر', 9], ['شباط', 2], ['آذار', 3], ['نيسان', 4], ['أيار', 5], ['حزيران', 6], ['تموز', 7], ['أيلول', 9], ['october', 10], ['november', 11], ['december', 12], ['january', 1], ['february', 2], ['march', 3], ['april', 4], ['may', 5], ['june', 6], ['july', 7], ['august', 8], ['september', 9]];
+  function monthOf(f) {
+    if (!f) return 0;
+    var t = String(f.title || '').replace(/[٠-٩]/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.indexOf(d); }), tl = t.toLowerCase();
+    for (var i = 0; i < MONTHS.length; i++) if (tl.indexOf(MONTHS[i][0]) >= 0) return MONTHS[i][1];
+    var m = t.match(/(?:شهر|month)\s*[:\-]?\s*(\d{1,2})(?!\d)/i) || t.match(/(?:^|[^\d])(1[0-2]|[1-9])\s*[\/\-.]\s*\d{2,4}/);
+    if (m && +m[1] >= 1 && +m[1] <= 12) return +m[1];
+    return f.round_date ? new Date(f.round_date).getMonth() + 1 : 0;
+  }
   function carryLabel(r) {
-    var f = K.rounds.filter(function (x) { return x.id === r.carry_from; })[0], m = f && f.round_date ? new Date(f.round_date).getMonth() + 1 : 0;
+    var f = K.rounds.filter(function (x) { return x.id === r.carry_from; })[0], m = monthOf(f);
     return m ? T('رصيد سابق عن شهر ' + m, 'Previous balance from month ' + m) : T('رصيد سابق', 'Previous balance') + (f ? ' (' + f.title + ')' : '');
   }
   function carryRow(r) {
     var c = num(r.carry); if (!c) return '';
-    return '<div class="row" style="background:rgba(11,138,151,.08)"><div class="main"><div class="t">' + h(carryLabel(r)) + ' <span class="pill ok">' + h(T('مرحَّل', 'Carried')) + '</span></div></div><div class="act"><b>' + h(money(c, r.currency)) + '</b></div></div>';
+    return '<div class="row" style="background:rgba(11,138,151,.08)"><div class="main"><div class="t">' + h(carryLabel(r)) + ' <span class="pill ok">' + h(T('مرحَّل', 'Carried')) + '</span></div></div>' +
+      '<div class="act"><input type="text" disabled style="width:110px" value="' + h(money(c, r.currency)) + '" title="' + h(T('الرصيد السابق', 'Previous balance')) + '"> <span class="ck" style="visibility:hidden"><input type="checkbox" disabled> ' + h(T('استُلم', 'Received')) + '</span> <button class="btn sm bad" style="visibility:hidden" tabindex="-1" disabled>' + h(T('حذف', 'Delete')) + '</button></div></div>';
   }
   function totalRow(r) {
     var c = num(r.carry), s = sums(r); if (!c) return '';
-    return '<div class="row" style="border-top:2px solid var(--accent,#0b8a97)"><div class="main"><div class="t">' + h(T('المجموع: المساهمات المستلَمة + الرصيد السابق', 'Total: received + previous balance')) + '</div>' + (s.inT > s.inD + 0.0001 ? '<div class="sub">' + h(T('مع احتساب التعهّدات غير المستلَمة: ', 'Including pending pledges: ') + money(s.inT + c, r.currency)) + '</div>' : '') + '</div><div class="act"><b>' + h(money(s.inD + c, r.currency)) + '</b></div></div>';
+    return '<div class="row" style="border-top:2px solid var(--accent,#0b8a97)"><div class="main"><div class="t">' + h(T('المجموع: المساهمات المستلَمة + الرصيد السابق', 'Total: received + previous balance')) + '</div>' + (s.inT > s.inD + 0.0001 ? '<div class="sub">' + h(T('مع احتساب التعهّدات غير المستلَمة: ', 'Including pending pledges: ') + money(s.inT + c, r.currency)) + '</div>' : '') + '</div><div class="act"><input type="text" disabled style="width:110px;font-weight:700" value="' + h(money(s.inD + c, r.currency)) + '"> <span class="ck" style="visibility:hidden"><input type="checkbox" disabled> ' + h(T('استُلم', 'Received')) + '</span> <button class="btn sm bad" style="visibility:hidden" tabindex="-1" disabled>' + h(T('حذف', 'Delete')) + '</button></div></div>';
   }
+  /* ── التقرير الشامل: مدخلات ومخرجات ورصيد نهائي (عرض + Excel + Word) ── */
+  function repData(r) {
+    var its = K.items.filter(function (x) { return x.round_id === r.id; }), s = sums(r), c = r.currency;
+    var kindOf = function (x) { return x.ext ? (x.ext === 'course' ? T('مساهمة خارجية: رسوم دورة', 'External: course fee') : T('مساهمة خارجية: تبرع', 'External: donation')) : T('مساهم', 'Contributor'); };
+    return {
+      r: r, s: s, c: c,
+      ins: its.filter(function (x) { return x.kind === 'in'; }).map(function (x) { return { kind: kindOf(x), name: x.person, amt: num(x.amount), done: !!x.done, at: x.done_at || '' }; }),
+      outs: its.filter(function (x) { return x.kind === 'out'; }).map(function (x) { return { name: x.person, amt: num(x.amount), done: !!x.done, at: x.done_at || '' }; }),
+      carryLabel: num(r.carry) ? carryLabel(r) : '', totalIn: s.inD + s.carry
+    };
+  }
+  function repHtml(r, word) {
+    var d = repData(r), c = d.c, m = function (v) { return h(money(v, c)); };
+    var th = function (a) { return '<tr>' + a.map(function (x) { return '<th style="background:#0b8a97;color:#fff;padding:6px 8px;border:1px solid #999;text-align:right">' + h(x) + '</th>'; }).join('') + '</tr>'; };
+    var td = function (a, st) { return '<tr' + (st ? ' style="' + st + '"' : '') + '>' + a.map(function (x) { return '<td style="padding:5px 8px;border:1px solid #bbb;text-align:right">' + x + '</td>'; }).join('') + '</tr>'; };
+    var tbl = function (body) { return '<table style="width:100%;border-collapse:collapse;margin:6px 0;font-size:' + (word ? '11' : '13') + 'pt">' + body + '</table>'; };
+    var inRows = (d.carryLabel ? td([h(T('رصيد سابق', 'Previous')), h(d.carryLabel), m(d.s.carry), h(T('مرحَّل', 'Carried')), ''], 'background:#e8f5f6') : '') +
+      d.ins.map(function (x) { return td([h(x.kind), h(x.name), m(x.amt), h(x.done ? T('مستلَم', 'Received') : T('لم يُستلم', 'Pending')), h(x.at)]); }).join('');
+    var outRows = d.outs.map(function (x) { return td([h(x.name), m(x.amt), h(x.done ? T('مصروف', 'Paid') : T('لم يُصرف', 'Pending')), h(x.at)]); }).join('');
+    var sm = [[T('تعهّدات المساهمين', 'Pledged'), d.s.inT], [T('المستلَم فعلاً', 'Received'), d.s.inD]];
+    if (d.s.carry) sm.push([T('الرصيد السابق', 'Previous balance'), d.s.carry], [T('مجموع المدخلات (المستلَم + الرصيد السابق)', 'Total inputs (received + previous)'), d.totalIn]);
+    sm.push([T('المخصّص للمستفيدين', 'Allocated'), d.s.outT], [T('المصروف فعلاً', 'Paid out'), d.s.outD], [T('الرصيد النهائي', 'FINAL BALANCE'), d.s.bal]);
+    return '<div dir="rtl" style="font-family:Arial,Tahoma,sans-serif;direction:rtl">' +
+      '<h2 style="text-align:center;margin:4px 0">' + h(T('تقرير التكافل', 'Takaful report')) + ' — ' + h(r.title) + '</h2><p style="text-align:center;margin:2px 0">' + h(T('التاريخ: ', 'Date: ')) + h(r.round_date) + ' · ' + h(T('العملة: ', 'Currency: ')) + h(c) + '</p>' +
+      '<h3>' + h(T('أولاً: المدخلات (المساهمون)', '1. Inputs (contributors)')) + '</h3>' + tbl(th([T('النوع', 'Type'), T('الاسم', 'Name'), T('المبلغ', 'Amount'), T('الحالة', 'Status'), T('تاريخ الاستلام', 'Date')]) + (inRows || td(['—', '', '', '', '']))) +
+      '<h3>' + h(T('ثانياً: المخرجات (المستفيدون)', '2. Outputs (beneficiaries)')) + '</h3>' + tbl(th([T('الاسم', 'Name'), T('المبلغ', 'Amount'), T('الحالة', 'Status'), T('تاريخ الصرف', 'Date')]) + (outRows || td(['—', '', '', '']))) +
+      '<h3>' + h(T('ثالثاً: الملخص والرصيد النهائي', '3. Summary and final balance')) + '</h3>' + tbl(sm.map(function (x, i) { var last = i === sm.length - 1; return td([h(x[0]), m(x[1])], last ? 'font-weight:bold;background:#e8f5f6' : ''); }).join('')) + '</div>';
+  }
+  function dlBlob(name, blob) { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500); }
+  function repName(r, ext) { return 'takaful-report-' + String(r.round_date || '') + '-' + String(r.title || '').slice(0, 30).replace(/[\\/:*?"<>|\s]+/g, '-') + '.' + ext; }
   function sums(r) {
     var it = K.items.filter(function (x) { return x.round_id === r.id; }), s = { inT: 0, inD: 0, outT: 0, outD: 0, nIn: 0, nOut: 0, extT: 0, extD: 0 };
     it.forEach(function (x) { if (x.kind === 'in') { s.nIn++; s.inT += num(x.amount); if (x.done) s.inD += num(x.amount); if (x.ext) { s.extT += num(x.amount); if (x.done) s.extD += num(x.amount); } } else { s.nOut++; s.outT += num(x.amount); if (x.done) s.outD += num(x.amount); } });
@@ -63,7 +104,7 @@
   function summary(r) {
     var s = sums(r), c = r.currency;
     return '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">' + box(T('تعهّدات المساهمين', 'Pledged'), money(s.inT, c)) + box(T('المستلَم فعلاً', 'Received'), money(s.inD, c)) + (s.extT ? box(T('منها مساهمات خارجية', 'of which external'), money(s.extT, c)) : '') + box(T('المخصّص للمستفيدين', 'Allocated'), money(s.outT, c)) + box(T('المصروف فعلاً', 'Paid out'), money(s.outD, c)) +
-      (s.carry ? box(T('رصيد سابق', 'Previous balance') + (function () { var f = K.rounds.filter(function (x) { return x.id === r.carry_from; })[0]; return f ? ' (' + f.title + ')' : ''; })(), money(s.carry, c)) : '') + box(T('الرصيد بيدك', 'Balance on hand'), money(s.bal, c), s.bal < 0 ? 'ex-late' : '') + '</div>' +
+      (s.carry ? box(T('رصيد سابق', 'Previous balance') + (function () { var f = K.rounds.filter(function (x) { return x.id === r.carry_from; })[0]; var mm = monthOf(f); return mm ? ' (' + T('شهر ', 'month ') + mm + ')' : (f ? ' (' + f.title + ')' : ''); })(), money(s.carry, c)) : '') + box(T('الرصيد بيدك', 'Balance on hand'), money(s.bal, c), s.bal < 0 ? 'ex-late' : '') + '</div>' +
       (s.outT > s.inT + 0.0001 ? '<p class="pill warn">' + h(T('تنبيه: المخصّص للمستفيدين أكبر من تعهّدات المساهمين.', 'Allocated exceeds pledged.')) + '</p>' : '');
   }
   function itemRow(x, c) {
@@ -101,8 +142,9 @@
   }
   function detail(r) {
     var its = K.items.filter(function (x) { return x.round_id === r.id; }), ins = its.filter(function (x) { return x.kind === 'in' && !x.ext; }), exts = its.filter(function (x) { return x.kind === 'in' && x.ext; }), outs = its.filter(function (x) { return x.kind === 'out'; });
-    return summary(r) +
+    return summary(r) + (K.rep === r.id ? '<div class="card" style="margin:8px 0;overflow-x:auto"><div class="tabs"><button class="btn sm pri" data-act="tk-repx" data-id="' + r.id + '">⬇ Excel</button> <button class="btn sm pri" data-act="tk-repw" data-id="' + r.id + '">⬇ Word</button> <button class="btn sm" data-act="tk-repp">🖨 ' + h(T('طباعة', 'Print')) + '</button></div>' + repHtml(r, false) + '</div>' : '') +
       '<div class="tabs"><button class="btn sm' + (r.accepting ? ' pri' : '') + '" data-act="tk-accept" data-id="' + r.id + '">' + h(r.accepting ? '📣 ' + T('باب التبرع مفتوح للموظفين (اضغط للإغلاق)', 'Pledging open (click to close)') : '🔒 ' + T('فتح باب التبرع للموظفين', 'Open pledging to staff')) + '</button> <button class="btn sm' + (r.show_status ? ' pri' : '') + '" data-act="tk-show" data-id="' + r.id + '">' + h(r.show_status ? '👁 ' + T('التوزيع منشور للمستفيدين (اضغط للإخفاء)', 'Distribution published (click to hide)') : '🙈 ' + T('نشر التوزيع للمستفيدين', 'Publish distribution to beneficiaries')) + '</button> ' +
+      '<button class="btn sm" data-act="tk-rep" data-id="' + r.id + '">📄 ' + h(K.rep === r.id ? T('إخفاء التقرير', 'Hide report') : T('تقرير شامل', 'Full report')) + '</button> ' +
       (function () { var nx = nextRound(r); return '<button class="btn sm pri" data-act="tk-push" data-id="' + r.id + '">' + h(nx && nx.carry_from === r.id ? T('تحديث الترحيل إلى ', 'Refresh carry to ') : T('ترحيل الرصيد إلى ', 'Carry balance to ')) + h(nx ? nx.title : T('الدورة التالية', 'next round')) + '</button> '; })() + (num(r.carry) ? '<button class="btn sm bad" data-act="tk-carry0" data-id="' + r.id + '">' + h(T('إلغاء الرصيد السابق', 'Clear previous balance')) + '</button> ' : '') +
       '<button class="btn sm" data-act="tk-lock" data-id="' + r.id + '">' + h(r.closed ? T('إعادة فتح الدورة', 'Reopen') : T('إغلاق الدورة', 'Close round')) + '</button> <button class="btn sm" data-act="tk-xlsx" data-id="' + r.id + '">⬇ Excel</button> <button class="btn sm bad" data-act="tk-delround" data-id="' + r.id + '" data-confirm="1">' + h(T('حذف الدورة', 'Delete round')) + '</button></div>' +
       '<p class="sub">' + h(T('عند فتح باب التبرع يظهر زر «التكافل» للموظفين فيتعهّد كل واحد بمبلغه ويرى رسالة الشكر وبيانات التحويل. وعند نشر التوزيع يرى كل مستفيد نصيبه الذي حددته أنت وإجمالي المتبرَّع به ويؤكد استلامه، ولا يرى أحد بيانات غيره.', 'Open pledging so staff can pledge from the Takaful button; publish the distribution so beneficiaries see their share and confirm receipt.')) + '</p>' +
@@ -156,6 +198,34 @@
     'tk-pdel': function (el) { var id = Number(el.dataset.id); guard(async function () { var r = await sb().rpc('tk_pending_delete', { p_id: id }); if (r.error) throw r.error; K.pend = K.pend.filter(function (x) { return x.id !== id; }); }); },
     'tk-sel': function (el) { var id = Number(el.dataset.id); K.sel = K.sel === id ? null : id; redraw(); },
     'tk-show': function (el) { var id = Number(el.dataset.id), r = K.rounds.filter(function (x) { return x.id === id; })[0]; if (!r) return; var nv = !r.show_status; guard(async function () { var u = await sb().from('tk_rounds').update({ show_status: nv }).eq('id', id); if (u.error) throw u.error; r.show_status = nv; K.ok = r.show_status ? T('نُشر التوزيع: يرى كل مستفيد نصيبه ويؤكد استلامه', 'Distribution published') : T('أُخفي التوزيع عن المستفيدين', 'Hidden'); }); },
+    'tk-rep': function (el) { var id = Number(el.dataset.id); K.rep = K.rep === id ? null : id; redraw(); },
+    'tk-repp': function () {
+      var r = K.rounds.filter(function (x) { return x.id === K.rep; })[0]; if (!r) return;
+      var w = window.open('', '_blank'); if (!w) { K.err = T('اسمح بالنوافذ المنبثقة للطباعة', 'Allow pop-ups to print'); redraw(); return; }
+      w.document.write('<!doctype html><html dir="rtl" lang="ar"><meta charset="utf-8"><title>' + h(r.title) + '</title><body style="margin:20px">' + repHtml(r, true) + '<script>setTimeout(function(){print()},300)<\/script></body></html>'); w.document.close();
+    },
+    'tk-repw': function (el) {
+      var id = Number(el.dataset.id), r = K.rounds.filter(function (x) { return x.id === id; })[0]; if (!r) return;
+      var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>' + h(r.title) + '</title><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]--><style>@page{size:A4;margin:2cm}body{font-family:Arial;direction:rtl}</style></head><body dir="rtl">' + repHtml(r, true) + '</body></html>';
+      dlBlob(repName(r, 'doc'), new Blob(['﻿', html], { type: 'application/msword;charset=utf-8' }));
+    },
+    'tk-repx': function (el) {
+      var id = Number(el.dataset.id), r = K.rounds.filter(function (x) { return x.id === id; })[0]; if (!r) return;
+      guard(async function () {
+        await loadXlsx(); var X = window.XLSX, d = repData(r), s = d.s, wb = X.utils.book_new(); wb.Workbook = { Views: [{ RTL: true }] };
+        var aoa = [[T('تقرير التكافل', 'Takaful report'), r.title], [T('التاريخ', 'Date'), r.round_date], [T('العملة', 'Currency'), r.currency], [],
+          [T('أولاً: المدخلات (المساهمون)', '1. Inputs')], [T('النوع', 'Type'), T('الاسم', 'Name'), T('المبلغ', 'Amount'), T('الحالة', 'Status'), T('تاريخ الاستلام', 'Date')]];
+        if (d.carryLabel) aoa.push([T('رصيد سابق', 'Previous'), d.carryLabel, s.carry, T('مرحَّل', 'Carried'), '']);
+        d.ins.forEach(function (x) { aoa.push([x.kind, x.name, x.amt, x.done ? T('مستلَم', 'Received') : T('لم يُستلم', 'Pending'), x.at]); });
+        aoa.push([T('مجموع المدخلات (المستلَم + الرصيد السابق)', 'Total inputs'), '', d.totalIn], [],
+          [T('ثانياً: المخرجات (المستفيدون)', '2. Outputs')], [T('الاسم', 'Name'), T('المبلغ', 'Amount'), T('الحالة', 'Status'), T('تاريخ الصرف', 'Date')]);
+        d.outs.forEach(function (x) { aoa.push([x.name, x.amt, x.done ? T('مصروف', 'Paid') : T('لم يُصرف', 'Pending'), x.at]); });
+        aoa.push([T('مجموع المخصّص', 'Total allocated'), s.outT], [T('المصروف فعلاً', 'Paid out'), s.outD], [],
+          [T('ثالثاً: الملخص', '3. Summary')], [T('تعهّدات المساهمين', 'Pledged'), s.inT], [T('المستلَم فعلاً', 'Received'), s.inD], [T('الرصيد السابق', 'Previous balance'), s.carry], [T('الرصيد النهائي', 'FINAL BALANCE'), s.bal]);
+        var ws = X.utils.aoa_to_sheet(aoa); ws['!cols'] = [{ wch: 38 }, { wch: 30 }, { wch: 14 }, { wch: 14 }, { wch: 16 }]; X.utils.book_append_sheet(wb, ws, T('التقرير', 'Report'));
+        dlBlob(repName(r, 'xlsx'), new Blob([X.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/octet-stream' }));
+      });
+    },
     'tk-push': function (el) {
       var id = Number(el.dataset.id), r = K.rounds.filter(function (x) { return x.id === id; })[0]; if (!r) return;
       var nx = nextRound(r);
