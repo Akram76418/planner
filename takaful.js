@@ -37,6 +37,11 @@
   }
   async function guard(fn) { try { K.err = ''; K.ok = ''; await fn(); } catch (e) { K.err = (e && e.message) || String(e); } K.busy = false; redraw(); }
 
+  /* الدورة التالية = أقرب دورة بتاريخ أحدث (ثم رقم أكبر عند التساوي) */
+  function nextRound(r) {
+    return K.rounds.filter(function (x) { return x.id !== r.id && (String(x.round_date) > String(r.round_date) || (String(x.round_date) === String(r.round_date) && x.id > r.id)); })
+      .sort(function (a, b) { return String(a.round_date) < String(b.round_date) ? -1 : String(a.round_date) > String(b.round_date) ? 1 : a.id - b.id; })[0] || null;
+  }
   function sums(r) {
     var it = K.items.filter(function (x) { return x.round_id === r.id; }), s = { inT: 0, inD: 0, outT: 0, outD: 0, nIn: 0, nOut: 0, extT: 0, extD: 0 };
     it.forEach(function (x) { if (x.kind === 'in') { s.nIn++; s.inT += num(x.amount); if (x.done) s.inD += num(x.amount); if (x.ext) { s.extT += num(x.amount); if (x.done) s.extD += num(x.amount); } } else { s.nOut++; s.outT += num(x.amount); if (x.done) s.outD += num(x.amount); } });
@@ -46,7 +51,7 @@
   function summary(r) {
     var s = sums(r), c = r.currency;
     return '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">' + box(T('تعهّدات المساهمين', 'Pledged'), money(s.inT, c)) + box(T('المستلَم فعلاً', 'Received'), money(s.inD, c)) + (s.extT ? box(T('منها مساهمات خارجية', 'of which external'), money(s.extT, c)) : '') + box(T('المخصّص للمستفيدين', 'Allocated'), money(s.outT, c)) + box(T('المصروف فعلاً', 'Paid out'), money(s.outD, c)) +
-      (s.carry ? box(T('رصيد مرحّل', 'Carried over'), money(s.carry, c)) : '') + box(T('الرصيد بيدك', 'Balance on hand'), money(s.bal, c), s.bal < 0 ? 'ex-late' : '') + '</div>' +
+      (s.carry ? box(T('رصيد سابق', 'Previous balance') + (function () { var f = K.rounds.filter(function (x) { return x.id === r.carry_from; })[0]; return f ? ' (' + f.title + ')' : ''; })(), money(s.carry, c)) : '') + box(T('الرصيد بيدك', 'Balance on hand'), money(s.bal, c), s.bal < 0 ? 'ex-late' : '') + '</div>' +
       (s.outT > s.inT + 0.0001 ? '<p class="pill warn">' + h(T('تنبيه: المخصّص للمستفيدين أكبر من تعهّدات المساهمين.', 'Allocated exceeds pledged.')) + '</p>' : '');
   }
   function itemRow(x, c) {
@@ -86,7 +91,7 @@
     var its = K.items.filter(function (x) { return x.round_id === r.id; }), ins = its.filter(function (x) { return x.kind === 'in' && !x.ext; }), exts = its.filter(function (x) { return x.kind === 'in' && x.ext; }), outs = its.filter(function (x) { return x.kind === 'out'; });
     return summary(r) +
       '<div class="tabs"><button class="btn sm' + (r.accepting ? ' pri' : '') + '" data-act="tk-accept" data-id="' + r.id + '">' + h(r.accepting ? '📣 ' + T('باب التبرع مفتوح للموظفين (اضغط للإغلاق)', 'Pledging open (click to close)') : '🔒 ' + T('فتح باب التبرع للموظفين', 'Open pledging to staff')) + '</button> <button class="btn sm' + (r.show_status ? ' pri' : '') + '" data-act="tk-show" data-id="' + r.id + '">' + h(r.show_status ? '👁 ' + T('التوزيع منشور للمستفيدين (اضغط للإخفاء)', 'Distribution published (click to hide)') : '🙈 ' + T('نشر التوزيع للمستفيدين', 'Publish distribution to beneficiaries')) + '</button> ' +
-      '<span class="sub"> ' + h(T('رصيد مرحّل:', 'Carry:')) + '</span> <select id="tkc-' + r.id + '">' + K.rounds.filter(function (p) { return p.id !== r.id; }).sort(function (a, b) { return String(b.round_date) < String(a.round_date) ? -1 : 1; }).map(function (p) { return '<option value="' + p.id + '"' + (p.id === r.carry_from ? ' selected' : '') + '>' + h(p.title + ' — ' + money(sums(p).bal, p.currency)) + '</option>'; }).join('') + '</select> <button class="btn sm" data-act="tk-carry" data-id="' + r.id + '">' + h(T('ترحيل/تحديث', 'Carry / refresh')) + '</button>' + (num(r.carry) ? ' <button class="btn sm bad" data-act="tk-carry0" data-id="' + r.id + '">' + h(T('إلغاء الترحيل', 'Clear carry')) + '</button>' : '') + ' ' +
+      (function () { var nx = nextRound(r); return '<button class="btn sm pri" data-act="tk-push" data-id="' + r.id + '">' + h(nx && nx.carry_from === r.id ? T('تحديث الترحيل إلى ', 'Refresh carry to ') : T('ترحيل الرصيد إلى ', 'Carry balance to ')) + h(nx ? nx.title : T('الدورة التالية', 'next round')) + '</button> '; })() + (num(r.carry) ? '<button class="btn sm bad" data-act="tk-carry0" data-id="' + r.id + '">' + h(T('إلغاء الرصيد السابق', 'Clear previous balance')) + '</button> ' : '') +
       '<button class="btn sm" data-act="tk-lock" data-id="' + r.id + '">' + h(r.closed ? T('إعادة فتح الدورة', 'Reopen') : T('إغلاق الدورة', 'Close round')) + '</button> <button class="btn sm" data-act="tk-xlsx" data-id="' + r.id + '">⬇ Excel</button> <button class="btn sm bad" data-act="tk-delround" data-id="' + r.id + '" data-confirm="1">' + h(T('حذف الدورة', 'Delete round')) + '</button></div>' +
       '<p class="sub">' + h(T('عند فتح باب التبرع يظهر زر «التكافل» للموظفين فيتعهّد كل واحد بمبلغه ويرى رسالة الشكر وبيانات التحويل. وعند نشر التوزيع يرى كل مستفيد نصيبه الذي حددته أنت وإجمالي المتبرَّع به ويؤكد استلامه، ولا يرى أحد بيانات غيره.', 'Open pledging so staff can pledge from the Takaful button; publish the distribution so beneficiaries see their share and confirm receipt.')) + '</p>' +
       pubBox(r) + pendBox(r) +
@@ -99,7 +104,7 @@
     var s = sums(r), open = K.sel === r.id;
     return '<div class="card" style="margin:10px 0"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><div><b>' + h(r.title) + '</b> <span class="sub">' + h(r.round_date) + '</span>' + (r.closed ? ' <span class="pill">' + h(T('مغلقة', 'Closed')) + '</span>' : '') + (r.show_status ? ' <span class="pill ok">👁</span>' : '') + (function () { var n = K.pend.filter(function (x) { return x.round_id === r.id && x.status === 'pending'; }).length; return n ? ' <span class="pill warn">🔔 ' + n + '</span>' : ''; })() + '</div>' +
       '<button class="btn sm" data-act="tk-sel" data-id="' + r.id + '">' + h(open ? T('إخفاء التفاصيل', 'Hide') : T('التفاصيل', 'Details')) + '</button></div>' +
-      '<div class="sub">' + h(T('مساهمون ', 'Contributors ') + s.nIn + ' · ' + T('مستفيدون ', 'Beneficiaries ') + s.nOut + ' · ' + T('المستلَم ', 'Received ') + money(s.inD, r.currency) + ' · ' + T('المصروف ', 'Paid ') + money(s.outD, r.currency) + (s.carry ? ' · ' + T('مرحّل ', 'Carried ') + money(s.carry, r.currency) : '') + ' · ' + T('الرصيد ', 'Balance ') + money(s.bal, r.currency)) + '</div>' +
+      '<div class="sub">' + h(T('مساهمون ', 'Contributors ') + s.nIn + ' · ' + T('مستفيدون ', 'Beneficiaries ') + s.nOut + ' · ' + T('المستلَم ', 'Received ') + money(s.inD, r.currency) + ' · ' + T('المصروف ', 'Paid ') + money(s.outD, r.currency) + (s.carry ? ' · ' + T('رصيد سابق ', 'Previous ') + money(s.carry, r.currency) : '') + ' · ' + T('الرصيد ', 'Balance ') + money(s.bal, r.currency)) + '</div>' +
       (r.note ? '<div class="sub">' + h(r.note) + '</div>' : '') + (open ? detail(r) : '') + '</div>';
   }
   window.takafulHtml = function () {
@@ -139,11 +144,13 @@
     'tk-pdel': function (el) { var id = Number(el.dataset.id); guard(async function () { var r = await sb().rpc('tk_pending_delete', { p_id: id }); if (r.error) throw r.error; K.pend = K.pend.filter(function (x) { return x.id !== id; }); }); },
     'tk-sel': function (el) { var id = Number(el.dataset.id); K.sel = K.sel === id ? null : id; redraw(); },
     'tk-show': function (el) { var id = Number(el.dataset.id), r = K.rounds.filter(function (x) { return x.id === id; })[0]; if (!r) return; var nv = !r.show_status; guard(async function () { var u = await sb().from('tk_rounds').update({ show_status: nv }).eq('id', id); if (u.error) throw u.error; r.show_status = nv; K.ok = r.show_status ? T('نُشر التوزيع: يرى كل مستفيد نصيبه ويؤكد استلامه', 'Distribution published') : T('أُخفي التوزيع عن المستفيدين', 'Hidden'); }); },
-    'tk-carry': function (el) {
-      var id = Number(el.dataset.id), r = K.rounds.filter(function (x) { return x.id === id; })[0], pid = Number(val('tkc-' + id)), p = K.rounds.filter(function (x) { return x.id === pid; })[0];
-      if (!r || !p) return; if (p.currency !== r.currency) { K.err = T('العملتان مختلفتان', 'Currencies differ'); redraw(); return; }
-      var amt = Math.round(sums(p).bal * 100) / 100;
-      guard(async function () { var u = await sb().from('tk_rounds').update({ carry: amt, carry_from: pid }).eq('id', id); if (u.error) throw u.error; r.carry = amt; r.carry_from = pid; K.ok = T('رُحِّل الرصيد: ', 'Carried: ') + money(amt, r.currency); });
+    'tk-push': function (el) {
+      var id = Number(el.dataset.id), r = K.rounds.filter(function (x) { return x.id === id; })[0]; if (!r) return;
+      var nx = nextRound(r);
+      if (!nx) { K.err = T('لا توجد دورة تالية. أنشئ دورة الشهر التالي أولاً ثم رحّل.', 'No later round. Create the next round first.'); redraw(); return; }
+      if (nx.currency !== r.currency) { K.err = T('عملة الدورة التالية مختلفة', 'Next round has a different currency'); redraw(); return; }
+      var amt = Math.round(sums(r).bal * 100) / 100;
+      guard(async function () { var u = await sb().from('tk_rounds').update({ carry: amt, carry_from: id }).eq('id', nx.id); if (u.error) throw u.error; nx.carry = amt; nx.carry_from = id; K.ok = T('رُحِّل رصيد «' + r.title + '» (' + money(amt, r.currency) + ') إلى «' + nx.title + '» كرصيد سابق.', 'Carried ' + money(amt, r.currency) + ' to ' + nx.title); });
     },
     'tk-carry0': function (el) {
       var id = Number(el.dataset.id), r = K.rounds.filter(function (x) { return x.id === id; })[0]; if (!r) return;
@@ -179,7 +186,7 @@
         var aoa = [[r.title, r.round_date, r.currency], [], [T('النوع', 'Type'), T('الاسم', 'Name'), T('المبلغ', 'Amount'), T('الحالة', 'Status')]];
         its.filter(function (x) { return x.kind === 'in'; }).forEach(function (x) { aoa.push([x.ext ? (x.ext === 'course' ? T('مساهمة خارجية: رسوم دورة', 'External: course') : T('مساهمة خارجية: تبرع', 'External: donation')) : T('مساهم', 'Contributor'), x.person, num(x.amount), x.done ? T('مستلَم', 'Received') : T('لم يُستلم', 'Pending')]); });
         its.filter(function (x) { return x.kind === 'out'; }).forEach(function (x) { aoa.push([T('مستفيد', 'Beneficiary'), x.person, num(x.amount), x.done ? T('مصروف', 'Paid') : T('لم يُصرف', 'Pending')]); });
-        aoa.push([], [T('تعهّدات المساهمين', 'Pledged'), '', s.inT], [T('المستلَم', 'Received'), '', s.inD], [T('المخصّص للمستفيدين', 'Allocated'), '', s.outT], [T('المصروف', 'Paid out'), '', s.outD], [T('رصيد مرحّل من دورة سابقة', 'Carried over'), '', s.carry], [T('الرصيد', 'Balance'), '', s.bal]);
+        aoa.push([], [T('تعهّدات المساهمين', 'Pledged'), '', s.inT], [T('المستلَم', 'Received'), '', s.inD], [T('المخصّص للمستفيدين', 'Allocated'), '', s.outT], [T('المصروف', 'Paid out'), '', s.outD], [T('رصيد سابق (مرحَّل من دورة سابقة)', 'Previous balance'), '', s.carry], [T('الرصيد', 'Balance'), '', s.bal]);
         var wb = window.XLSX.utils.book_new(); window.XLSX.utils.book_append_sheet(wb, window.XLSX.utils.aoa_to_sheet(aoa), 'takaful'); window.XLSX.writeFile(wb, 'takaful-' + r.round_date + '.xlsx');
       });
     }
