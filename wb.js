@@ -48,7 +48,7 @@
     '@media print{body>*:not(#wb-cert){display:none!important}#wb-cert{position:static!important;background:#fff!important;padding:0!important}#wb-cert .bar{display:none!important}@page{size:landscape;margin:8mm}}';
   document.head.appendChild(css);
 
-  var W = { loaded: false, ev: [], id: null, tab: 'info', q: [], polls: [], att: [], fb: [], recs: [], form: null, cohorts: null, busy: false, err: '', msg: '', qd: '', qanon: false, pq: '', po: '', fbr: 0, fbc: '', urls: {}, play: null };
+  var W = { loaded: false, ev: [], id: null, tab: 'info', q: [], polls: [], chk: [], mine: [], att: [], fb: [], recs: [], form: null, cohorts: null, busy: false, err: '', msg: '', qd: '', qanon: false, pq: '', po: '', fbr: 0, fbc: '', urls: {}, play: null };
 
   window.wbVisible = function () { return !!role(); };
   window.wbView = function () { return '<div id="wb-root"></div>'; };
@@ -80,10 +80,19 @@
   async function loadEvents() { W.ev = (await rpc('wb_list')) || []; W.loaded = true; }
   function cur() { return W.ev.filter(function (e) { return e.id === W.id; })[0]; }
   function isMgr(e) { return !!(e && e.is_mgr); }
+  function chkAdd(pub) {
+    var g = function (id) { return (($q(id) || {}).value || '').trim(); }, q = g('#wb-cq'), o = g('#wb-co').split('\n').map(function (x) { return x.trim(); }).filter(Boolean), cs = g('#wb-cc'), sec = Number(g('#wb-cs') || 90), cn = cs === '' ? null : Number(cs) - 1;
+    if (q.length < 2 || o.length < 2 || o.length > 6) { W.err = T('اكتب السؤال وخيارين إلى ستة', 'Enter a question and 2–6 options'); return redraw(); }
+    if (cn != null && (!isFinite(cn) || cn < 0 || cn >= o.length)) { W.err = T('رقم الخيار الصحيح خارج النطاق', 'Correct option number out of range'); return redraw(); }
+    if (!isFinite(sec) || sec < 15 || sec > 900) { W.err = T('المدة من 15 إلى 900 ثانية', 'Time must be 15–900 s'); return redraw(); }
+    var id = W.id; go(async function () { var cid = await rpc('wb_check_save', { p_id: id, p_q: q, p_opts: o, p_correct: cn, p_secs: Math.round(sec) }); if (pub) await rpc('wb_check_publish', { p_check: cid }); await loadTab(); });
+  }
   async function loadTab() {
     var e = cur(); if (!e) return;
     if (W.tab === 'qa') W.q = (await rpc('wb_q_list', { p_id: e.id })) || [];
     else if (W.tab === 'polls') W.polls = (await rpc('wb_poll_list', { p_id: e.id })) || [];
+    else if (W.tab === 'mine' && !isMgr(e)) { try { W.mine = (await rpc('wb_check_mine', { p_id: e.id })) || []; } catch (e7) { W.mine = []; } }
+    else if (W.tab === 'chk' && isMgr(e)) W.chk = (await rpc('wb_check_list', { p_id: e.id })) || [];
     else if (W.tab === 'att') { W.att = (await rpc('wb_attendees', { p_id: e.id })) || []; try { W.minReq = await rpc('wb_min_get', { p_id: e.id }); } catch (e4) { W.minReq = null; } }
     else if (W.tab === 'fb' && isMgr(e)) W.fb = (await rpc('wb_fb_list', { p_id: e.id })) || [];
     else if (W.tab === 'rec') W.recs = (await rpc('wb_rec_list', { p_event: e.id })) || [];
@@ -138,10 +147,11 @@
   function eventHtml(e) {
     var tabs = [['info', 'ℹ ' + T('التفاصيل', 'Details')], ['qa', '❓ ' + T('الأسئلة', 'Q&A')], ['polls', '📊 ' + T('الاستطلاعات', 'Polls')], ['fb', '⭐ ' + T('التقييم', 'Feedback')]];
     if (canRec()) tabs.splice(3, 0, ['rec', '🎙 ' + T('تسجيلات', 'Recordings')]);
-    if (isMgr(e)) tabs.push(['att', '👥 ' + T('الحضور', 'Attendance')]);
+    if (!isMgr(e) && e.joined) tabs.push(['mine', '✅ ' + T('نتائجي', 'My results')]);
+    if (isMgr(e)) { tabs.push(['chk', '✅ ' + T('أسئلة الحضور', 'Attendance checks')]); tabs.push(['att', '👥 ' + T('الحضور', 'Attendance')]); }
     var body = '';
     if (W.tab === 'info') body = infoTab(e); else if (W.tab === 'qa') body = qaTab(e); else if (W.tab === 'polls') body = pollsTab(e);
-    else if (W.tab === 'rec') body = recTab(e); else if (W.tab === 'fb') body = fbTab(e); else if (W.tab === 'att') body = attTab(e);
+    else if (W.tab === 'rec') body = recTab(e); else if (W.tab === 'fb') body = fbTab(e); else if (W.tab === 'att') body = attTab(e); else if (W.tab === 'chk') body = chkTab(e); else if (W.tab === 'mine') body = mineTab(e);
     return '<div class="wb-h"><button class="btn sm" data-act="wb-back">← ' + h(T('كل الويبنارات', 'All webinars')) + '</button><b style="font-size:17px">' + h(e.title) + '</b> ' + pill(e) + '</div>' +
       '<div class="tabs" style="margin:10px 0">' + tabs.map(function (t) { return '<button class="btn sm' + (W.tab === t[0] ? ' pri' : '') + '" data-act="wb-tab" data-t="' + t[0] + '">' + h(t[1]) + '</button>'; }).join('') + '</div>' + body;
   }
@@ -220,6 +230,40 @@
   }
 
   /* ── الحضور ── */
+  function chkList() {
+    return W.chk.map(function (c, n) {
+      var st = c.opened_at ? (c.is_open ? '<span class="pill ok">' + h(T('🔴 مفتوح الآن', 'Open now')) + '</span>' : '<span class="pill">' + h(T('مُغلق', 'Closed')) + '</span>') : '<span class="pill warn">' + h(T('مسوّدة', 'Draft')) + '</span>';
+      return '<div class="wb-q"><div class="wb-h"><b>' + (n + 1) + '. ' + h(c.question) + '</b> ' + st + '<span style="flex:1"></span><span class="sub">⏱ ' + c.secs + h(T(' ث', ' s')) + '</span></div>' +
+        (c.options || []).map(function (o, i) { var ct = (c.counts || [])[i] || 0; return '<div class="sub" style="margin:2px 0">' + (c.correct === i ? '✔ ' : '○ ') + h(o) + (c.opened_at ? ' — <b>' + ct + '</b>' : '') + '</div>'; }).join('') +
+        '<div class="sub">' + (c.opened_at ? '👥 ' + c.answered + h(T(' أجاب', ' answered')) + (c.correct != null ? ' · ✔ ' + c.right_n + h(T(' صحيح', ' correct')) : '') : (c.correct == null ? h(T('بلا إجابة صحيحة (تسجيل حضور فقط)', 'No correct answer (presence only)')) : '')) + '</div>' +
+        '<div class="wb-row" style="margin-top:6px">' + (c.is_open ? '<button class="btn sm" data-act="wb-cclose" data-id="' + c.id + '">' + h(T('إغلاق الآن', 'Close now')) + '</button>' : '<button class="btn sm pri" data-act="wb-cpub" data-id="' + c.id + '">' + h(c.opened_at ? T('إعادة النشر (يمسح الإجابات)', 'Republish (clears answers)') : T('نشر الآن للطلاب', 'Publish now')) + '</button>') + ' <button class="btn sm bad" data-act="wb-cdel" data-id="' + c.id + '">' + h(T('حذف', 'Delete')) + '</button></div></div>';
+    }).join('') || '<div class="empty">' + h(T('لا أسئلة حضور بعد.', 'No attendance checks yet.')) + '</div>';
+  }
+  function mineTab(e) {
+    var n = W.mine.length, ok = 0, bad = 0, no = 0;
+    var rows = W.mine.map(function (c, i) {
+      var st, cl;
+      if (c.my_opt == null) { st = T('لم تجب', 'No answer'); cl = 'warn'; no++; }
+      else if (c.correct == null) { st = T('أجبت', 'Answered'); cl = 'ok'; ok++; }
+      else if (c.my_opt === c.correct) { st = T('إجابتك صحيحة', 'Correct'); cl = 'ok'; ok++; }
+      else { st = T('إجابتك خاطئة', 'Wrong'); cl = 'bad'; bad++; }
+      return '<div class="wb-q"><div class="wb-h"><b>' + (i + 1) + '. ' + h(c.question) + '</b><span style="flex:1"></span><span class="pill ' + cl + '">' + h(st) + '</span></div>' +
+        (c.my_opt != null ? '<div class="sub">' + h(T('إجابتك: ', 'Your answer: ')) + h((c.options || [])[c.my_opt] || '') + '</div>' : '') +
+        (c.correct != null && c.my_opt !== c.correct ? '<div class="sub">' + h(T('الإجابة الصحيحة: ', 'Correct answer: ')) + h((c.options || [])[c.correct] || '') + '</div>' : '') + '</div>';
+    }).join('');
+    return '<div class="wb-card"><div class="wb-h"><b>' + h(T('نتائجي في أسئلة الحضور', 'My attendance-check results')) + '</b></div>' +
+      (n ? '<div class="sub">' + h(T('الأسئلة: ', 'Questions: ')) + n + ' · ✔ ' + ok + ' · ✖ ' + bad + ' · ○ ' + no + '</div>' + rows : '<div class="empty">' + h(T('لا أسئلة منتهية بعد. تظهر هنا بعد انتهاء وقت كل سؤال.', 'No finished questions yet. They appear here after each question ends.')) + '</div>') +
+      '<div class="sub" style="margin-top:6px">' + h(T('هذه النتائج تراها أنت فقط ولا تدخل في الشهادة.', 'Only you can see this; it is not part of the certificate.')) + '</div></div>';
+  }
+  function chkTab(e) {
+    return '<div class="wb-card"><div class="sub">' + h(T('يظهر السؤال المنشور فوراً لمن سجّل حضوره بزر «انضمام» وصفحة التطبيق مفتوحة عنده، ويُغلق تلقائياً بانتهاء المدة. النتائج تُسجَّل وتُصدَّر مع الحضور ولا تؤثر على الشهادة.', 'A published question appears at once for students who pressed “Join” with the app open, and closes when time ends. Results are recorded and exported with attendance; they do not affect the certificate.')) + '</div>' +
+      '<div class="wb-form" style="margin-top:8px"><label>' + h(T('نص السؤال', 'Question')) + '<input id="wb-cq" maxlength="300"></label>' +
+      '<label>' + h(T('الخيارات (سطر لكل خيار، من 2 إلى 6)', 'Options (one per line, 2–6)')) + '<textarea id="wb-co" rows="4"></textarea></label>' +
+      '<label>' + h(T('رقم الخيار الصحيح (1 = أول سطر؛ فارغ = تسجيل حضور فقط)', 'Correct option number (blank = presence only)')) + '<input id="wb-cc" inputmode="numeric" style="max-width:120px"></label>' +
+      '<label>' + h(T('مدة ظهور السؤال (ثانية)', 'Time to answer (seconds)')) + '<input id="wb-cs" inputmode="numeric" value="90" style="max-width:120px"></label>' +
+      '<div><button class="btn pri" data-act="wb-cadd">' + h(T('حفظ السؤال', 'Save question')) + '</button> <button class="btn" data-act="wb-caddp">' + h(T('حفظ ونشر الآن', 'Save & publish')) + '</button></div></div></div>' +
+      '<div class="wb-card" id="wb-live">' + chkList() + '</div>';
+  }
   function attTab(e) {
     var att = W.att.filter(function (a) { return a.joined_at; }).length, mr = W.minReq;
     var ok = function (a) { return a.joined_at && (!mr || (a.minutes || 0) >= mr); };
@@ -468,6 +512,11 @@ S === 'ready' ? '<div class="pill ok" style="display:block;margin:8px 0;line-hei
     'wb-qans': function (el) { var q = W.q.filter(function (x) { return String(x.id) === el.dataset.id; })[0], a = window.prompt(T('اكتب الجواب (اتركه فارغاً لحذف الجواب):', 'Write the answer (empty removes it):'), (q && q.answer) || ''); if (a === null) return; go(async function () { await rpc('wb_q_answer', { p_qid: Number(el.dataset.id), p_answer: a }); await loadTab(); }); },
     'wb-qdel': function (el) { go(async function () { await rpc('wb_q_delete', { p_qid: Number(el.dataset.id) }); await loadTab(); }); },
     'wb-padd': function () { var q = (($q('#wb-pq') || {}).value || '').trim(), o = (($q('#wb-po') || {}).value || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean); if (q.length < 2 || o.length < 2) { W.err = T('اكتب السؤال وخيارين على الأقل', 'Enter a question and at least 2 options'); return redraw(); } go(async function () { await rpc('wb_poll_save', { p_id: W.id, p_question: q, p_options: o }); W.pq = ''; W.po = ''; await loadTab(); }); },
+    'wb-cadd': function () { chkAdd(false); },
+    'wb-caddp': function () { chkAdd(true); },
+    'wb-cpub': function (el) { go(async function () { await rpc('wb_check_publish', { p_check: Number(el.dataset.id) }); await loadTab(); }); },
+    'wb-cclose': function (el) { go(async function () { await rpc('wb_check_close', { p_check: Number(el.dataset.id) }); await loadTab(); }); },
+    'wb-cdel': function (el) { if (!window.confirm(T('حذف السؤال ونتائجه؟', 'Delete this question and its results?'))) return; go(async function () { await rpc('wb_check_delete', { p_check: Number(el.dataset.id) }); await loadTab(); }); },
     'wb-pvote': function (el) { go(async function () { await rpc('wb_poll_vote', { p_poll: Number(el.dataset.id), p_opt: Number(el.dataset.o) }); await loadTab(); }); },
     'wb-pclose': function (el) { go(async function () { await rpc('wb_poll_close', { p_poll: Number(el.dataset.id), p_closed: el.dataset.on === '1' }); await loadTab(); }); },
     'wb-pdel': function (el) { go(async function () { await rpc('wb_poll_delete', { p_poll: Number(el.dataset.id) }); await loadTab(); }); },
@@ -485,9 +534,14 @@ S === 'ready' ? '<div class="pill ok" style="display:block;margin:8px 0;line-hei
           [T('الحد الأدنى للشهادة', 'Certificate minimum'), mr ? fmtMin(mr) : T('بلا شرط', 'none')], [T('مستحقو الشهادة', 'Certificate-eligible'), W.att.filter(function (a) { return a.joined_at && (!mr || (a.minutes || 0) >= mr); }).length]];
         var ws0 = X.utils.aoa_to_sheet(info); ws0['!cols'] = [{ wch: 26 }, { wch: 50 }]; X.utils.book_append_sheet(wb, ws0, T('ملخص', 'Summary'));
         var head = [T('الاسم', 'Name'), T('الرقم', 'Number'), T('النوع', 'Type'), T('وقت التسجيل', 'Registered'), T('وقت الحضور', 'Joined'), T('حضر؟', 'Attended'), T('مدة الحضور (دقيقة)', 'Minutes'), T('مدة الحضور (نص)', 'Duration'), T('نسبة الحضور', 'Share'), T('الشهادة', 'Certificate')];
-        var rows = W.att.map(function (a) { var m = a.minutes || 0; return [a.full_name || '', a.university_id || '', a.acct_role || '', D(a.registered_at), D(a.joined_at), a.joined_at ? T('نعم', 'Yes') : T('لا', 'No'), a.joined_at ? m : '', a.joined_at ? fmtMin(m) : '', a.joined_at && e.duration_min ? Math.min(100, Math.round(100 * m / e.duration_min)) + '%' : '', a.joined_at ? ((!mr || m >= mr) ? T('مستحق', 'Eligible') : T('غير مستحق', 'Not eligible')) : '']; });
-        var ws = X.utils.aoa_to_sheet([head].concat(rows)); ws['!cols'] = [34, 16, 12, 20, 20, 8, 12, 18, 10, 12].map(function (w) { return { wch: w }; }); ws['!freeze'] = { xSplit: 0, ySplit: 1 }; ws['!autofilter'] = { ref: 'A1:J' + (rows.length + 1) };
+        var chk = [], cres = {}; try { chk = ((await rpc('wb_check_list', { p_id: e.id })) || []).filter(function (c) { return c.opened_at; }); (((await rpc('wb_check_results', { p_id: e.id })) || [])).forEach(function (r) { cres[r.check_id + ':' + r.user_id] = r.opt; }); } catch (e6) { chk = []; }
+        var chkCell = function (a, c) { if (!a.joined_at) return '—'; var o = cres[c.id + ':' + a.user_id]; if (o == null) return T('لم يجب', 'No answer'); if (c.correct == null) return T('أجاب', 'Answered'); return o === c.correct ? T('صح', 'Correct') : T('خطأ', 'Wrong'); };
+        var rows = W.att.map(function (a) { var m = a.minutes || 0; return [a.full_name || '', a.university_id || '', a.acct_role || '', D(a.registered_at), D(a.joined_at), a.joined_at ? T('نعم', 'Yes') : T('لا', 'No'), a.joined_at ? m : '', a.joined_at ? fmtMin(m) : '', a.joined_at && e.duration_min ? Math.min(100, Math.round(100 * m / e.duration_min)) + '%' : '', a.joined_at ? ((!mr || m >= mr) ? T('مستحق', 'Eligible') : T('غير مستحق', 'Not eligible')) : ''].concat(chk.length ? chk.map(function (c) { return chkCell(a, c); }).concat([0, 1, 2].map(function (k) { var v = chk.map(function (c) { return chkCell(a, c); }); var lab = [T('صح', 'Correct'), T('خطأ', 'Wrong'), T('لم يجب', 'No answer')][k]; return a.joined_at ? v.filter(function (x) { return x === lab || (k === 0 && x === T('أجاب', 'Answered')); }).length : ''; })) : []); });
+        if (chk.length) head = head.concat(chk.map(function (c, n) { return T('س', 'Q') + (n + 1); }), [T('عدد الصحيح', 'Correct'), T('عدد الخطأ', 'Wrong'), T('عدد من لم يجب', 'Unanswered')]);
+        var colL = function (n) { var r = ''; n++; while (n > 0) { var m = (n - 1) % 26; r = String.fromCharCode(65 + m) + r; n = Math.floor((n - 1) / 26); } return r; };
+        var ws = X.utils.aoa_to_sheet([head].concat(rows)); ws['!cols'] = head.map(function (x, i) { return { wch: [34, 16, 12, 20, 20, 8, 12, 18, 10, 12][i] || 12 }; }); ws['!freeze'] = { xSplit: 0, ySplit: 1 }; ws['!autofilter'] = { ref: 'A1:' + colL(head.length - 1) + (rows.length + 1) };
         X.utils.book_append_sheet(wb, ws, T('الحضور', 'Attendance'));
+        if (chk.length) { var ks = [[T('رقم', 'No.'), T('السؤال', 'Question'), T('الخيارات', 'Options'), T('الإجابة الصحيحة', 'Correct answer'), T('عدد من أجاب', 'Answered'), T('عدد الصحيح', 'Correct')]].concat(chk.map(function (c, n) { return [T('س', 'Q') + (n + 1), c.question, (c.options || []).map(function (o, i) { return (i + 1) + ') ' + o; }).join(' | '), c.correct == null ? T('— (حضور فقط)', '— (presence only)') : (c.correct + 1) + ') ' + c.options[c.correct], c.answered, c.correct == null ? '' : c.right_n]; })); var ws2 = X.utils.aoa_to_sheet(ks); ws2['!cols'] = [8, 50, 60, 28, 12, 12].map(function (w) { return { wch: w }; }); X.utils.book_append_sheet(wb, ws2, T('أسئلة الحضور', 'Attendance checks')); }
         saveBlob('attendance-' + String(e.title).slice(0, 30).replace(/[\\/:*?"<>|]+/g, '-') + '.xlsx', new Blob([X.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/octet-stream' }));
       });
     },
@@ -551,6 +605,7 @@ S === 'ready' ? '<div class="pill ok" style="display:block;margin:8px 0;line-hei
     try {
       if (W.id && W.tab === 'qa') { W.q = (await rpc('wb_q_list', { p_id: W.id })) || []; var a = $q('#wb-live'); if (a) a.innerHTML = qList(); }
       else if (W.id && W.tab === 'polls') { W.polls = (await rpc('wb_poll_list', { p_id: W.id })) || []; var b = $q('#wb-live'); if (b) b.innerHTML = pollList(); }
+      else if (W.id && W.tab === 'chk') { W.chk = (await rpc('wb_check_list', { p_id: W.id })) || []; var c0 = $q('#wb-live'); if (c0) c0.innerHTML = chkList(); }
       if (tick % 3 === 0) {
         var before = (W.ev || []).map(sigE).join(';'); await loadEvents(); updWBN();
         var changed = before !== W.ev.map(sigE).join(';'), el = document.activeElement, typing = el && /INPUT|TEXTAREA|SELECT/.test(el.tagName);
@@ -567,6 +622,36 @@ S === 'ready' ? '<div class="pill ok" style="display:block;margin:8px 0;line-hei
         if (now >= st - (e.open_before_min || 0) * 60000 && now <= st + e.duration_min * 60000 + 3600000) { var p = rpc('wb_ping', { p_id: e.id }); if (p && p.catch) p.catch(function () {}); } });
     } catch (e) {}
   }, 60000);
+
+  /* سؤال الحضور: نافذة فوق أي صفحة في التطبيق للطالب الذي سجّل حضوره */
+  var chkShown = {}, chkTimer = null;
+  function chkClose() { var d = document.getElementById('wb-chkov'); if (d) d.remove(); if (chkTimer) { clearInterval(chkTimer); chkTimer = null; } }
+  function chkShow(c) {
+    if (document.getElementById('wb-chkov')) return; chkShown[c.id] = 1;
+    var d = document.createElement('div'); d.id = 'wb-chkov'; d.setAttribute('dir', document.documentElement.dir || 'rtl');
+    d.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px';
+    var left = c.left_s;
+    d.innerHTML = '<div style="background:var(--card,#fff);color:var(--text,#111);border-radius:14px;max-width:460px;width:100%;padding:16px;box-shadow:0 10px 40px rgba(0,0,0,.4)"><div style="display:flex;justify-content:space-between;gap:8px"><b>✅ ' + h(T('سؤال حضور', 'Attendance check')) + '</b><span id="wb-chkt" class="pill warn"></span></div><div style="margin:10px 0;font-size:16px;font-weight:600">' + h(c.question) + '</div><div id="wb-chko"></div><div id="wb-chkm" class="sub" style="margin-top:8px"></div></div>';
+    document.body.appendChild(d);
+    var box = d.querySelector('#wb-chko'), msg = d.querySelector('#wb-chkm'), tm = d.querySelector('#wb-chkt');
+    (c.options || []).forEach(function (o, i) {
+      var b = document.createElement('button'); b.className = 'btn' + (c.my_opt === i ? ' pri' : ''); b.style.cssText = 'display:block;width:100%;margin:6px 0;text-align:start'; b.textContent = o;
+      b.onclick = async function () {
+        try { await rpc('wb_check_answer', { p_check: c.id, p_opt: i }); box.querySelectorAll('button').forEach(function (x) { x.className = 'btn'; }); b.className = 'btn pri'; msg.textContent = T('✅ سُجّلت إجابتك (يمكنك تغييرها قبل انتهاء الوقت)', '✅ Answer recorded (you can change it before time ends)'); }
+        catch (e) { msg.textContent = e.message || String(e); }
+      };
+      box.appendChild(b);
+    });
+    var t0 = Date.now(); tm.textContent = left + 's';
+    chkTimer = setInterval(function () { var r = left - Math.round((Date.now() - t0) / 1000); if (r <= 0) { chkClose(); return; } tm.textContent = r + 's'; }, 1000);
+  }
+  setInterval(async function () {
+    try {
+      if (!role() || !W.ev || document.getElementById('wb-chkov')) return; var now = Date.now();
+      var evs = W.ev.filter(function (e) { if (!e.joined || e.is_mgr || e.cancelled) return false; var st = new Date(e.starts_at).getTime(); return now >= st - (e.open_before_min || 0) * 60000 && now <= st + e.duration_min * 60000 + 3600000; });
+      for (var i = 0; i < evs.length; i++) { var r = await rpc('wb_check_active', { p_id: evs[i].id }); var c = r && r[0]; if (c && c.my_opt == null && !chkShown[c.id] && c.left_s > 2) { chkShow(c); return; } }
+    } catch (e) { /* لم يُشغَّل webinar-checks.sql بعد */ }
+  }, 10000);
 
   window.WB = { visible: window.wbVisible };
 })();
