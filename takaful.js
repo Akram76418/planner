@@ -42,6 +42,18 @@
     return K.rounds.filter(function (x) { return x.id !== r.id && (String(x.round_date) > String(r.round_date) || (String(x.round_date) === String(r.round_date) && x.id > r.id)); })
       .sort(function (a, b) { return String(a.round_date) < String(b.round_date) ? -1 : String(a.round_date) > String(b.round_date) ? 1 : a.id - b.id; })[0] || null;
   }
+  function carryLabel(r) {
+    var f = K.rounds.filter(function (x) { return x.id === r.carry_from; })[0], m = f && f.round_date ? new Date(f.round_date).getMonth() + 1 : 0;
+    return m ? T('رصيد سابق عن شهر ' + m, 'Previous balance from month ' + m) : T('رصيد سابق', 'Previous balance') + (f ? ' (' + f.title + ')' : '');
+  }
+  function carryRow(r) {
+    var c = num(r.carry); if (!c) return '';
+    return '<div class="row" style="background:rgba(11,138,151,.08)"><div class="main"><div class="t">' + h(carryLabel(r)) + ' <span class="pill ok">' + h(T('مرحَّل', 'Carried')) + '</span></div></div><div class="act"><b>' + h(money(c, r.currency)) + '</b></div></div>';
+  }
+  function totalRow(r) {
+    var c = num(r.carry), s = sums(r); if (!c) return '';
+    return '<div class="row" style="border-top:2px solid var(--accent,#0b8a97)"><div class="main"><div class="t">' + h(T('المجموع: المساهمات المستلَمة + الرصيد السابق', 'Total: received + previous balance')) + '</div>' + (s.inT > s.inD + 0.0001 ? '<div class="sub">' + h(T('مع احتساب التعهّدات غير المستلَمة: ', 'Including pending pledges: ') + money(s.inT + c, r.currency)) + '</div>' : '') + '</div><div class="act"><b>' + h(money(s.inD + c, r.currency)) + '</b></div></div>';
+  }
   function sums(r) {
     var it = K.items.filter(function (x) { return x.round_id === r.id; }), s = { inT: 0, inD: 0, outT: 0, outD: 0, nIn: 0, nOut: 0, extT: 0, extD: 0 };
     it.forEach(function (x) { if (x.kind === 'in') { s.nIn++; s.inT += num(x.amount); if (x.done) s.inD += num(x.amount); if (x.ext) { s.extT += num(x.amount); if (x.done) s.extD += num(x.amount); } } else { s.nOut++; s.outT += num(x.amount); if (x.done) s.outD += num(x.amount); } });
@@ -95,7 +107,7 @@
       '<button class="btn sm" data-act="tk-lock" data-id="' + r.id + '">' + h(r.closed ? T('إعادة فتح الدورة', 'Reopen') : T('إغلاق الدورة', 'Close round')) + '</button> <button class="btn sm" data-act="tk-xlsx" data-id="' + r.id + '">⬇ Excel</button> <button class="btn sm bad" data-act="tk-delround" data-id="' + r.id + '" data-confirm="1">' + h(T('حذف الدورة', 'Delete round')) + '</button></div>' +
       '<p class="sub">' + h(T('عند فتح باب التبرع يظهر زر «التكافل» للموظفين فيتعهّد كل واحد بمبلغه ويرى رسالة الشكر وبيانات التحويل. وعند نشر التوزيع يرى كل مستفيد نصيبه الذي حددته أنت وإجمالي المتبرَّع به ويؤكد استلامه، ولا يرى أحد بيانات غيره.', 'Open pledging so staff can pledge from the Takaful button; publish the distribution so beneficiaries see their share and confirm receipt.')) + '</p>' +
       pubBox(r) + pendBox(r) +
-      '<h3>' + h(T('المساهمون (موظفو المشاريع)', 'Contributors')) + ' <span class="pill">' + ins.length + '</span></h3><div class="list">' + (ins.map(function (x) { return itemRow(x, r.currency); }).join('') || '<div class="empty">—</div>') + '</div>' + (r.closed ? '' : addBox(r, 'in')) +
+      '<h3>' + h(T('المساهمون (موظفو المشاريع)', 'Contributors')) + ' <span class="pill">' + ins.length + '</span></h3><div class="list">' + (carryRow(r) + ins.map(function (x) { return itemRow(x, r.currency); }).join('') + totalRow(r) || '<div class="empty">—</div>') + '</div>' + (r.closed ? '' : addBox(r, 'in')) +
       '<h3>' + h(T('مساهمات خارجية (تبرعات، دورات تدريبية)', 'External contributions (donations, training courses)')) + ' <span class="pill">' + exts.length + '</span></h3><div class="list">' + (exts.map(function (x) { return itemRow(x, r.currency); }).join('') || '<div class="empty">—</div>') + '</div>' +
       (r.closed ? '' : '<div class="form" style="margin-top:8px"><label>' + h(T('النوع', 'Type')) + '<select id="tk-xt"><option value="donation">' + h(T('تبرع خارجي', 'External donation')) + '</option><option value="course">' + h(T('رسوم دورة تدريبية', 'Training course fees')) + '</option></select></label><label>' + h(T('الجهة أو البيان *', 'Source / description *')) + '<input id="tk-xn" maxlength="120" placeholder="' + h(T('مثال: تبرع فاعل خير، دورة الإسعافات الأولية', 'e.g. donor, first-aid course')) + '"></label><label>' + h(T('المبلغ', 'Amount')) + '<input id="tk-xa" type="number" step="0.01" min="0" inputmode="decimal"></label><div style="align-self:end"><button class="btn pri" data-act="tk-addext" data-r="' + r.id + '">+ ' + h(T('إضافة مساهمة خارجية', 'Add external')) + '</button></div></div>') +
       '<h3>' + h(T('المستفيدون (زملاء بلا مشروع)', 'Beneficiaries')) + ' <span class="pill">' + outs.length + '</span></h3><div class="list">' + (outs.map(function (x) { return itemRow(x, r.currency); }).join('') || '<div class="empty">—</div>') + '</div>' + (r.closed ? '' : addBox(r, 'out'));
